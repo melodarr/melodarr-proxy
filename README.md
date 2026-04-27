@@ -1,6 +1,6 @@
 # Melodarr Proxy
 
-Lightweight MusicBrainz-backed metadata proxy for Melodarr. Avoids the full MusicBrainz database and Solr stack by using live MusicBrainz lookups plus aggressive Redis caching.
+Lightweight MusicBrainz-backed metadata proxy for Melodarr. Can also be used with [Lidarr](https://lidarr.audio). Avoids the full MusicBrainz database and Solr stack by using live MusicBrainz lookups plus aggressive Redis caching.
 
 ## Endpoints
 
