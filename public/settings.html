@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Melodarr Proxy - Settings</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="lookup-panel">
+        <div>
+          <h1>Settings</h1>
+          <p>Runtime configuration for this proxy instance.</p>
+        </div>
+        <nav class="top-nav" aria-label="Page navigation">
+          <a href="/">Test</a>
+          <a href="/stats.html">Stats</a>
+          <a href="/settings.html" aria-current="page">Settings</a>
+        </nav>
+      </section>
+
+      <section id="settings-panel" class="result settings-panel" hidden>
+        <div class="artist-header">
+          <div>
+            <h2>Runtime config</h2>
+            <code>Values are read from environment/config at startup.</code>
+          </div>
+          <button id="logout" type="button">Log out</button>
+        </div>
+        <div id="settings-grid" class="settings-grid"></div>
+      </section>
+
+      <div id="status" class="status settings-status">Loading settings...</div>
+    </main>
+
+    <script src="/settings.js"></script>
+  </body>
+</html>
