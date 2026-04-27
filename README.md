@@ -130,6 +130,22 @@ REDIS_URL=redis://localhost:6379 npm start
 | `UPSTREAM_TIMEOUT_MS` | `8000` |
 | `SLOW_REQUEST_MS` | `2000` |
 
+## Resetting the Admin Password
+
+If you forget the admin password, reset it with:
+
+```bash
+# Local
+npm run reset-password
+
+# Docker
+docker compose exec proxy node src/server.js --reset-password
+```
+
+This clears the stored password hash from `data/settings.json`. The setup flow will appear on the next login so you can create a new password.
+
+If the password is set via the `ADMIN_PASSWORD` environment variable, remove it from your `.env` file instead.
+
 ## Notes
 
 - This is a lightweight metadata proxy for personal Melodarr setups.

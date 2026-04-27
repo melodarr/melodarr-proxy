@@ -1,6 +1,20 @@
 const express = require('express');
 const path = require('path');
 
+// ── CLI Commands (run before server boots) ───────────────────────
+if (process.argv.includes('--reset-password')) {
+  const { resetPassword } = require('./settings/store');
+  const result = resetPassword();
+
+  if (result.cleared) {
+    console.log('[CLI] Password cleared. The setup flow will appear on next login.');
+  } else {
+    console.log(`[CLI] ${result.reason}`);
+  }
+
+  process.exit(0);
+}
+
 const metricsMiddleware = require('./middleware/metrics.middleware');
 const apiRoutes = require('./routes/api.routes');
 const { isAuthenticated } = require('./controllers/settings.controller');

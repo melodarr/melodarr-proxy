@@ -81,10 +81,28 @@ function verifyPassword(password) {
   return passwordBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(passwordBuffer, expectedBuffer);
 }
 
+function resetPassword() {
+  if (process.env.ADMIN_PASSWORD) {
+    return { cleared: false, reason: 'Password is set via ADMIN_PASSWORD env var — remove it from your environment to reset.' };
+  }
+
+  if (!settings.adminPasswordHash) {
+    return { cleared: false, reason: 'No stored password found. Setup flow will appear on next login.' };
+  }
+
+  const next = { ...settings };
+  delete next.adminPasswordHash;
+  delete next.sessionSecret;
+  saveSettings(next);
+
+  return { cleared: true };
+}
+
 module.exports = {
   bootstrapAdminPassword,
   canBootstrapAdmin,
   getSessionSecret,
   hasAdminPassword,
+  resetPassword,
   verifyPassword
 };
