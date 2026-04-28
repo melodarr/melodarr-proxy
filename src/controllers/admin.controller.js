@@ -1,7 +1,7 @@
 const { createKey, listKeys, deleteKey } = require('../auth/apikeys')
 
 function generateKey (req, res) {
-  const { name, quota } = req.body
+  const { name, quota } = req.body || {}
   if (!name) {
     return res.status(400).json({ error: 'Name is required to generate API key.' })
   }
