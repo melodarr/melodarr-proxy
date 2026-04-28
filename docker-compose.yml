@@ -16,13 +16,11 @@ services:
       SETTINGS_SESSION_SECRET: ${SETTINGS_SESSION_SECRET:-}
       DATA_DIR: /data
       MUSICBRAINZ_BASE_URL: ${MUSICBRAINZ_BASE_URL:-https://musicbrainz.org/ws/2}
+      MUSICBRAINZ_IP_FAMILY: ${MUSICBRAINZ_IP_FAMILY:-6}
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
       SLOW_REQUEST_MS: 2000
-      NODE_OPTIONS: --dns-result-order=ipv4first
-      AUTH_ENABLED: ${AUTH_ENABLED:-false}
-      AUTH_URL: ${AUTH_URL:-http://auth:4000}
       JWT_SECRET: ${JWT_SECRET:-super-secret-key}
       METADATA_PROVIDERS: ${METADATA_PROVIDERS:-musicbrainz,itunes}
       PROVIDER_PRIORITY: ${PROVIDER_PRIORITY:-musicbrainz,theaudiodb,itunes,lastfm,discogs}
@@ -40,28 +38,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 5s
       retries: 3
-
-  auth:
-    profiles: ["auth"]
-    build: ./auth-service
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    environment:
-      PORT: 4000
-      APP_NAME: "Auth Service"
-      APP_VERSION: "1.0.0"
-      NODE_ENV: "development"
-      NODE_OPTIONS: --dns-result-order=ipv4first
-    ports:
-      - "${AUTH_HOST_PORT:-0}:4000"
 
   test:
     profiles: ["test"]
@@ -71,8 +53,6 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    environment:
-      NODE_OPTIONS: --dns-result-order=ipv4first
 
   devdash:
     profiles: ["devdash"]
@@ -84,8 +64,17 @@ services:
       - 1.1.1.1
     environment:
       PORT: 3000
+      PROXY_API_URL: http://proxy:3000/api
     ports:
-      - "${DEVDASH_HOST_PORT:-0}:3000"
+      - "${DEVDASH_HOST_PORT:-55026}:3000"
+    depends_on:
+      - proxy
+
 
 volumes:
   melodarr_proxy_data:
+
+networks:
+  default:
+    name: melodarr-ipv6
+    external: true

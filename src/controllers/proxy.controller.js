@@ -1,14 +1,25 @@
 const metrics = require('../metrics')
+const tracer = require('../tracer')
 const cache = require('../cache')
 const upstreamService = require('../services/upstream.service')
 const { aggregateArtist } = require('../providers')
+const { discoverArtists, findSongAlbums } = require('../providers/artist-discovery')
 const { rankResults } = require('../ranking/engine')
 const { enrichResult } = require('../enrichment/pipeline')
 const { getConfigValue } = require('../settings/store')
 const logger = require('../utils/logger')
+const { saveSnapshot } = require('../snapshots')
 
-// Bonus: Track top queries and repeated queries
+const withTimeout = (promise, ms) => {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Upstream request timed out after ${ms}ms`)), ms)
+  })
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer))
+}
+
 const queryCounts = new Map()
+const inflightRequests = new Map()
 
 async function handleSearch (req, res) {
   const { q } = req.query
@@ -16,38 +27,84 @@ async function handleSearch (req, res) {
     return res.status(400).json({ error: 'Missing query parameter "q"' })
   }
 
-  const cacheKey = `search:${q}`
+  const normalizedQ = String(q).trim().toLowerCase().replace(/\s+/g, ' ')
+  const cacheKey = `search:${normalizedQ}`
+  const trace = tracer.createTrace(`search:${normalizedQ}`)
 
   // Check cache
-  const cachedData = await cache.get(cacheKey)
-  if (cachedData) {
+  const startCache = Date.now()
+  const cached = await cache.get(cacheKey)
+  if (cached) {
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
     metrics.recordCache(true)
-    return res.json(cachedData)
+    await tracer.finalizeTrace(trace, { cacheHit: true })
+    res.set('X-Cache-Generated-At', cached.generatedAt)
+    const responseData = cached.data
+    if (responseData && typeof responseData === 'object') responseData._generatedAt = cached.generatedAt
+    return res.json(responseData)
   }
 
+  tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
   metrics.recordCache(false)
 
-  try {
-    const data = await upstreamService.search(q)
+  const lockKey = `lock:${cacheKey}`
+  let hasLock = false
+  const startWait = Date.now()
+  const ttlMs = 15000
 
-    // Bonus logic: Repeated queries get longer TTL
-    let count = queryCounts.get(q) || 0
-    count++
-    queryCounts.set(q, count)
+  let attempt = 0;
+  while (Date.now() - startWait < ttlMs) {
+    hasLock = await cache.acquireLock(lockKey, ttlMs)
+    if (hasLock) break
 
-    let ttl = 86400 // 24h default
-    if (count > 5) {
-      ttl = 86400 * 3 // 3 days if queried many times
+    attempt++;
+    const baseWait = Math.min(100 * Math.pow(2, attempt - 1), 2000);
+    const jitter = Math.floor(Math.random() * 50);
+    const waitTime = baseWait + jitter;
+
+    tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
+    await new Promise(resolve => setTimeout(resolve, waitTime))
+
+    const cachedData = await cache.get(cacheKey)
+    if (cachedData) {
+      await tracer.finalizeTrace(trace, { cacheHit: true })
+      res.set('X-Cache-Generated-At', cachedData.generatedAt)
+      const responseData = { ...cachedData.data, _generatedAt: cachedData.generatedAt }
+      return res.json(responseData)
     }
+  }
 
+  if (!hasLock) {
+    tracer.addStep(trace, 'error', 0, 'timeout')
+    await tracer.finalizeTrace(trace, { cacheHit: false })
+    return res.status(502).json({ error: 'Failed to acquire distributed lock for upstream fetch' })
+  }
+
+  try {
+    const startUpstream = Date.now()
+    const data = await withTimeout(upstreamService.search(q), 15000)
+    tracer.addStep(trace, 'upstreamSearch', Date.now() - startUpstream, 'success')
+
+    // Handle stateless query count for adaptive TTL via Redis/Cache (optional simplified)
+    let ttl = 86400 // 24h default
+
+    const startCacheSet = Date.now()
     await cache.set(cacheKey, data, ttl)
+    tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
 
-    res.json(data)
+    const providersUsed = Array.from(new Set(data.albums?.map(a => a.provider) || []))
+    await tracer.finalizeTrace(trace, { providersUsed, cacheHit: false })
+    await saveSnapshot(`search:${normalizedQ}`, data)
+
+    const responseData = { ...data, _generatedAt: new Date().toISOString() }
+    res.set('X-Cache-Generated-At', responseData._generatedAt)
+    return res.json(responseData)
   } catch (err) {
+    tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Upstream error in handleSearch', {
       context: 'Proxy',
       error: err.message,
-      userAgent: err.config?.headers?.['User-Agent']
+      userAgent: req.headers?.['user-agent']
     })
     const diagnostic = {
       message: err.message,
@@ -61,7 +118,10 @@ async function handleSearch (req, res) {
           }
         : undefined
     }
-    res.status(502).json({ error: 'Failed to fetch from upstream API', details: diagnostic })
+    await tracer.finalizeTrace(trace, { cacheHit: false })
+    return res.status(502).json({ error: 'Failed to fetch from upstream API', details: diagnostic })
+  } finally {
+    await cache.releaseLock(lockKey)
   }
 }
 
@@ -92,38 +152,104 @@ async function handleArtistLookup (req, res) {
     })
   }
 
-  const cacheKey = `artist:${term.toLowerCase().replace(/\s+/g, ' ')}`
+  const normalizedTerm = term.toLowerCase().replace(/\s+/g, ' ')
+  const cacheKey = `artist:${normalizedTerm}`
+  const trace = tracer.createTrace(`artistLookup:${normalizedTerm}`)
+
+  const startCache = Date.now()
   const cachedData = await cache.get(cacheKey)
 
   if (cachedData) {
-    const providers = cachedData.providers?.length
-      ? cachedData.providers
-      : summarizeProvidersFromAlbums(cachedData.albums)
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
+    const cachedObj = cachedData.data
+    const providers = cachedObj.providers?.length
+      ? cachedObj.providers
+      : summarizeProvidersFromAlbums(cachedObj.albums)
 
     metrics.recordCache(true)
     metrics.recordArtistLookup({
       term,
       upstreamCalls: 0,
       providers,
-      partial: Boolean(cachedData.partial),
+      partial: Boolean(cachedObj.partial),
       statusCode: 200
     })
     res.set('X-Cache', 'HIT')
     res.set('X-Providers', providers.map(provider => provider.name).join(','))
+    res.set('X-Cache-Generated-At', cachedData.generatedAt)
 
-    // We can conditionally strip debug if it was cached with debug, but we'll assume it's fine.
-    const response = { ...cachedData, providers }
+    const response = { ...cachedObj, providers }
     if (!isDebug && response.debug) {
       delete response.debug
     }
+    response._generatedAt = cachedData.generatedAt
 
+    await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
     return res.json(response)
   }
 
+  tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
   metrics.recordCache(false)
 
+  const lockKey = `lock:${cacheKey}`
+  let hasLock = false
+  const startWait = Date.now()
+  const ttlMs = 15000
+
+  let attempt = 0;
+  while (Date.now() - startWait < ttlMs) {
+    hasLock = await cache.acquireLock(lockKey, ttlMs)
+    if (hasLock) break
+
+    attempt++;
+    const baseWait = Math.min(100 * Math.pow(2, attempt - 1), 2000);
+    const jitter = Math.floor(Math.random() * 50);
+    const waitTime = baseWait + jitter;
+
+    tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
+    await new Promise(resolve => setTimeout(resolve, waitTime))
+
+    const cachedDataAfterWait = await cache.get(cacheKey)
+    if (cachedDataAfterWait) {
+      const cachedObj = cachedDataAfterWait.data
+      const providers = cachedObj.providers?.length
+        ? cachedObj.providers
+        : summarizeProvidersFromAlbums(cachedObj.albums)
+
+      metrics.recordCache(true)
+      metrics.recordArtistLookup({
+        term,
+        upstreamCalls: 0,
+        providers,
+        partial: Boolean(cachedObj.partial),
+        statusCode: 200
+      })
+      res.set('X-Cache', 'HIT')
+      res.set('X-Providers', providers.map(provider => provider.name).join(','))
+      res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
+
+      const response = { ...cachedObj, providers }
+      if (!isDebug && response.debug) {
+        delete response.debug
+      }
+      response._generatedAt = cachedDataAfterWait.generatedAt
+
+      await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
+      return res.json(response)
+    }
+  }
+
+  if (!hasLock) {
+    tracer.addStep(trace, 'error', 0, 'timeout')
+    metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 502, error: 'Lock timeout' })
+    await tracer.finalizeTrace(trace, { cacheHit: false })
+    return res.status(502).json({ artistName: term, foreignArtistId: '', albums: [], partial: true, warning: 'Upstream request failed during coalescing (lock timeout)' })
+  }
+
   try {
-    const data = await aggregateArtist(term)
+    const startAgg = Date.now()
+    const data = await withTimeout(aggregateArtist(term), 15000)
+    tracer.addStep(trace, 'aggregateArtist', Date.now() - startAgg, 'success')
 
     const rankingStartTime = Date.now()
 
@@ -148,6 +274,7 @@ async function handleArtistLookup (req, res) {
 
     const { results: rankedResults, debug: rankingDebug } = rankResults(rankingInput)
     const rankingTimeMs = Date.now() - rankingStartTime
+    tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
 
     const scores = rankedResults.map(r => r.score)
     const topConfidence = rankedResults[0]?.confidence || 0
@@ -156,7 +283,9 @@ async function handleArtistLookup (req, res) {
     const topResult = rankedResults[0]
 
     // Enrichment Pipeline
+    const startEnrich = Date.now()
     const enrichedTopResult = await enrichResult(topResult, isDebug)
+    tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
 
     const response = {
       artistName: enrichedTopResult.artistName,
@@ -183,7 +312,11 @@ async function handleArtistLookup (req, res) {
       delete enrichedTopResult._enrichmentDebug
     }
 
+    const startCacheSet = Date.now()
     await cache.set(cacheKey, response, getConfigValue('cacheTtlSeconds'))
+    tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
+
+    await saveSnapshot(`artist:${normalizedTerm}`, response)
 
     metrics.recordArtistLookup({
       term,
@@ -197,10 +330,17 @@ async function handleArtistLookup (req, res) {
     res.set('X-Cache', 'MISS')
     res.set('X-Upstream-Calls', String(data.providerCount))
     res.set('X-Providers', data.providers.map(provider => provider.name).join(','))
+    res.set('X-Cache-Generated-At', new Date().toISOString())
 
-    // Also remove debug before responding if not requested, though it shouldn't be added if isDebug is false
-    return res.json(response)
+    const finalResponse = { ...response, _generatedAt: new Date().toISOString() }
+    if (!isDebug && finalResponse.debug) {
+      delete finalResponse.debug
+    }
+
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: data.providers.map(p => p.name) })
+    return res.json(finalResponse)
   } catch (error) {
+    tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist lookup failed', {
       context: 'Proxy',
       error: error.message
@@ -215,6 +355,8 @@ async function handleArtistLookup (req, res) {
       error: error.message
     })
 
+    await tracer.finalizeTrace(trace, { cacheHit: false })
+
     return res.status(502).json({
       artistName: term,
       foreignArtistId: '',
@@ -226,7 +368,76 @@ async function handleArtistLookup (req, res) {
         code: error.code
       }
     })
+  } finally {
+    await cache.releaseLock(lockKey)
   }
 }
 
-module.exports = { handleArtistLookup, handleSearch }
+async function handleArtistDiscover (req, res) {
+  const query = String(req.query.q || req.query.term || '').trim()
+  const type = String(req.query.type || 'artist').trim().toLowerCase()
+  const trace = tracer.createTrace(`artistDiscover:${type}:${query.toLowerCase().replace(/\s+/g, ' ')}`)
+
+  if (!query) {
+    return res.status(400).json({ error: 'Missing query parameter "q"' })
+  }
+
+  try {
+    const startedAt = Date.now()
+    const candidates = await withTimeout(discoverArtists({ query, type }), 15000)
+    tracer.addStep(trace, 'discoverArtists', Date.now() - startedAt, 'success')
+    await tracer.finalizeTrace(trace, {
+      cacheHit: false,
+      providersUsed: ['musicbrainz']
+    })
+
+    return res.json({
+      query,
+      type,
+      candidates
+    })
+  } catch (error) {
+    tracer.addStep(trace, 'error', 0, 'error')
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
+    return res.status(502).json({
+      query,
+      type,
+      candidates: [],
+      error: error.message,
+      details: {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status || null
+      }
+    })
+  }
+}
+
+async function handleSongAlbums (req, res) {
+  const artist = String(req.query.artist || '').trim()
+  const song = String(req.query.song || req.query.q || '').trim()
+  const trace = tracer.createTrace(`songAlbums:${artist}:${song}`)
+
+  if (!artist || !song) {
+    return res.status(400).json({ error: 'Missing required query parameters: artist and song' })
+  }
+
+  try {
+    const startedAt = Date.now()
+    const result = await withTimeout(findSongAlbums({ artist, song }), 15000)
+    tracer.addStep(trace, 'findSongAlbums', Date.now() - startedAt, 'success')
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: [result.source] })
+    return res.json(result)
+  } catch (error) {
+    tracer.addStep(trace, 'error', 0, 'error')
+    await tracer.finalizeTrace(trace, { cacheHit: false })
+    return res.status(502).json({
+      artist,
+      song,
+      albums: [],
+      error: error.message
+    })
+  }
+}
+
+module.exports = { handleArtistDiscover, handleArtistLookup, handleSearch, handleSongAlbums }

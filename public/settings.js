@@ -452,6 +452,52 @@ logoutButton.addEventListener('click', async () => {
   window.location.assign('/login.html')
 })
 
+const btnStart = document.querySelector('#btn-start')
+const btnStop = document.querySelector('#btn-stop')
+const btnClear = document.querySelector('#btn-clear')
+
+if (btnStart) {
+  btnStart.addEventListener('click', async () => {
+    try {
+      setStatus('Starting service...')
+      const res = await fetch('/api/proxy/start', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to start service')
+      setStatus(data.message || 'Service started')
+    } catch (err) {
+      setStatus(err.message, true)
+    }
+  })
+}
+
+if (btnStop) {
+  btnStop.addEventListener('click', async () => {
+    try {
+      setStatus('Stopping service...')
+      const res = await fetch('/api/proxy/stop', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to stop service')
+      setStatus(data.message || 'Service stopped')
+    } catch (err) {
+      setStatus(err.message, true)
+    }
+  })
+}
+
+if (btnClear) {
+  btnClear.addEventListener('click', async () => {
+    try {
+      setStatus('Clearing cache...')
+      const res = await fetch('/api/cache/clear', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to clear cache')
+      setStatus(data.message || 'Cache cleared')
+    } catch (err) {
+      setStatus(err.message, true)
+    }
+  })
+}
+
 loadSettings().catch((error) => {
   setStatus(error.message, true)
 })

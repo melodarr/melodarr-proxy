@@ -169,4 +169,31 @@ async function aggregateArtist (term) {
   }
 }
 
-module.exports = { aggregateArtist }
+async function testProvider (providerName, term) {
+  const normalizedName = String(providerName || '').trim().toLowerCase()
+  const provider = providers[normalizedName]
+
+  if (!provider) {
+    const validProviders = Object.keys(providers).join(', ')
+    throw new Error(`Unknown provider "${providerName}". Valid providers: ${validProviders}`)
+  }
+
+  const startedAt = Date.now()
+  const result = await provider.searchArtist(term)
+  const durationMs = Date.now() - startedAt
+  const albums = Array.isArray(result?.albums) ? result.albums : []
+
+  return {
+    provider: provider.name,
+    query: term,
+    durationMs,
+    artistName: result?.artistName || term,
+    albumCount: albums.length,
+    sampleAlbums: albums.slice(0, 5).map(album => ({
+      name: album.name || '',
+      year: album.year || null
+    }))
+  }
+}
+
+module.exports = { aggregateArtist, testProvider }

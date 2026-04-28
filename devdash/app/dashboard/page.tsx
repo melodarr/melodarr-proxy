@@ -6,8 +6,8 @@ export default function DashboardPage() {
     <main className="container mx-auto p-8 max-w-screen-2xl">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ecosystem Services</h1>
-          <p className="text-gray-400 mt-2">Real-time control plane and observability.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Melodarr Proxy</h1>
+          <p className="text-gray-400 mt-2">Service status, observability, and runtime controls.</p>
         </div>
       </div>
       

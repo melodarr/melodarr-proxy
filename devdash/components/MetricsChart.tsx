@@ -3,17 +3,27 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface MetricsChartProps {
-  data: any[];
+  data: unknown;
   dataKey: string;
   color: string;
   name: string;
 }
 
 export function MetricsChart({ data, dataKey, color, name }: MetricsChartProps) {
+  const chartData = Array.isArray(data) ? data : [];
+
+  if (chartData.length === 0) {
+    return (
+      <div className="h-[250px] w-full mt-4 flex items-center justify-center rounded-md border border-border/50 bg-background/30 text-sm text-gray-500">
+        No telemetry samples yet.
+      </div>
+    );
+  }
+
   return (
     <div className="h-[250px] w-full mt-4">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+        <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
           <XAxis 
             dataKey="timestamp" 

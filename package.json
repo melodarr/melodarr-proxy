@@ -1,6 +1,6 @@
 {
   "name": "melodarr-proxy",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Lightweight multi-provider music metadata proxy for Melodarr.",
   "main": "src/server.js",
   "type": "commonjs",
@@ -10,9 +10,6 @@
     "dev": "NODE_ENV=development node src/server.js",
     "reset-password": "node src/server.js --reset-password",
     "lint": "XDG_CACHE_HOME=.cache standard",
-    "lint:auth": "node --check auth-service/server.js",
-    "lint:devdash": "docker compose exec devdash npx tsc --noEmit",
-    "lint:all": "yarn lint && yarn lint:auth && yarn lint:devdash",
     "test": "node --test src/**/*.test.js",
     "docker:lint": "docker compose run --rm --entrypoint \"yarn lint\" proxy",
     "docker:test": "docker compose run --rm --entrypoint \"yarn test\" proxy"

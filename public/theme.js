@@ -8,8 +8,11 @@
 
   if (saved === 'light' || saved === 'dark') {
     document.documentElement.dataset.theme = saved
+  } else {
+    // Check system preference
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+    document.documentElement.dataset.theme = prefersLight ? 'light' : 'dark'
   }
-  // else: default is dark via CSS :root (no data-theme attribute needed)
 
   function getTheme () {
     return document.documentElement.dataset.theme || 'dark'

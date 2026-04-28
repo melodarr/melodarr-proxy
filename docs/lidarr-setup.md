@@ -20,7 +20,7 @@ docker run -d \
   -p 3055:3000 \
   -e APP_CONTACT=you@example.com \
   -e METADATA_PROVIDERS=musicbrainz,itunes \
-  ghcr.io/melodarr/melodarr-proxy:v0.1.1
+  ghcr.io/melodarr/melodarr-proxy:v0.2.0
 ```
 
 Open the web UI and create the first-run admin password:

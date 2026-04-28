@@ -3,7 +3,7 @@ const router = express.Router()
 
 const { getHealth } = require('../controllers/health.controller')
 const { getStats, getHistory } = require('../controllers/stats.controller')
-const { handleArtistLookup, handleSearch } = require('../controllers/proxy.controller')
+const { handleArtistDiscover, handleArtistLookup, handleSearch, handleSongAlbums } = require('../controllers/proxy.controller')
 const { startProxy, stopProxy, clearCache, triggerSync } = require('../controllers/control.controller')
 const { generateKey, getAllKeys, revokeKey } = require('../controllers/admin.controller')
 const {
@@ -15,6 +15,7 @@ const {
   logoutSettings,
   requireSettingsAuth,
   setupSettings,
+  testSettingsProvider,
   updateSettings
 } = require('../controllers/settings.controller')
 
@@ -34,6 +35,7 @@ router.get('/stats/history', requireSettingsAuth, getHistory)
 router.get('/settings', requireSettingsAuth, getSettings)
 router.patch('/settings', requireSettingsAuth, updateSettings)
 router.post('/settings/generate-name', requireSettingsAuth, generateName)
+router.post('/settings/providers/test', requireSettingsAuth, testSettingsProvider)
 router.get('/settings/name-history', requireSettingsAuth, getNameHistory)
 
 // API Key Administration
@@ -46,7 +48,9 @@ const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 })
 const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
 
 router.get('/search', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
+router.get('/v1/artist/discover', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
 router.get('/v1/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
+router.get('/v1/song/albums', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
 
 // Control routes
 router.post('/proxy/start', startProxy)

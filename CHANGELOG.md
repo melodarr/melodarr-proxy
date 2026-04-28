@@ -2,6 +2,19 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.2.0 - 2026-04-28
+
+- Redesigned DevDash around Melodarr Proxy with Dashboard, Insights, Analytics, Requests, Explorer, and Settings views.
+- Added Explorer search modes for artist, song, album, and artist plus song workflows.
+- Added visual Explorer results with artwork cards and a JSON tab for raw debug output.
+- Added richer request trace inspection with provider timing, steps, raw details, and copyable logs.
+- Added provider testing from Settings, including drag-and-drop provider priority and per-provider diagnostics.
+- Added custom provider configuration and a visual mapping builder backed by proxy-side JSONPath transforms.
+- Added MusicBrainz API key support and moved MusicBrainz identity/contact into runtime configuration.
+- Fixed MusicBrainz TLS resets in Docker by running the proxy on a Debian Node image and routing MusicBrainz over IPv6.
+- Restored DevDash Compose support on `DEVDASH_HOST_PORT` and added `manage.sh` network setup for local operation.
+- Added debug endpoints for artist discovery, song-to-album lookup, provider tests, snapshots, and request tracing.
+
 ## v0.1.1 - 2026-04-28
 
 - Added Proxmox LXC installer script and streamlined README usage docs.

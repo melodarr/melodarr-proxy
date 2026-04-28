@@ -1,5 +1,11 @@
 const express = require('express')
 const path = require('path')
+const crypto = require('crypto')
+
+if (!process.env.INSTANCE_ID) {
+  process.env.INSTANCE_ID = crypto.randomBytes(4).toString('hex')
+}
+
 const logger = require('./utils/logger')
 const cacheLayer = require('./cache')
 const upstreamService = require('./services/upstream.service')
@@ -20,8 +26,7 @@ if (process.argv.includes('--reset-password')) {
 
 const metricsMiddleware = require('./middleware/metrics.middleware')
 const apiRoutes = require('./routes/api.routes')
-const publicRoutes = require('./routes/public.routes')
-const { isAuthenticated } = require('./controllers/settings.controller')
+const debugRoutes = require('./routes/debug.routes')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -43,51 +48,27 @@ app.use(express.json())
 // Metrics tracking for all routes
 app.use(metricsMiddleware)
 
-function isProtectedPage (req) {
-  return req.method === 'GET' && (req.path === '/' || (req.path.endsWith('.html') && req.path !== '/login.html'))
-}
-
-app.use((req, res, next) => {
-  if (req.method === 'GET' && req.path === '/login.html' && isAuthenticated(req)) {
-    return res.redirect('/')
-  }
-
-  if (isProtectedPage(req) && !isAuthenticated(req)) {
-    return res.redirect('/login.html')
-  }
-
-  return next()
-})
-
-// Serve frontend static files
-app.use(express.static(path.join(__dirname, '../public')))
-
 // Versioning + Release Identity Endpoint
 app.get('/api/version', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '1.0.0',
+    version: process.env.APP_VERSION || '0.2.0',
     environment: process.env.NODE_ENV || 'development'
   })
 })
 
 // API Routes
 app.use('/api', apiRoutes)
-app.use('/public', publicRoutes)
-app.use('/api', (req, res) => {
+app.use('/debug', debugRoutes)
+
+// Serve static frontend
+app.use(express.static(path.join(__dirname, '../public')))
+
+// Fallback for unmatched routes
+app.use((req, res) => {
   res.status(404).json({
     error: 'API route not found'
   })
-})
-
-// Fallback for SPA or unmatched GET routes. Use middleware instead of app.get('*')
-// because newer Express router parsing rejects bare wildcard route strings.
-app.use((req, res, next) => {
-  if (req.method !== 'GET') {
-    return next()
-  }
-
-  res.sendFile(path.join(__dirname, '../public/index.html'))
 })
 
 // ── Startup Validation (Fail-Fast System) ───────────────────────
@@ -118,11 +99,26 @@ async function boot () {
     process.exit(1)
   }
 
+  // Start background jobs
+  require('./jobs').startJobs()
+
   // Start server
-  app.listen(PORT, '0.0.0.0', () => {
-    logger.info(`Production proxy running on port ${PORT}`)
-    logger.info(`Health Check: http://localhost:${PORT}/api/health`)
-  })
+  if (!process.env.NO_LISTEN) {
+    if (typeof PORT === 'string' && PORT.startsWith('/')) {
+      app.listen(PORT, () => {
+        logger.info(`Production proxy running on socket ${PORT}`)
+        logger.info(`Health Check: curl --unix-socket ${PORT} http://localhost/api/health`)
+      })
+    } else {
+      app.listen(PORT, '0.0.0.0', () => {
+        logger.info(`Production proxy running on port ${PORT}`)
+        logger.info(`Health Check: http://localhost:${PORT}/api/health`)
+      })
+    }
+  } else {
+    logger.info('Skipping app.listen due to NO_LISTEN flag.')
+  }
 }
 
 boot()
+module.exports = app

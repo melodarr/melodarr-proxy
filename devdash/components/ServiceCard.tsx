@@ -5,16 +5,33 @@ import { fetcher } from "@/lib/fetcher";
 import { StatusBadge } from "./StatusBadge";
 import Link from "next/link";
 import { Activity, Clock, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { mergeTelemetry, telemetryFromOverview, telemetryFromStats } from "@/lib/telemetry";
 
 export function ServiceCard({ service }: { service: { name: string; baseUrl: string } }) {
   const { data: health, error: healthError } = useSWR(`${service.baseUrl}/api/health`, fetcher, { refreshInterval: 5000 });
-  const { data: stats, error: statsError } = useSWR(`${service.baseUrl}/api/stats`, fetcher, { refreshInterval: 10000 });
+  const { data: stats } = useSWR(`${service.baseUrl}/api/stats`, fetcher, { refreshInterval: 10000 });
+  const { data: overview } = useSWR(`${service.baseUrl}/debug/overview`, fetcher, { refreshInterval: 5000 });
+  const [updatedAt, setUpdatedAt] = useState<string>("--");
 
-  const isDown = healthError || (health && health.status !== "ok");
-  const isDegraded = !isDown && (statsError || (stats && stats.errorRate > 5));
+  useEffect(() => {
+    const update = () => setUpdatedAt(new Date().toLocaleTimeString());
+
+    update();
+    const interval = window.setInterval(update, 10000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const isDown = healthError || (health && health.proxy && health.proxy !== "running");
+  const isDegraded = !isDown && health && (health.cache === "degraded" || health.memory?.status === "warning");
   const isLoading = !health && !healthError;
 
   const status = isLoading ? "loading" : isDown ? "down" : isDegraded ? "degraded" : "healthy";
+  const telemetry = mergeTelemetry(telemetryFromStats(stats), telemetryFromOverview(overview));
+  const rpm = telemetry.rpm ?? "--";
+  const latency = telemetry.latencyAvgMs === undefined ? "--" : `${telemetry.latencyAvgMs}ms`;
+  const errorRate = telemetry.errorRatePercent === undefined ? "--" : `${telemetry.errorRatePercent}%`;
 
   return (
     <Link href={`/service/${service.name}`} className="block">
@@ -30,26 +47,26 @@ export function ServiceCard({ service }: { service: { name: string; baseUrl: str
               <p className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1 text-gray-400">
                 <Activity className="w-3 h-3" /> Requests/min
               </p>
-              <p className="text-xl font-medium">{stats ? stats.rpm : "--"}</p>
+              <p className="text-xl font-medium">{rpm}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1 text-gray-400">
                 <Clock className="w-3 h-3" /> Latency (avg)
               </p>
-              <p className="text-xl font-medium">{stats ? `${stats.latencyAvg}ms` : "--"}</p>
+              <p className="text-xl font-medium">{latency}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1 text-gray-400">
                 <AlertTriangle className="w-3 h-3" /> Error rate
               </p>
-              <p className="text-xl font-medium">{stats ? `${stats.errorRate}%` : "--"}</p>
+              <p className="text-xl font-medium">{errorRate}</p>
             </div>
           </div>
         </div>
 
         <div className="mt-6 pt-4 border-t border-border/50 flex items-center justify-between text-xs text-gray-500">
           <span>{service.baseUrl}</span>
-          <span>Updated: {new Date().toLocaleTimeString()}</span>
+          <span>Updated: {updatedAt}</span>
         </div>
       </div>
     </Link>

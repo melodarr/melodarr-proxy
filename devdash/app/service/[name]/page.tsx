@@ -1,5 +1,6 @@
 "use client";
 
+import { use } from "react";
 import { services } from "@/lib/services";
 import { fetcher } from "@/lib/fetcher";
 import useSWR from "swr";
@@ -9,20 +10,28 @@ import { ControlPanel } from "@/components/ControlPanel";
 import Link from "next/link";
 import { ArrowLeft, Server, Activity, Database, Clock } from "lucide-react";
 import { notFound } from "next/navigation";
+import { chartSamplesFromOverview, mergeTelemetry, telemetryFromOverview, telemetryFromStats } from "@/lib/telemetry";
 
-export default function ServiceDetail({ params }: { params: { name: string } }) {
-  const service = services.find(s => s.name === params.name);
+export default function ServiceDetail({ params }: { params: Promise<{ name: string }> }) {
+  const { name } = use(params);
+  const service = services.find(s => s.name === name);
   if (!service) return notFound();
 
   const { data: health, error: healthError } = useSWR(`${service.baseUrl}/api/health`, fetcher, { refreshInterval: 5000 });
-  const { data: stats, error: statsError } = useSWR(`${service.baseUrl}/api/stats`, fetcher, { refreshInterval: 10000 });
+  const { data: stats } = useSWR(`${service.baseUrl}/api/stats`, fetcher, { refreshInterval: 10000 });
+  const { data: overview } = useSWR(`${service.baseUrl}/debug/overview`, fetcher, { refreshInterval: 5000 });
   const { data: version } = useSWR(`${service.baseUrl}/api/version`, fetcher);
-  const { data: history } = useSWR(`${service.baseUrl}/api/stats/history`, fetcher, { refreshInterval: 30000 });
 
-  const isDown = healthError || (health && health.status !== "ok");
-  const isDegraded = !isDown && (statsError || (stats && stats.errorRate > 5));
+  const isDown = healthError || (health && health.proxy && health.proxy !== "running");
+  const isDegraded = !isDown && health && (health.cache === "degraded" || health.memory?.status === "warning");
   const isLoading = !health && !healthError;
   const status = isLoading ? "loading" : isDown ? "down" : isDegraded ? "degraded" : "healthy";
+  const providerStats = stats?.providers && typeof stats.providers === "object" ? stats.providers : {};
+  const telemetry = mergeTelemetry(telemetryFromStats(stats), telemetryFromOverview(overview));
+  const chartData = chartSamplesFromOverview(overview);
+  const rpm = telemetry.rpm ?? "--";
+  const latency = telemetry.latencyAvgMs === undefined ? "--" : `${telemetry.latencyAvgMs}ms`;
+  const errorRate = telemetry.errorRatePercent === undefined ? "--" : `${telemetry.errorRatePercent}%`;
 
   return (
     <main className="container mx-auto p-8 max-w-screen-2xl">
@@ -53,21 +62,39 @@ export default function ServiceDetail({ params }: { params: { name: string } }) 
                 <span className="font-medium">{health?.uptime ? `${Math.floor(health.uptime / 60)}m` : '--'}</span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                <span className="text-gray-400 text-sm flex items-center gap-2"><Activity className="w-4 h-4" /> Requests/min</span>
+                <span className="font-medium">{rpm}</span>
+              </div>
+              <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                <span className="text-gray-400 text-sm flex items-center gap-2"><Clock className="w-4 h-4" /> Latency</span>
+                <span className="font-medium">{latency}</span>
+              </div>
+              <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                <span className="text-gray-400 text-sm flex items-center gap-2"><Activity className="w-4 h-4" /> Error rate</span>
+                <span className="font-medium">{errorRate}</span>
+              </div>
+              <div className="flex justify-between items-center pb-3 border-b border-border/50">
                 <span className="text-gray-400 text-sm flex items-center gap-2"><Database className="w-4 h-4" /> Redis</span>
-                <span className="font-medium">{health?.redis === 'connected' ? 'Connected' : 'Disconnected'}</span>
+                <span className="font-medium">{health?.redisConnected ? 'Connected' : 'Disconnected'}</span>
+              </div>
+              <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                <span className="text-gray-400 text-sm flex items-center gap-2"><Server className="w-4 h-4" /> Upstream</span>
+                <span className={`font-medium ${health?.upstream === 'reachable' ? 'text-emerald-400' : 'text-orange-300'}`}>
+                  {health?.upstream === 'reachable' ? 'Reachable' : 'Unreachable'}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm flex items-center gap-2"><Activity className="w-4 h-4" /> Memory</span>
-                <span className="font-medium">{health?.memoryUsage?.rss ? `${Math.round(health.memoryUsage.rss / 1024 / 1024)}MB` : '--'}</span>
+                <span className="font-medium">{health?.memory?.usageMb ? `${health.memory.usageMb}MB` : '--'}</span>
               </div>
             </div>
           </div>
 
-          {stats?.providers && Object.keys(stats.providers).length > 0 && (
+          {Object.keys(providerStats).length > 0 && (
             <div className="rounded-xl border bg-card p-6">
               <h3 className="font-semibold text-lg mb-4">Providers</h3>
               <div className="space-y-4">
-                {Object.entries(stats.providers).map(([name, pStats]: [string, any]) => (
+                {Object.entries(providerStats).map(([name, pStats]: [string, any]) => (
                   <div key={name} className="flex flex-col pb-3 border-b border-border/50">
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-medium capitalize">{name}</span>
@@ -94,20 +121,20 @@ export default function ServiceDetail({ params }: { params: { name: string } }) 
           <div className="rounded-xl border bg-card p-6">
             <h3 className="font-semibold text-lg mb-2">Requests per Minute</h3>
             <p className="text-sm text-gray-400 mb-4">Volume of traffic hitting the service.</p>
-            {history ? <MetricsChart data={history} dataKey="rpm" color="#3b82f6" name="RPM" /> : <div className="h-[250px] flex items-center justify-center text-gray-500">Loading...</div>}
+            <MetricsChart data={chartData} dataKey="rpm" color="#3b82f6" name="RPM" />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <div className="rounded-xl border bg-card p-6">
               <h3 className="font-semibold text-lg mb-2">Latency (ms)</h3>
               <p className="text-sm text-gray-400 mb-4">Average response time.</p>
-              {history ? <MetricsChart data={history} dataKey="latencyAvg" color="#10b981" name="Avg Latency" /> : <div className="h-[250px] flex items-center justify-center text-gray-500">Loading...</div>}
+              <MetricsChart data={chartData} dataKey="latencyAvg" color="#10b981" name="Avg Latency" />
             </div>
             
             <div className="rounded-xl border bg-card p-6">
               <h3 className="font-semibold text-lg mb-2">Error Rate (%)</h3>
               <p className="text-sm text-gray-400 mb-4">Percentage of failed requests.</p>
-              {history ? <MetricsChart data={history} dataKey="errorRate" color="#ef4444" name="Error Rate" /> : <div className="h-[250px] flex items-center justify-center text-gray-500">Loading...</div>}
+              <MetricsChart data={chartData} dataKey="errorRate" color="#ef4444" name="Error Rate" />
             </div>
           </div>
         </div>

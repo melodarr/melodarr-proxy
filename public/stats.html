@@ -5,7 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Melodarr Proxy - Stats</title>
     <script>
-      document.documentElement.dataset.theme = localStorage.getItem('melodarr-theme') || 'dark';
+      (function() {
+        var saved = localStorage.getItem('melodarr-theme');
+        if (saved) {
+          document.documentElement.dataset.theme = saved;
+        } else {
+          var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+          document.documentElement.dataset.theme = prefersLight ? 'light' : 'dark';
+        }
+      })();
     </script>
     <link rel="stylesheet" href="/styles.css">
   </head>

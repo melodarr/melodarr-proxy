@@ -9,6 +9,7 @@ const {
   updateRuntimeConfig,
   verifyPassword
 } = require('../settings/store')
+const { testProvider } = require('../providers')
 
 const SETTINGS_COOKIE = 'melodarr_proxy_settings'
 const SETTINGS_SESSION_TTL_MS = 12 * 60 * 60 * 1000
@@ -192,6 +193,46 @@ function updateSettings (req, res) {
   })
 }
 
+function buildProviderErrorDetails (error) {
+  return {
+    message: error.message || 'Provider test failed',
+    code: error.code || null,
+    status: error.response?.status || null,
+    statusText: error.response?.statusText || null,
+    url: error.config?.url || null,
+    method: error.config?.method || null,
+    response: typeof error.response?.data === 'string'
+      ? error.response.data.slice(0, 1000)
+      : error.response?.data || null
+  }
+}
+
+async function testSettingsProvider (req, res) {
+  const provider = String(req.body?.provider || '').trim()
+  const query = String(req.body?.query || 'Radiohead').trim()
+
+  if (!provider) {
+    return res.status(400).json({ error: 'Provider is required' })
+  }
+
+  if (!query) {
+    return res.status(400).json({ error: 'Query is required' })
+  }
+
+  try {
+    const result = await testProvider(provider, query)
+    return res.json({ ok: true, ...result })
+  } catch (error) {
+    return res.status(502).json({
+      ok: false,
+      provider,
+      query,
+      error: error.message || 'Provider test failed',
+      details: buildProviderErrorDetails(error)
+    })
+  }
+}
+
 module.exports = {
   generateName,
   getNameHistory,
@@ -202,5 +243,6 @@ module.exports = {
   logoutSettings,
   requireSettingsAuth,
   setupSettings,
+  testSettingsProvider,
   updateSettings
 }

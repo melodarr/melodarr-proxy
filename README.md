@@ -37,10 +37,15 @@ Ports are randomized by default. Find the active proxy port with:
 docker compose port proxy 3000
 ```
 
+Run the proxy:
+
+```bash
+docker compose up -d
+```
+
 Optional services use Compose profiles:
 
 ```bash
-docker compose --profile devdash up -d
 docker compose --profile auth up -d
 docker compose --profile test build test
 ```

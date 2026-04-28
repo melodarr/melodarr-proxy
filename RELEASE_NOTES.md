@@ -1,37 +1,39 @@
-# Melodarr Proxy v0.1.1
+# Melodarr Proxy v0.2.0
 
-Patch release focused on open-source hardening, install documentation, and regression coverage after the initial `v0.1.0` release.
+Feature release focused on the Melodarr Proxy control plane, provider diagnostics, custom provider setup, and Docker networking reliability.
 
 ## Highlights
 
-- Added `scripts/install-proxmox-lxc.sh` for Proxmox LXC installs.
-- Added Lidarr setup documentation.
-- Protected `main` with required CI checks.
-- Tuned Dependabot to avoid unplanned major Node Docker and Express upgrades.
-- Pinned optional service dependencies and added Yarn lockfiles.
-- Added immutable Yarn installs for optional service Docker builds.
-- Tightened Docker build contexts.
-- Added tests for artist lookup cache behavior, response shape, provider failure handling, and API-key middleware.
+- Redesigned DevDash with dedicated Dashboard, Insights, Analytics, Requests, Explorer, and Settings pages.
+- Added Explorer search modes for artist, song, album, and artist plus song lookups.
+- Added a visual Explorer result view with artwork cards, plus a JSON tab for the original debug payload.
+- Added request trace details, provider timing, raw diagnostics, and copyable log output.
+- Added Settings provider testing with drag-and-drop provider priority.
+- Added custom provider configuration with a visual JSON mapping builder.
+- Added MusicBrainz API key support and runtime identity/contact configuration.
+- Fixed MusicBrainz Docker TLS failures by moving the proxy runtime to Debian Node and preferring IPv6 for MusicBrainz.
+- Restored DevDash Compose support on `DEVDASH_HOST_PORT=55026`.
+- Added `manage.sh` network setup for local start/rebuild flows.
 
 ## Compatibility
 
-This release is not a full Lidarr metadata-server replacement. Current support is focused on:
+The proxy still focuses on artist lookup compatibility first:
 
 - `GET /api/v1/artist/lookup?term={artist}`
 - album-level normalized metadata
-- cached repeated lookup behavior
+- provider fallback and cache behavior
 
-Known gaps are tracked in `docs/lidarr-compatibility.md` and `ROADMAP.md`.
+Explorer and debug endpoints are intended for operator workflows and provider diagnostics, not Lidarr compatibility.
 
 ## Verification
 
 Release checks run locally:
 
-- `yarn lint`
-- `yarn lint:auth`
-- `yarn lint:devdash`
-- `yarn test`
 - `docker compose config --quiet`
-- `docker compose build auth`
-- `docker compose build devdash`
-- `docker compose --profile test build test`
+- `docker compose --profile devdash build devdash`
+- Browser smoke test for Explorer Visual and JSON tabs
+- MusicBrainz container connectivity check over IPv6
+
+Known test gap:
+
+- `yarn test` currently fails in existing controller tests because the test cache mock is missing `cache.acquireLock` and one cached response fixture is stale.
