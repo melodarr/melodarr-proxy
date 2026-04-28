@@ -49,8 +49,18 @@ async function handleSearch(req, res) {
 
     res.json(data);
   } catch (err) {
-    console.error('[Proxy] Upstream error:', err.message);
-    res.status(502).json({ error: 'Failed to fetch from upstream API' });
+    console.error('[Proxy] Upstream error in handleSearch:', err.message, 'User-Agent sent:', err.config?.headers?.['User-Agent']);
+    const diagnostic = {
+      message: err.message,
+      code: err.code,
+      config: err.config ? {
+        url: err.config.url,
+        method: err.config.method,
+        headers: err.config.headers,
+        params: err.config.params
+      } : undefined
+    };
+    res.status(502).json({ error: 'Failed to fetch from upstream API', details: diagnostic });
   }
 }
 
@@ -208,7 +218,7 @@ async function handleArtistLookup(req, res) {
     res.set('X-Upstream-Calls', '2');
     return res.json(response);
   } catch (error) {
-    console.error('[Proxy] Artist lookup failed:', error.message);
+    console.error('[Proxy] Artist lookup failed:', error.message, 'User-Agent sent:', error.config?.headers?.['User-Agent']);
     const status = [403, 429, 503, 504].includes(error.response?.status) ? 503 : 502;
     const isConnReset = error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED';
     const networkWarning = isConnReset
@@ -228,7 +238,17 @@ async function handleArtistLookup(req, res) {
       foreignArtistId: '',
       albums: [],
       partial: true,
-      warning: error.response?.data?.error || networkWarning
+      warning: error.response?.data?.error || networkWarning,
+      details: {
+        message: error.message,
+        code: error.code,
+        config: error.config ? {
+          url: error.config.url,
+          method: error.config.method,
+          headers: error.config.headers,
+          params: error.config.params
+        } : undefined
+      }
     });
   }
 }
