@@ -182,6 +182,8 @@ See [ROADMAP.md](ROADMAP.md).
 
 See [docs/lidarr-compatibility.md](docs/lidarr-compatibility.md).
 
+For setup steps, see [docs/lidarr-setup.md](docs/lidarr-setup.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

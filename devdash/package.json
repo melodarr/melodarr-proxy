@@ -2,6 +2,7 @@
   "name": "devdash",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "yarn@4.14.1",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,22 +10,23 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "swr": "latest",
-    "recharts": "latest",
-    "lucide-react": "latest",
-    "clsx": "latest",
-    "tailwind-merge": "latest"
+    "clsx": "2.1.1",
+    "lucide-react": "1.11.0",
+    "next": "16.2.4",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-is": "19.2.5",
+    "recharts": "3.8.1",
+    "swr": "2.4.1",
+    "tailwind-merge": "3.5.0"
   },
   "devDependencies": {
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "postcss": "latest",
-    "tailwindcss": "latest",
-    "autoprefixer": "latest",
-    "typescript": "latest"
+    "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "autoprefixer": "10.5.0",
+    "postcss": "8.5.12",
+    "tailwindcss": "4.2.4",
+    "typescript": "6.0.3"
   }
 }

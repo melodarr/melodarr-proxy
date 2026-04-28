@@ -9,11 +9,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: express
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /auth-service
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: express
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /devdash
@@ -24,13 +30,22 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /auth-service
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /devdash
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]

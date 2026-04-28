@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "description": "Platform authentication service",
   "main": "server.js",
+  "packageManager": "yarn@4.14.1",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "dependencies": {
-    "bcrypt": "latest",
-    "express": "latest",
-    "jsonwebtoken": "latest"
+    "bcrypt": "6.0.0",
+    "express": "5.2.1",
+    "jsonwebtoken": "9.0.3"
   }
 }
