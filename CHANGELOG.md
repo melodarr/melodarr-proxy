@@ -2,6 +2,17 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.1.1 - 2026-04-28
+
+- Added Proxmox LXC installer script and streamlined README usage docs.
+- Added Lidarr setup guide and linked it from compatibility documentation.
+- Protected `main` with required PR checks.
+- Tuned Dependabot to avoid unplanned major Node Docker and Express upgrades.
+- Pinned optional service dependencies and added Yarn lockfiles.
+- Added immutable Yarn installs for optional service Docker builds.
+- Tightened Docker build contexts for root and optional services.
+- Added integration coverage for artist lookup cache behavior, response shape, provider failure handling, and API-key middleware.
+
 ## v0.1.0 - 2026-04-28
 
 - Added multi-provider metadata support.

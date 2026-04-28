@@ -20,7 +20,7 @@ UNPRIVILEGED="${UNPRIVILEGED:-1}"
 
 HOST_PORT="${HOST_PORT:-3055}"
 APP_CONTACT="${APP_CONTACT:-admin@example.com}"
-IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:v0.1.0}"
+IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:v0.1.1}"
 ### =========================
 
 if [[ $EUID -ne 0 ]]; then
@@ -143,7 +143,7 @@ services:
       REDIS_URL: redis://redis:6379
       DATA_DIR: /data
       APP_NAME: melodarr-proxy
-      APP_VERSION: 0.1.0
+      APP_VERSION: 0.1.1
       APP_CONTACT: ${APP_CONTACT}
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
