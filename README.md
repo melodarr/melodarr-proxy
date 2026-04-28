@@ -48,7 +48,118 @@ docker compose --profile test build test
 Published images are built by GitHub Actions and published to:
 
 ```text
-ghcr.io/<owner>/<repo>
+ghcr.io/melodarr/melodarr-proxy
+```
+
+## Proxmox LXC Install
+
+Run this on the Proxmox host as `root`. It creates a Debian 12 LXC, installs Docker inside it, and starts Melodarr Proxy with Redis.
+
+Before running, adjust `PASSWORD` and `APP_CONTACT`. Change `STORAGE`, `ROOTFS_STORAGE`, or `BRIDGE` if your Proxmox node uses different names.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+VMID="${VMID:-3055}"
+HOSTNAME="${HOSTNAME:-melodarr-proxy}"
+STORAGE="${STORAGE:-local}"
+ROOTFS_STORAGE="${ROOTFS_STORAGE:-local-lvm}"
+BRIDGE="${BRIDGE:-vmbr0}"
+DISK_SIZE="${DISK_SIZE:-8}"
+MEMORY="${MEMORY:-1024}"
+CORES="${CORES:-1}"
+PASSWORD="${PASSWORD:-change-this-password}"
+HOST_PORT="${HOST_PORT:-3055}"
+APP_CONTACT="${APP_CONTACT:-admin@example.com}"
+IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:v0.1.0}"
+TEMPLATE="${TEMPLATE:-}"
+
+if pct status "$VMID" >/dev/null 2>&1; then
+  echo "LXC $VMID already exists. Choose another VMID or remove the existing container."
+  exit 1
+fi
+
+pveam update
+if [ -z "$TEMPLATE" ]; then
+  TEMPLATE="$(pveam available --section system | awk '/debian-12-standard/ {print $2}' | sort -V | tail -n 1)"
+fi
+
+if ! pveam list "$STORAGE" | grep -q "$TEMPLATE"; then
+  pveam download "$STORAGE" "$TEMPLATE"
+fi
+
+pct create "$VMID" "$STORAGE:vztmpl/$TEMPLATE" \
+  --hostname "$HOSTNAME" \
+  --ostype debian \
+  --unprivileged 1 \
+  --features nesting=1,keyctl=1 \
+  --cores "$CORES" \
+  --memory "$MEMORY" \
+  --rootfs "$ROOTFS_STORAGE:$DISK_SIZE" \
+  --net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" \
+  --password "$PASSWORD" \
+  --start 1
+
+pct exec "$VMID" -- bash -lc '
+set -euo pipefail
+apt-get update
+apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+mkdir -p /opt/melodarr-proxy
+'
+
+pct exec "$VMID" -- bash -lc "cat > /opt/melodarr-proxy/compose.yml" <<EOF
+services:
+  proxy:
+    image: ${IMAGE}
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      DATA_DIR: /data
+      HOST_PORT: ${HOST_PORT}
+      APP_NAME: melodarr-proxy
+      APP_VERSION: 0.1.0
+      APP_CONTACT: ${APP_CONTACT}
+      METADATA_PROVIDERS: musicbrainz,itunes
+      PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
+      MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
+      MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
+      CACHE_TTL_SECONDS: 86400
+      UPSTREAM_TIMEOUT_MS: 8000
+      SLOW_REQUEST_MS: 2000
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    ports:
+      - "${HOST_PORT}:3000"
+    volumes:
+      - melodarr_proxy_data:/data
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+volumes:
+  melodarr_proxy_data:
+EOF
+
+pct exec "$VMID" -- bash -lc '
+set -euo pipefail
+cd /opt/melodarr-proxy
+docker compose up -d
+'
+
+IP="$(pct exec "$VMID" -- hostname -I | awk "{print \$1}")"
+echo "Melodarr Proxy is starting at: http://${IP}:${HOST_PORT}"
+echo "Open the URL and create the first-run admin password."
 ```
 
 ## Local Development
