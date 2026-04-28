@@ -5,38 +5,152 @@ const statusEl = document.querySelector('#status');
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
-  statusEl.style.color = isError ? '#b42318' : '#44505c';
+  statusEl.style.color = isError ? '#b42318' : 'var(--c-muted)';
 }
 
-function formatValue(value) {
-  if (typeof value === 'boolean') {
-    return value ? 'yes' : 'no';
-  }
+// Human-readable labels for each config key
+const LABELS = {
+  userAgent:            'User-Agent',
+  cacheTtlSeconds:      'Cache TTL (seconds)',
+  musicbrainzBaseUrl:   'MusicBrainz Base URL',
+  minRequestIntervalMs: 'Min Request Interval (ms)',
+  upstreamTimeoutMs:    'Upstream Timeout (ms)',
+  slowRequestMs:        'Slow Request Threshold (ms)'
+};
 
-  return String(value);
-}
-
-function renderSettings(settings) {
+function renderSettings(data) {
   settingsGrid.replaceChildren();
 
-  Object.entries(settings).forEach(([sectionName, values]) => {
-    const section = document.createElement('section');
-    const heading = document.createElement('h3');
-    const list = document.createElement('dl');
+  // ── Editable config section ──
+  const configSection = document.createElement('section');
+  configSection.innerHTML = '<h3>Configuration</h3>';
 
-    heading.textContent = sectionName;
+  const form = document.createElement('form');
+  form.id = 'settings-form';
+  form.className = 'settings-form';
 
-    Object.entries(values).forEach(([key, value]) => {
-      const term = document.createElement('dt');
-      const definition = document.createElement('dd');
+  const entries = Object.entries(data.config || {});
 
-      term.textContent = key;
-      definition.textContent = formatValue(value);
-      list.append(term, definition);
+  entries.forEach(([key, info]) => {
+    const label = document.createElement('label');
+    const labelText = LABELS[key] || key;
+    const isLocked = info.source === 'env';
+
+    label.innerHTML = `
+      ${labelText}
+      ${isLocked ? '<span class="lock-badge" title="Locked by environment variable">env</span>' : ''}
+    `;
+
+    const input = document.createElement('input');
+    input.name = key;
+    input.value = info.value;
+    input.disabled = isLocked;
+    input.type = typeof info.value === 'number' ? 'number' : 'text';
+
+    if (typeof info.value === 'number') {
+      input.min = '1';
+    }
+
+    label.append(input);
+    form.append(label);
+  });
+
+  const saveButton = document.createElement('button');
+  saveButton.type = 'submit';
+  saveButton.textContent = 'Save changes';
+  form.append(saveButton);
+
+  configSection.append(form);
+  settingsGrid.append(configSection);
+
+  // ── Read-only server info ──
+  const serverSection = document.createElement('section');
+  serverSection.innerHTML = '<h3>Server (read-only)</h3>';
+
+  const dl = document.createElement('dl');
+
+  if (data.server) {
+    Object.entries(data.server).forEach(([key, info]) => {
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+      dt.textContent = key;
+      dd.textContent = info.value;
+      dl.append(dt, dd);
     });
+  }
 
-    section.append(heading, list);
-    settingsGrid.append(section);
+  if (data.admin) {
+    Object.entries(data.admin).forEach(([key, value]) => {
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+      dt.textContent = key;
+      dd.textContent = typeof value === 'boolean' ? (value ? 'yes' : 'no') : String(value);
+      dl.append(dt, dd);
+    });
+  }
+
+  serverSection.append(dl);
+  settingsGrid.append(serverSection);
+
+  // ── Form submit handler ──
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    saveButton.disabled = true;
+    setStatus('Saving...');
+
+    const formData = new FormData(form);
+    const updates = {};
+
+    for (const [key, value] of formData.entries()) {
+      const original = data.config[key];
+
+      if (!original || original.source === 'env') {
+        continue;
+      }
+
+      const coerced = typeof original.value === 'number' ? Number(value) : value;
+
+      if (coerced !== original.value) {
+        updates[key] = coerced;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      setStatus('No changes to save');
+      saveButton.disabled = false;
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Save failed');
+      }
+
+      const appliedCount = Object.keys(result.applied || {}).length;
+      const skippedKeys = Object.keys(result.skipped || {});
+
+      if (skippedKeys.length > 0) {
+        const reasons = skippedKeys.map((k) => `${k}: ${result.skipped[k]}`).join(', ');
+        setStatus(`Saved ${appliedCount} setting(s). Skipped: ${reasons}`, true);
+      } else {
+        setStatus(`Saved ${appliedCount} setting(s)`);
+      }
+
+      // Reload the settings to show updated values
+      await loadSettings();
+    } catch (error) {
+      setStatus(error.message, true);
+    } finally {
+      saveButton.disabled = false;
+    }
   });
 }
 

@@ -11,7 +11,8 @@ const {
   loginSettings,
   logoutSettings,
   requireSettingsAuth,
-  setupSettings
+  setupSettings,
+  updateSettings
 } = require('../controllers/settings.controller');
 
 const proxyStateMiddleware = require('../middleware/proxy.middleware');
@@ -26,6 +27,7 @@ router.post('/settings/logout', logoutSettings);
 // Authenticated monitoring/configuration
 router.get('/stats', requireSettingsAuth, getStats);
 router.get('/settings', requireSettingsAuth, getSettings);
+router.patch('/settings', requireSettingsAuth, updateSettings);
 
 // Main proxy route (requires proxy to be running)
 router.get('/search', proxyStateMiddleware, handleSearch);

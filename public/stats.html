@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Melodarr Proxy - Stats</title>
+    <script>
+      document.documentElement.dataset.theme = localStorage.getItem('melodarr-theme') || 'dark';
+    </script>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -78,6 +81,7 @@
       </div>
     </main>
 
+    <script src="/theme.js"></script>
     <script src="/stats.js"></script>
   </body>
 </html>

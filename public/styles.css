@@ -9,9 +9,9 @@
 [hidden] { display: none !important; }
 
 :root {
-  color-scheme: dark;
+  color-scheme: dark light;
 
-  /* Neutrals — Zinc scale, no pure black */
+  /* Dark theme */
   --bg-base:        #111113;
   --bg-raised:      #19191d;
   --bg-surface:     #222228;
@@ -46,6 +46,33 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-base:        #f5f2ec;
+  --bg-raised:      #fffdf8;
+  --bg-surface:     #f0ebe2;
+  --bg-surface-alt: #e8e1d6;
+  --border-subtle:  rgba(58, 49, 39, 0.10);
+  --border-medium:  rgba(58, 49, 39, 0.18);
+
+  --text-primary:   #24211d;
+  --text-secondary: #655d53;
+  --text-tertiary:  #8a8175;
+
+  --accent:         #a86522;
+  --accent-dim:     rgba(168, 101, 34, 0.12);
+  --accent-ring:    rgba(168, 101, 34, 0.24);
+
+  --success:        #247a53;
+  --warning:        #9f6d1b;
+  --danger:         #b33d3d;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 /* ── Reset & Base ─────────────────────────────────────────────── */
@@ -138,6 +165,10 @@ p {
   position: relative;
 }
 
+.lookup-panel > div:first-child {
+  padding-right: 120px;
+}
+
 /* Thin accent bar — left edge, not top. Asymmetric. */
 .lookup-panel::before {
   content: '';
@@ -179,6 +210,24 @@ p {
 }
 
 .top-nav a[aria-current="page"] {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.theme-toggle {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  min-height: 34px;
+  min-width: 96px;
+  padding: 0 var(--space-sm);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+  white-space: nowrap;
+}
+
+.theme-toggle:hover {
   color: var(--text-primary);
   background: var(--bg-surface);
 }
@@ -244,7 +293,8 @@ button:disabled {
 /* Ghost/secondary buttons */
 button#toggle-json,
 button#logout,
-button#refresh {
+button#refresh,
+button.theme-toggle {
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-medium);
@@ -256,7 +306,8 @@ button#refresh {
 
 button#toggle-json:hover,
 button#logout:hover,
-button#refresh:hover {
+button#refresh:hover,
+button.theme-toggle:hover {
   color: var(--text-primary);
   border-color: var(--border-medium);
   background: var(--bg-surface);
@@ -487,6 +538,59 @@ pre::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 
   padding: 3px 8px;
   border-radius: var(--radius-sm);
   word-break: break-all;
+}
+
+/* ── Settings Form ────────────────────────────────────────────── */
+
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+.settings-form input {
+  background: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+.settings-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-form input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--text-tertiary);
+}
+
+.settings-form button[type="submit"] {
+  margin-top: var(--space-sm);
+}
+
+.lock-badge {
+  display: inline-block;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */

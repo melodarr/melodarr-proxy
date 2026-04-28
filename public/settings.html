@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Melodarr Proxy - Settings</title>
+    <script>
+      document.documentElement.dataset.theme = localStorage.getItem('melodarr-theme') || 'dark';
+    </script>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -24,7 +27,7 @@
         <div class="artist-header">
           <div>
             <h2>Runtime config</h2>
-            <code>Values are read from environment/config at startup.</code>
+            <code>Edit runtime settings. Fields locked by env vars are read-only.</code>
           </div>
           <button id="logout" type="button">Log out</button>
         </div>
@@ -34,6 +37,7 @@
       <div id="status" class="status settings-status">Loading settings...</div>
     </main>
 
+    <script src="/theme.js"></script>
     <script src="/settings.js"></script>
   </body>
 </html>

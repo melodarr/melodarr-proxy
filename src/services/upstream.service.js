@@ -1,14 +1,14 @@
 const axios = require('axios');
+const { getConfigValue } = require('../settings/store');
 
 class UpstreamService {
-  constructor() {
-    this.baseUrl = process.env.UPSTREAM_URL || 'https://musicbrainz.org/ws/2';
-  }
-
   async checkHealth() {
+    const baseUrl = getConfigValue('musicbrainzBaseUrl');
+    const timeout = getConfigValue('upstreamTimeoutMs');
+
     try {
       // Just a lightweight request to see if it's reachable
-      const res = await axios.get(`${this.baseUrl}/artist/?query=test&fmt=json&limit=1`, { timeout: 5000 });
+      const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, { timeout });
       return res.status === 200 ? 'reachable' : 'unreachable';
     } catch (err) {
       return 'unreachable';
@@ -16,12 +16,16 @@ class UpstreamService {
   }
 
   async search(query) {
-    const url = `${this.baseUrl}/artist/?query=${encodeURIComponent(query)}&fmt=json`;
+    const baseUrl = getConfigValue('musicbrainzBaseUrl');
+    const userAgent = getConfigValue('userAgent');
+    const timeout = getConfigValue('upstreamTimeoutMs');
+
+    const url = `${baseUrl}/artist/?query=${encodeURIComponent(query)}&fmt=json`;
     const res = await axios.get(url, {
       headers: {
-        'User-Agent': 'MelodarrProxy/1.0.0 ( jasonwalker )'
+        'User-Agent': userAgent
       },
-      timeout: 10000
+      timeout
     });
     return res.data;
   }

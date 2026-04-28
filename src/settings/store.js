@@ -98,11 +98,103 @@ function resetPassword() {
   return { cleared: true };
 }
 
+// ── Runtime config (editable from UI) ────────────────────────────
+// Keys that can be changed at runtime via the settings page.
+// Each maps to the env-var name so env vars still win when set.
+const EDITABLE_KEYS = {
+  userAgent:               { env: 'APP_USER_AGENT',                      fallback: 'melodarr-proxy/0.1.0 (replace-with-contact@example.com)', type: 'string' },
+  cacheTtlSeconds:         { env: 'CACHE_TTL_SECONDS',                   fallback: 86400,  type: 'number' },
+  musicbrainzBaseUrl:      { env: 'MUSICBRAINZ_BASE_URL',                fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
+  minRequestIntervalMs:    { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100,   type: 'number' },
+  upstreamTimeoutMs:       { env: 'UPSTREAM_TIMEOUT_MS',                 fallback: 8000,   type: 'number' },
+  slowRequestMs:           { env: 'SLOW_REQUEST_MS',                     fallback: 2000,   type: 'number' }
+};
+
+function getRuntimeConfig() {
+  const config = {};
+
+  for (const [key, spec] of Object.entries(EDITABLE_KEYS)) {
+    const envValue = process.env[spec.env];
+    const storedValue = settings.runtime?.[key];
+
+    if (envValue !== undefined && envValue !== '') {
+      config[key] = { value: spec.type === 'number' ? Number(envValue) : envValue, source: 'env' };
+    } else if (storedValue !== undefined) {
+      config[key] = { value: storedValue, source: 'saved' };
+    } else {
+      config[key] = { value: spec.fallback, source: 'default' };
+    }
+  }
+
+  return config;
+}
+
+function getConfigValue(key) {
+  const spec = EDITABLE_KEYS[key];
+
+  if (!spec) {
+    return undefined;
+  }
+
+  const envValue = process.env[spec.env];
+
+  if (envValue !== undefined && envValue !== '') {
+    return spec.type === 'number' ? Number(envValue) : envValue;
+  }
+
+  if (settings.runtime?.[key] !== undefined) {
+    return settings.runtime[key];
+  }
+
+  return spec.fallback;
+}
+
+function updateRuntimeConfig(updates) {
+  const applied = {};
+  const skipped = {};
+
+  for (const [key, value] of Object.entries(updates)) {
+    const spec = EDITABLE_KEYS[key];
+
+    if (!spec) {
+      skipped[key] = 'Unknown setting';
+      continue;
+    }
+
+    // Env vars take precedence — can't override from UI
+    if (process.env[spec.env] && process.env[spec.env] !== '') {
+      skipped[key] = `Locked by ${spec.env} env var`;
+      continue;
+    }
+
+    const coerced = spec.type === 'number' ? Number(value) : String(value);
+
+    if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) {
+      skipped[key] = 'Must be a positive number';
+      continue;
+    }
+
+    applied[key] = coerced;
+  }
+
+  if (Object.keys(applied).length > 0) {
+    saveSettings({
+      ...settings,
+      runtime: { ...settings.runtime, ...applied }
+    });
+  }
+
+  return { applied, skipped };
+}
+
 module.exports = {
   bootstrapAdminPassword,
   canBootstrapAdmin,
+  getConfigValue,
+  getRuntimeConfig,
   getSessionSecret,
   hasAdminPassword,
   resetPassword,
+  updateRuntimeConfig,
   verifyPassword
 };

@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Melodarr Proxy</title>
+    <script>
+      document.documentElement.dataset.theme = localStorage.getItem('melodarr-theme') || 'dark';
+    </script>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -90,6 +93,7 @@
       </section>
     </main>
 
+    <script src="/theme.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

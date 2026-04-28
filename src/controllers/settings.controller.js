@@ -2,8 +2,10 @@ const crypto = require('crypto');
 const {
   bootstrapAdminPassword,
   canBootstrapAdmin,
+  getRuntimeConfig,
   getSessionSecret,
   hasAdminPassword,
+  updateRuntimeConfig,
   verifyPassword
 } = require('../settings/store');
 
@@ -80,33 +82,18 @@ function requireSettingsAuth(req, res, next) {
 }
 
 function getSettingsPayload() {
-  const userAgent =
-    process.env.APP_USER_AGENT ||
-    process.env.MUSICBRAINZ_USER_AGENT ||
-    'melodarr-proxy/0.1.0 (replace-with-contact@example.com)';
+  const runtimeConfig = getRuntimeConfig();
 
   return {
-    app: {
-      userAgent,
-      userAgentConfigured: !userAgent.includes('replace-with-contact') && !userAgent.includes('your-contact')
-    },
-    server: {
-      port: Number(process.env.PORT || 3000),
-      slowRequestMs: Number(process.env.SLOW_REQUEST_MS || 2000)
-    },
-    cache: {
-      redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
-      ttlSeconds: Number(process.env.CACHE_TTL_SECONDS || 24 * 60 * 60)
-    },
-    musicbrainz: {
-      baseUrl: process.env.MUSICBRAINZ_BASE_URL || 'https://musicbrainz.org/ws/2',
-      minRequestIntervalMs: Number(process.env.MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS || 1100),
-      timeoutMs: Number(process.env.UPSTREAM_TIMEOUT_MS || 8000)
-    },
+    config: runtimeConfig,
     admin: {
       passwordConfigured: hasAdminPassword(),
       envPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD),
       bootstrapAvailable: canBootstrapAdmin()
+    },
+    server: {
+      port: { value: Number(process.env.PORT || 3000), source: 'env' },
+      redisUrl: { value: process.env.REDIS_URL || 'redis://localhost:6379', source: 'env' }
     }
   };
 }
@@ -173,6 +160,22 @@ function getSettings(_req, res) {
   res.json(getSettingsPayload());
 }
 
+function updateSettings(req, res) {
+  const updates = req.body;
+
+  if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Provide at least one setting to update' });
+  }
+
+  const result = updateRuntimeConfig(updates);
+
+  return res.json({
+    ok: true,
+    applied: result.applied,
+    skipped: result.skipped
+  });
+}
+
 module.exports = {
   getSettings,
   getSettingsStatus,
@@ -180,5 +183,6 @@ module.exports = {
   loginSettings,
   logoutSettings,
   requireSettingsAuth,
-  setupSettings
+  setupSettings,
+  updateSettings
 };
