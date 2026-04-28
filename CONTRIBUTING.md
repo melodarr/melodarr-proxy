@@ -43,10 +43,23 @@ When you are creating an enhancement suggestion, please include as many details 
 
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/your-username/lidarr-lite-proxy.git`
-3. Install dependencies: `npm install`
+3. Install dependencies: `yarn install`
 4. Copy `.env.example` to `.env` and adjust the variables.
-5. Start the development server: `npm run dev`
+5. Start the development server: `yarn dev`
 
 ## Code Style
 
-This project follows standard JavaScript style guidelines. Please ensure your code passes linting before submitting a pull request.
+This project follows standard JavaScript style guidelines.
+
+Before submitting a pull request, run:
+
+```bash
+yarn lint
+yarn test
+```
+
+For Docker verification:
+
+```bash
+docker compose --profile test build test
+```

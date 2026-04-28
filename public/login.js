@@ -1,18 +1,18 @@
-const authPanel = document.querySelector('#auth-panel');
-const statusEl = document.querySelector('#status');
-const introEl = document.querySelector('#auth-intro');
+const authPanel = document.querySelector('#auth-panel')
+const statusEl = document.querySelector('#status')
+const introEl = document.querySelector('#auth-intro')
 
-function setStatus(message, isError = false) {
-  statusEl.textContent = message;
-  statusEl.style.color = isError ? '#b42318' : '#44505c';
+function setStatus (message, isError = false) {
+  statusEl.textContent = message
+  statusEl.style.color = isError ? '#b42318' : '#44505c'
 }
 
-function goHome() {
-  window.location.assign('/');
+function goHome () {
+  window.location.assign('/')
 }
 
-function renderLogin() {
-  introEl.textContent = 'Sign in to access the proxy pages.';
+function renderLogin () {
+  introEl.textContent = 'Sign in to access the proxy pages.'
   authPanel.innerHTML = `
     <section class="result settings-panel">
       <div class="artist-header">
@@ -41,15 +41,15 @@ docker compose exec proxy \
         </div>
       </details>
     </section>
-  `;
+  `
 
   document.querySelector('#login-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const button = event.currentTarget.querySelector('button');
-    const password = document.querySelector('#password').value;
+    event.preventDefault()
+    const button = event.currentTarget.querySelector('button')
+    const password = document.querySelector('#password').value
 
-    button.disabled = true;
-    setStatus('Signing in...');
+    button.disabled = true
+    setStatus('Signing in...')
 
     try {
       const response = await fetch('/api/settings/login', {
@@ -58,26 +58,26 @@ docker compose exec proxy \
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ password })
-      });
-      const data = await response.json();
+      })
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Sign in failed');
+        throw new Error(data.error || 'Sign in failed')
       }
 
-      goHome();
+      goHome()
     } catch (error) {
-      setStatus(error.message, true);
+      setStatus(error.message, true)
     } finally {
-      button.disabled = false;
+      button.disabled = false
     }
-  });
+  })
 
-  setStatus('Enter the local admin password');
+  setStatus('Enter the local admin password')
 }
 
-function renderSetup() {
-  introEl.textContent = 'Create the local admin password to finish first-run setup.';
+function renderSetup () {
+  introEl.textContent = 'Create the local admin password to finish first-run setup.'
   authPanel.innerHTML = `
     <section class="result settings-panel">
       <div class="artist-header">
@@ -98,21 +98,21 @@ function renderSetup() {
         <button type="submit">Create password</button>
       </form>
     </section>
-  `;
+  `
 
   document.querySelector('#setup-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const button = event.currentTarget.querySelector('button');
-    const password = document.querySelector('#setup-password').value;
-    const confirm = document.querySelector('#setup-confirm').value;
+    event.preventDefault()
+    const button = event.currentTarget.querySelector('button')
+    const password = document.querySelector('#setup-password').value
+    const confirm = document.querySelector('#setup-confirm').value
 
     if (password !== confirm) {
-      setStatus('Passwords do not match', true);
-      return;
+      setStatus('Passwords do not match', true)
+      return
     }
 
-    button.disabled = true;
-    setStatus('Creating password...');
+    button.disabled = true
+    setStatus('Creating password...')
 
     try {
       const response = await fetch('/api/settings/setup', {
@@ -121,41 +121,41 @@ function renderSetup() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ password })
-      });
-      const data = await response.json();
+      })
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Password setup failed');
+        throw new Error(data.error || 'Password setup failed')
       }
 
-      goHome();
+      goHome()
     } catch (error) {
-      setStatus(error.message, true);
+      setStatus(error.message, true)
     } finally {
-      button.disabled = false;
+      button.disabled = false
     }
-  });
+  })
 
-  setStatus('Create the local admin password');
+  setStatus('Create the local admin password')
 }
 
-async function checkStatus() {
-  const response = await fetch('/api/settings/status');
-  const status = await response.json();
+async function checkStatus () {
+  const response = await fetch('/api/settings/status')
+  const status = await response.json()
 
   if (status.authenticated) {
-    goHome();
-    return;
+    goHome()
+    return
   }
 
   if (status.setupRequired) {
-    renderSetup();
-    return;
+    renderSetup()
+    return
   }
 
-  renderLogin();
+  renderLogin()
 }
 
 checkStatus().catch((error) => {
-  setStatus(error.message, true);
-});
+  setStatus(error.message, true)
+})

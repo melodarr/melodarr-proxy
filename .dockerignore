@@ -1,0 +1,12 @@
+.cache
+.env
+.git
+.github
+.yarn/install-state.gz
+coverage
+data
+debug.log
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

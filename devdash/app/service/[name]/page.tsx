@@ -63,6 +63,29 @@ export default function ServiceDetail({ params }: { params: { name: string } }) 
             </div>
           </div>
 
+          {stats?.providers && Object.keys(stats.providers).length > 0 && (
+            <div className="rounded-xl border bg-card p-6">
+              <h3 className="font-semibold text-lg mb-4">Providers</h3>
+              <div className="space-y-4">
+                {Object.entries(stats.providers).map(([name, pStats]: [string, any]) => (
+                  <div key={name} className="flex flex-col pb-3 border-b border-border/50">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium capitalize">{name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${pStats.errorRate > 0.5 ? 'bg-red-500/10 text-red-500' : pStats.errorRate > 0 ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-500'}`}>
+                        {pStats.errorRate === 0 ? 'Healthy' : pStats.errorRate < 1 ? 'Degraded' : 'Failing'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-gray-400">
+                      <span>{pStats.calls} calls</span>
+                      <span>{pStats.avgLatencyMs}ms avg</span>
+                      <span className="text-blue-400 font-medium">Score: {health?.providers?.[name] !== undefined ? `${health.providers[name]}/100` : '--'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <ControlPanel baseUrl={service.baseUrl} />
         </div>
 

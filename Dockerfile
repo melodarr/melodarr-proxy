@@ -1,14 +1,27 @@
-FROM node:20-alpine
-
+FROM node:20-alpine AS base
 WORKDIR /app
+RUN corepack enable
+COPY package.json yarn.lock .yarnrc.yml ./
 
-ENV NODE_ENV=production
-
-COPY package*.json ./
-RUN npm install --omit=dev
-
+FROM base AS dev
+RUN yarn install
 COPY . .
 
-EXPOSE 3000
+FROM dev AS test
+RUN yarn lint
+RUN yarn test
 
-CMD ["node", "src/server.js"]
+FROM base AS production
+ENV NODE_ENV=production
+RUN apk add --no-cache su-exec
+RUN yarn install --immutable
+COPY src ./src
+COPY public ./public
+RUN addgroup -S melodarr \
+  && adduser -S melodarr -G melodarr \
+  && mkdir -p /data \
+  && chown -R melodarr:melodarr /app /data
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1
+CMD ["sh", "-c", "chown -R melodarr:melodarr /data && exec su-exec melodarr node src/server.js"]

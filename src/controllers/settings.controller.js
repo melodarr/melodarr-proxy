@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const crypto = require('crypto')
 const {
   bootstrapAdminPassword,
   canBootstrapAdmin,
@@ -8,82 +8,82 @@ const {
   hasAdminPassword,
   updateRuntimeConfig,
   verifyPassword
-} = require('../settings/store');
+} = require('../settings/store')
 
-const SETTINGS_COOKIE = 'melodarr_proxy_settings';
-const SETTINGS_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const SETTINGS_COOKIE = 'melodarr_proxy_settings'
+const SETTINGS_SESSION_TTL_MS = 12 * 60 * 60 * 1000
 
-function getCookie(req, name) {
-  const cookies = req.headers.cookie || '';
+function getCookie (req, name) {
+  const cookies = req.headers.cookie || ''
   const match = cookies
     .split(';')
     .map((cookie) => cookie.trim())
-    .find((cookie) => cookie.startsWith(`${name}=`));
+    .find((cookie) => cookie.startsWith(`${name}=`))
 
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : ''
 }
 
-function signPayload(payload) {
-  return crypto.createHmac('sha256', getSessionSecret()).update(payload).digest('base64url');
+function signPayload (payload) {
+  return crypto.createHmac('sha256', getSessionSecret()).update(payload).digest('base64url')
 }
 
-function createToken() {
-  const payload = Buffer.from(JSON.stringify({ exp: Date.now() + SETTINGS_SESSION_TTL_MS })).toString('base64url');
-  return `${payload}.${signPayload(payload)}`;
+function createToken () {
+  const payload = Buffer.from(JSON.stringify({ exp: Date.now() + SETTINGS_SESSION_TTL_MS })).toString('base64url')
+  return `${payload}.${signPayload(payload)}`
 }
 
-function isTokenValid(token) {
+function isTokenValid (token) {
   if (!hasAdminPassword() || !getSessionSecret() || !token) {
-    return false;
+    return false
   }
 
-  const [payload, signature] = token.split('.');
+  const [payload, signature] = token.split('.')
 
   if (!payload || !signature) {
-    return false;
+    return false
   }
 
-  const expected = signPayload(payload);
-  const signatureBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
+  const expected = signPayload(payload)
+  const signatureBuffer = Buffer.from(signature)
+  const expectedBuffer = Buffer.from(expected)
 
   if (signatureBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
-    return false;
+    return false
   }
 
   try {
-    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    return Number(parsed.exp) > Date.now();
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+    return Number(parsed.exp) > Date.now()
   } catch (_error) {
-    return false;
+    return false
   }
 }
 
-function isAuthenticated(req) {
-  return isTokenValid(getCookie(req, SETTINGS_COOKIE));
+function isAuthenticated (req) {
+  return isTokenValid(getCookie(req, SETTINGS_COOKIE))
 }
 
-function setAuthCookie(res) {
+function setAuthCookie (res) {
   res.cookie(SETTINGS_COOKIE, createToken(), {
     httpOnly: true,
     sameSite: 'lax',
     secure: false,
     maxAge: SETTINGS_SESSION_TTL_MS
-  });
+  })
 }
 
-function requireSettingsAuth(req, res, next) {
+function requireSettingsAuth (req, res, next) {
   if (isAuthenticated(req)) {
-    return next();
+    return next()
   }
 
   return res.status(401).json({
     error: hasAdminPassword() ? 'Authentication required' : 'Settings password is not configured'
-  });
+  })
 }
 
-function getSettingsPayload() {
-  const runtimeConfig = getRuntimeConfig();
+function getSettingsPayload () {
+  const runtimeConfig = getRuntimeConfig()
 
   return {
     config: runtimeConfig,
@@ -96,100 +96,100 @@ function getSettingsPayload() {
       port: { value: Number(process.env.PORT || 3000), source: 'env' },
       redisUrl: { value: process.env.REDIS_URL || 'redis://localhost:6379', source: 'env' }
     }
-  };
+  }
 }
 
-function getSettingsStatus(req, res) {
+function getSettingsStatus (req, res) {
   res.json({
     enabled: hasAdminPassword(),
     setupRequired: canBootstrapAdmin(),
     authenticated: isAuthenticated(req)
-  });
+  })
 }
 
-function setupSettings(req, res) {
+function setupSettings (req, res) {
   if (!canBootstrapAdmin()) {
     return res.status(409).json({
       error: 'Admin password is already configured'
-    });
+    })
   }
 
-  const password = String(req.body?.password || '');
+  const password = String(req.body?.password || '')
 
   if (password.length < 8) {
     return res.status(400).json({
       error: 'Password must be at least 8 characters'
-    });
+    })
   }
 
-  bootstrapAdminPassword(password);
-  setAuthCookie(res);
+  bootstrapAdminPassword(password)
+  setAuthCookie(res)
 
   return res.json({
     ok: true
-  });
+  })
 }
 
-function loginSettings(req, res) {
+function loginSettings (req, res) {
   if (!hasAdminPassword()) {
     return res.status(503).json({
       error: 'Create the admin password before signing in'
-    });
+    })
   }
 
   if (!verifyPassword(String(req.body?.password || ''))) {
     return res.status(401).json({
       error: 'Invalid password'
-    });
+    })
   }
 
-  setAuthCookie(res);
+  setAuthCookie(res)
 
   return res.json({
     ok: true
-  });
+  })
 }
 
-function logoutSettings(_req, res) {
-  res.clearCookie(SETTINGS_COOKIE);
+function logoutSettings (_req, res) {
+  res.clearCookie(SETTINGS_COOKIE)
   res.json({
     ok: true
-  });
+  })
 }
 
-function getSettings(_req, res) {
-  res.json(getSettingsPayload());
+function getSettings (_req, res) {
+  res.json(getSettingsPayload())
 }
 
-const nameHistory = [];
+const nameHistory = []
 
-function getNameHistory(_req, res) {
-  res.json(nameHistory);
+function getNameHistory (_req, res) {
+  res.json(nameHistory)
 }
 
-function generateName(_req, res) {
-  const newName = generateRandomName();
-  nameHistory.unshift(newName);
+function generateName (_req, res) {
+  const newName = generateRandomName()
+  nameHistory.unshift(newName)
   if (nameHistory.length > 10) {
-    nameHistory.pop();
+    nameHistory.pop()
   }
-  res.json({ name: newName });
+  res.json({ name: newName })
 }
 
-function updateSettings(req, res) {
-  const updates = req.body;
+function updateSettings (req, res) {
+  const updates = req.body
 
   if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
-    return res.status(400).json({ error: 'Provide at least one setting to update' });
+    return res.status(400).json({ error: 'Provide at least one setting to update' })
   }
 
-  const result = updateRuntimeConfig(updates);
+  const result = updateRuntimeConfig(updates)
 
   return res.json({
     ok: true,
     applied: result.applied,
     skipped: result.skipped
-  });
+  })
 }
 
 module.exports = {
@@ -203,4 +203,4 @@ module.exports = {
   requireSettingsAuth,
   setupSettings,
   updateSettings
-};
+}

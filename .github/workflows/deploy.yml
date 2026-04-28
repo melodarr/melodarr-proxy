@@ -1,65 +1,54 @@
-name: Deploy Ecosystem
+name: Publish Docker Image
 
 on:
+  push:
+    branches: [main, master]
+    tags: ['v*.*.*']
   release:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  deploy:
-    name: Deploy via SSH Image Transfer
+  publish:
+    name: Build and publish proxy image
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Ecosystem Images
-        run: |
-          docker compose build proxy auth
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Setup SSH
-        env:
-          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          SSH_USER: ${{ secrets.PROD_SSH_USER }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Transfer and Load Proxy Image
-        env:
-          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          SSH_USER: ${{ secrets.PROD_SSH_USER }}
-        run: |
-          echo "Compressing and transferring proxy image..."
-          docker save melodarr-proxy-proxy:latest | gzip | ssh $SSH_USER@$SSH_HOST "gunzip | docker load"
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Transfer and Load Auth Service Image
-        env:
-          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          SSH_USER: ${{ secrets.PROD_SSH_USER }}
-        run: |
-          echo "Compressing and transferring auth service image..."
-          docker save melodarr-proxy-auth:latest | gzip | ssh $SSH_USER@$SSH_HOST "gunzip | docker load"
-
-      - name: Restart Remote Ecosystem
-        env:
-          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          SSH_USER: ${{ secrets.PROD_SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
-        run: |
-          echo "Restarting services on remote host..."
-          ssh $SSH_USER@$SSH_HOST "cd $DEPLOY_PATH && docker compose up -d proxy auth"
-
-      - name: Health Check Verification Loop
-        env:
-          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          SSH_USER: ${{ secrets.PROD_SSH_USER }}
-        run: |
-          echo "Verifying Proxy Health..."
-          ssh $SSH_USER@$SSH_HOST 'for i in {1..5}; do curl -sf http://localhost:3001/api/health && echo "Proxy Healthy" && exit 0; sleep 2; done; echo "Proxy Health Check Failed"; exit 1'
-          
-          echo "Verifying Auth Service Health..."
-          ssh $SSH_USER@$SSH_HOST 'for i in {1..5}; do curl -sf http://localhost:4001/api/health && echo "Auth Healthy" && exit 0; sleep 2; done; echo "Auth Health Check Failed"; exit 1'
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

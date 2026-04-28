@@ -1,102 +1,84 @@
-# 🚀 Melodarr Proxy
+# Melodarr Proxy
 
-> A lightweight, self-hostable **Music Metadata Proxy with built-in observability, caching, and control**.
+Melodarr Proxy is a lightweight, self-hostable music metadata proxy for personal automation setups. It queries live metadata providers, caches normalized responses, and exposes a small Lidarr-style API surface without requiring a local MusicBrainz database or Solr index.
 
-Melodarr Proxy is not just a proxy—it’s an **operational layer** for MusicBrainz and similar metadata services.
+## Why This Exists
 
----
+Full metadata stacks can be expensive to run for small setups. Melodarr Proxy focuses on:
 
-## 🔥 Why this exists
+- live provider lookups
+- aggressive caching
+- provider fallback
+- observable request behavior
+- low-resource Docker deployment
 
-Most metadata proxies are:
+This is not a full metadata-server replacement yet. Compatibility is intentionally partial while the API surface stabilizes.
 
-* opaque
-* hard to debug
-* or fragile under load
+## Features
 
-Melodarr Proxy solves that by giving you:
+- MusicBrainz-backed artist lookup
+- Optional iTunes, TheAudioDB, Last.fm, and Discogs providers
+- Redis cache with in-memory fallback
+- Provider visibility in lookup responses and stats
+- Web UI for testing, stats, settings, and first-run admin setup
+- Docker Compose deployment with random host ports
+- Yarn-based development workflow
 
-👉 **full visibility**
-👉 **runtime control**
-👉 **predictable behavior**
+## Quick Start
 
----
+```bash
+cp .env.example .env
+docker compose up --build
+```
 
-## ⚡ Key Capabilities
+Ports are randomized by default. Find the active proxy port with:
 
-* 📡 **Real-time MusicBrainz proxy**
-  Safely queries upstream APIs with proper User-Agent handling
+```bash
+docker compose port proxy 3000
+```
 
-* ⚡ **Redis-backed caching (with fallback)**
-  Automatically degrades to in-memory if Redis is unavailable
+Optional services use Compose profiles:
 
-* 📊 **Built-in observability**
-  Health, metrics, latency, and cache performance out of the box
+```bash
+docker compose --profile devdash up -d
+docker compose --profile auth up -d
+docker compose --profile test build test
+```
 
-* 🛡 **Rate limiting (abuse protection)**
-  Prevents upstream overload (60 req/min per IP)
+Published images are built by GitHub Actions and published to:
 
-* 🔁 **Fail-fast startup validation**
-  Detects broken configs before serving traffic
+```text
+ghcr.io/<owner>/<repo>
+```
 
-* 🎛 **Operational control endpoints**
-  Start/stop proxy, clear cache, trigger sync
+## Local Development
 
-* 🧠 **Interactive dashboard**
-  Live system state, not static UI
+```bash
+yarn install
+yarn dev
+```
 
----
+Run checks:
 
-## 🧪 Verify It Works (Trust Layer)
+```bash
+yarn lint
+yarn test
+docker compose --profile test build test
+```
 
-If these pass, your system is operational:
+## Verify
 
 ```bash
 curl http://localhost:3055/api/health
-curl http://localhost:3055/api/stats
 curl "http://localhost:3055/api/v1/artist/lookup?term=radiohead"
 ```
 
 Expected:
 
-* `/health` → `"status": "ok"`
-* `/stats` → real metrics (not empty)
-* `/lookup` → artist + albums returned
+- `/api/health` returns `"status": "ok"`
+- `/api/v1/artist/lookup` returns artist, albums, and provider metadata
 
-If any of these fail → investigate before proceeding.
-
----
-
-## 🐳 Quick Start
-
-### Docker (Recommended)
-
-```bash
-docker compose up --build
-```
-
-App will be available at:
-
-👉 http://localhost:3055
-
-If port is busy:
-
-```bash
-HOST_PORT=3100 docker compose up --build
-```
-
----
-
-### Local
-
-```bash
-npm install
-node src/server.js
-```
-
----
-
-## ⚙️ Configuration
+## Configuration
 
 Copy `.env.example`:
 
@@ -106,90 +88,84 @@ cp .env.example .env
 
 Key variables:
 
-* `PORT` / `HOST_PORT` → server ports
-* `REDIS_URL` → caching backend
-* `UPSTREAM_URL` → MusicBrainz endpoint
-* `APP_NAME`, `APP_VERSION`, `APP_CONTACT` → User-Agent identity
+- `HOST_PORT` controls the proxy host port. Use `0` or leave unset for a random port.
+- `REDIS_URL` points to the cache backend.
+- `APP_NAME`, `APP_VERSION`, and `APP_CONTACT` define the MusicBrainz User-Agent identity.
+- `METADATA_PROVIDERS` is a comma-separated provider list.
+- `PROVIDER_PRIORITY` controls merge preference when providers disagree.
+- `THEAUDIODB_API_KEY`, `LASTFM_API_KEY`, and `DISCOGS_TOKEN` enable optional providers.
+- `ITUNES_COUNTRY` controls the iTunes storefront country.
 
----
+Provider details are documented in [docs/providers.md](docs/providers.md).
 
-## 📊 Observability (First-Class Feature)
+## API
 
-Melodarr Proxy is designed to be **inspectable in real time**.
+See [docs/api.md](docs/api.md) for the full API reference.
 
-### Core Endpoints
+Proxy endpoints accept either an authenticated admin browser session or an API key. For Lidarr or scripts, create an API key on the Settings page and send it as:
 
-* **`/api/health`**
-  Deep system health:
+```text
+X-Api-Key: mp_...
+```
 
-  * Redis status
-  * upstream availability
-  * memory usage
+The `api_key` query parameter is also supported for clients that cannot set custom headers.
 
-* **`/api/stats`**
-  Live metrics:
+### `GET /api/v1/artist/lookup?term={name}`
 
-  * requests/min
-  * cache hits/misses
-  * latency (avg + p95)
-  * error rate
+Returns a normalized artist response:
 
-* **`/api/stats/history`**
-  Rolling performance snapshots (last 10 intervals)
+```json
+{
+  "artistName": "Radiohead",
+  "foreignArtistId": "",
+  "providers": [
+    { "name": "musicbrainz", "albumCount": 18 },
+    { "name": "itunes", "albumCount": 27 }
+  ],
+  "albums": [
+    {
+      "title": "OK Computer",
+      "id": "...",
+      "firstReleaseDate": "1997",
+      "coverUrl": "...",
+      "provider": "musicbrainz",
+      "ids": {}
+    }
+  ]
+}
+```
 
-* **`/api/version`**
-  Release identity + environment verification
+Response headers include:
 
----
+- `X-Cache`: `HIT` or `MISS`
+- `X-Upstream-Calls`: upstream provider calls for a cache miss
+- `X-Providers`: comma-separated provider names used for the response
 
-## 🧠 How It Works
+## Observability
 
-1. Request hits proxy
-2. Cache checked (Redis → fallback memory)
-3. If miss → upstream queried
-4. Response cached + metrics updated
-5. Observability endpoints reflect everything in real time
+- `GET /api/health`
+- `GET /api/stats`
+- `GET /api/stats/history`
+- `GET /api/version`
 
----
+The Stats page also shows provider calls, errors, and average latency.
 
-## 🛡 Production Behavior
+## Roadmap
 
-* Rate-limited upstream access
-* Structured JSON logging
-* Fail-fast boot validation
-* Graceful cache fallback
-* Health degradation reporting
+See [ROADMAP.md](ROADMAP.md).
 
----
+## Lidarr Compatibility
 
-## 🤝 Contributing
+See [docs/lidarr-compatibility.md](docs/lidarr-compatibility.md).
 
-We welcome contributions.
+## Contributing
 
-See 👉 [CONTRIBUTING.md](./CONTRIBUTING.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
----
+## Security
 
-## 📄 License
+See [SECURITY.md](SECURITY.md).
+
+## License
 
 MIT
-
----
-
-## 🚀 What’s next
-
-Planned improvements:
-
-* adaptive caching (hot query detection)
-* multi-upstream support
-* DevDash integration
-* deeper analytics
-
----
-
-## 💬 Final Note
-
-This project is built with a **production mindset from day one**.
-
-👉 Not just a proxy
-👉 A **controllable, observable metadata layer**
