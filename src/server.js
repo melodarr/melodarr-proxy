@@ -60,6 +60,11 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // API Routes
 app.use('/api', apiRoutes);
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    error: 'API route not found'
+  });
+});
 
 // Fallback for SPA or unmatched routes
 app.get('*', (req, res) => {

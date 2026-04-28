@@ -12,7 +12,13 @@ class MetricsManager extends EventEmitter {
     this.stats = {
       requests: { total: 0 },
       cache: { hits: 0, misses: 0 },
-      errors: { count: 0 }
+      errors: { count: 0 },
+      artistLookup: {
+        total: 0,
+        upstreamCalls: 0,
+        partialResponses: 0,
+        lastLookup: null
+      }
     };
 
     // Sliding window for RPM
@@ -44,6 +50,32 @@ class MetricsManager extends EventEmitter {
     
     let count = this.queryCounts.get(query) || 0;
     this.queryCounts.set(query, count + 1);
+  }
+
+  recordArtistLookup({ term, upstreamCalls = 0, partial = false, statusCode = 200, error = null }) {
+    this.stats.artistLookup.total++;
+    this.stats.artistLookup.upstreamCalls += upstreamCalls;
+
+    if (partial) {
+      this.stats.artistLookup.partialResponses++;
+    }
+
+    if (statusCode >= 400) {
+      this.recordError();
+    }
+
+    this.state.lastQueryAt = new Date().toISOString();
+    this.stats.artistLookup.lastLookup = {
+      term,
+      upstreamCalls,
+      partial,
+      statusCode,
+      error,
+      at: this.state.lastQueryAt
+    };
+
+    let count = this.queryCounts.get(term) || 0;
+    this.queryCounts.set(term, count + 1);
   }
 
   getTopQueries(limit = 5) {
@@ -102,21 +134,40 @@ class MetricsManager extends EventEmitter {
       : 0;
 
     return {
+      startedAt: new Date(this.state.startTime).toISOString(),
+      uptimeSeconds: Math.floor((Date.now() - this.state.startTime) / 1000),
+      state: {
+        isRunning: this.state.isRunning,
+        lastQueryAt: this.state.lastQueryAt
+      },
       requests: {
         total: this.stats.requests.total,
         perMinute: this.getRPM()
       },
       cache: {
         hits: this.stats.cache.hits,
-        misses: this.stats.cache.misses
+        misses: this.stats.cache.misses,
+        hitRate: (this.stats.cache.hits + this.stats.cache.misses) > 0
+          ? Number((this.stats.cache.hits / (this.stats.cache.hits + this.stats.cache.misses)).toFixed(4))
+          : null
+      },
+      artistLookup: {
+        ...this.stats.artistLookup,
+        cacheHits: this.stats.cache.hits,
+        cacheMisses: this.stats.cache.misses,
+        cacheHitRate: (this.stats.cache.hits + this.stats.cache.misses) > 0
+          ? Number((this.stats.cache.hits / (this.stats.cache.hits + this.stats.cache.misses)).toFixed(4))
+          : null
       },
       latency: {
         avgMs: latency.avgMs,
         p95Ms: latency.p95Ms
       },
       errors: {
+        count: this.stats.errors.count,
         rate: errorRate
-      }
+      },
+      topQueries: this.getTopQueries()
     };
   }
 

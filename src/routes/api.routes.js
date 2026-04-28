@@ -3,7 +3,7 @@ const router = express.Router();
 
 const { getHealth } = require('../controllers/health.controller');
 const { getStats } = require('../controllers/stats.controller');
-const { handleSearch } = require('../controllers/proxy.controller');
+const { handleArtistLookup, handleSearch } = require('../controllers/proxy.controller');
 const { startProxy, stopProxy, clearCache, triggerSync } = require('../controllers/control.controller');
 const {
   getSettings,
@@ -31,6 +31,7 @@ router.patch('/settings', requireSettingsAuth, updateSettings);
 
 // Main proxy route (requires proxy to be running)
 router.get('/search', proxyStateMiddleware, handleSearch);
+router.get('/v1/artist/lookup', proxyStateMiddleware, handleArtistLookup);
 
 // Control routes
 router.post('/proxy/start', startProxy);

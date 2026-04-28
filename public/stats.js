@@ -59,30 +59,45 @@ function createMetricSection(title, values) {
 }
 
 function renderStats(stats) {
-  totalRequestsEl.textContent = formatNumber(stats.requests.total);
-  artistLookupsEl.textContent = formatNumber(stats.artistLookup.total);
-  cacheHitRateEl.textContent = formatPercent(stats.artistLookup.cacheHitRate);
-  upstreamCallsEl.textContent = formatNumber(stats.artistLookup.upstreamCalls);
-  uptimeEl.textContent = `Started ${stats.startedAt}; uptime ${formatDuration(stats.uptimeSeconds)}`;
+  const requests = stats.requests || {};
+  const cache = stats.cache || {};
+  const artistLookup = stats.artistLookup || {};
+  const errors = stats.errors || {};
+  const latency = stats.latency || {};
+  const cacheHitRate = artistLookup.cacheHitRate ?? cache.hitRate;
+
+  totalRequestsEl.textContent = formatNumber(requests.total);
+  artistLookupsEl.textContent = formatNumber(artistLookup.total);
+  cacheHitRateEl.textContent = formatPercent(cacheHitRate);
+  upstreamCallsEl.textContent = formatNumber(artistLookup.upstreamCalls);
+  uptimeEl.textContent = stats.startedAt
+    ? `Started ${stats.startedAt}; uptime ${formatDuration(stats.uptimeSeconds || 0)}`
+    : 'Runtime stats are active';
 
   statsGrid.replaceChildren(
     createMetricSection('Requests', {
-      total: stats.requests.total,
-      slow: stats.requests.slow
+      total: requests.total ?? 0,
+      perMinute: requests.perMinute ?? 0
     }),
     createMetricSection('Artist lookup', {
-      total: stats.artistLookup.total,
-      cacheHits: stats.artistLookup.cacheHits,
-      cacheMisses: stats.artistLookup.cacheMisses,
-      partialResponses: stats.artistLookup.partialResponses,
-      errors: stats.artistLookup.errors
+      total: artistLookup.total ?? 0,
+      cacheHits: artistLookup.cacheHits ?? cache.hits ?? 0,
+      cacheMisses: artistLookup.cacheMisses ?? cache.misses ?? 0,
+      upstreamCalls: artistLookup.upstreamCalls ?? 0,
+      partialResponses: artistLookup.partialResponses ?? 0
     }),
-    createMetricSection('Status codes', stats.requests.byStatus),
-    createMetricSection('Routes', stats.requests.byRoute)
+    createMetricSection('Latency', {
+      avgMs: latency.avgMs ?? 0,
+      p95Ms: latency.p95Ms ?? 0
+    }),
+    createMetricSection('Errors', {
+      count: errors.count ?? 0,
+      rate: formatPercent(errors.rate)
+    })
   );
 
-  lastLookupHeading.textContent = stats.artistLookup.lastLookup?.term || 'No lookup recorded';
-  lastLookupEl.textContent = JSON.stringify(stats.artistLookup.lastLookup || {}, null, 2);
+  lastLookupHeading.textContent = artistLookup.lastLookup?.term || 'No lookup recorded';
+  lastLookupEl.textContent = JSON.stringify(artistLookup.lastLookup || {}, null, 2);
 }
 
 async function loadStats() {

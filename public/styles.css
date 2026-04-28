@@ -552,7 +552,7 @@ pre::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 
 }
 
 .settings-form input {
-  background: var(--bg-app);
+  background: var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
@@ -595,27 +595,114 @@ pre::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 
 
 /* ── Responsive ───────────────────────────────────────────────── */
 
+/* Tablet and below */
 @media (max-width: 768px) {
   .shell {
-    margin: var(--space-lg) auto;
+    width: calc(100% - 32px);
+    margin: var(--space-md) auto var(--space-lg);
     gap: var(--space-md);
   }
 
+  /* ── Header: tighten, reposition theme toggle ──────────────── */
+  .lookup-panel {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+
+  .lookup-panel > div:first-child {
+    padding-right: 0;
+  }
+
+  h1 { font-size: 1.4rem; }
+  p { font-size: 0.85rem; }
+
+  .theme-toggle {
+    position: static;
+    order: -1;
+    align-self: flex-end;
+    margin-bottom: var(--space-xs);
+  }
+
+  /* ── Navigation: full-width pill bar ───────────────────────── */
+  .top-nav {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .top-nav a {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+    padding: 10px 8px;
+    font-size: 0.82rem;
+    min-height: 44px;
+  }
+
+  /* ── Form: stack search input and button ────────────────────── */
   .search-row { grid-template-columns: 1fr; }
 
-  button { width: 100%; }
+  button {
+    width: 100%;
+    min-height: 48px;
+  }
 
+  /* ── Metrics: 2-column compact grid ────────────────────────── */
   .summary {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .summary div {
+    padding: var(--space-md);
+  }
+
+  .summary strong {
+    font-size: 1.25rem;
+  }
+
+  .summary span {
+    font-size: 0.65rem;
+  }
+
+  /* ── Result cards ──────────────────────────────────────────── */
   .artist-header {
     flex-direction: column;
     align-items: flex-start;
+    padding: var(--space-md);
+    gap: var(--space-sm);
   }
 
+  .artist-header button {
+    width: auto;
+    align-self: flex-end;
+  }
+
+  /* ── Tables: horizontal scroll ─────────────────────────────── */
+  .table-wrap {
+    max-height: 400px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  th, td {
+    padding: 10px var(--space-md);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  /* ── JSON preview ──────────────────────────────────────────── */
+  pre {
+    padding: var(--space-md);
+    font-size: 0.72rem;
+    max-height: 300px;
+  }
+
+  /* ── Settings ──────────────────────────────────────────────── */
   .settings-grid {
     grid-template-columns: 1fr;
+    padding: var(--space-md);
+  }
+
+  .settings-grid section {
+    padding: var(--space-md);
   }
 
   .settings-grid dl {
@@ -623,7 +710,76 @@ pre::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 
     gap: 4px;
   }
 
-  .settings-grid dd { margin-bottom: var(--space-sm); }
+  .settings-grid dd {
+    margin-bottom: var(--space-sm);
+  }
 
-  .auth-shell { margin-top: var(--space-xl); }
+  .settings-form {
+    padding: var(--space-md);
+    max-width: none;
+  }
+
+  .settings-form label {
+    font-size: 0.82rem;
+  }
+
+  .settings-form input {
+    min-height: 44px;
+    font-size: 0.8rem;
+  }
+
+  /* ── Auth shell: less top margin on mobile ──────────────────── */
+  .auth-shell {
+    margin-top: var(--space-xl);
+  }
+
+  /* ── Status pill ────────────────────────────────────────────── */
+  .status {
+    font-size: 0.72rem;
+  }
+}
+
+/* Phone-sized screens */
+@media (max-width: 480px) {
+  .shell {
+    width: calc(100% - 24px);
+    margin: var(--space-sm) auto var(--space-md);
+    gap: var(--space-sm);
+  }
+
+  h1 { font-size: 1.2rem; }
+
+  /* Single column metrics on small phones */
+  .summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary div {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .summary strong {
+    font-size: 1.1rem;
+  }
+
+  .lookup-panel {
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .result {
+    border-radius: var(--radius-md);
+  }
+
+  .top-nav a {
+    font-size: 0.78rem;
+    padding: 8px 6px;
+  }
+}
+
+/* Safe area for notched devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
