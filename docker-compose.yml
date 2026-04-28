@@ -10,6 +10,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       SETTINGS_SESSION_SECRET: ${SETTINGS_SESSION_SECRET:-}
       DATA_DIR: /data
+      UPSTREAM_URL: ${UPSTREAM_URL:-https://musicbrainz.org/ws/2}
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
