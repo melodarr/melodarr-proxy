@@ -114,43 +114,7 @@ function toArtistResponse(artist, releaseGroups, partial = false, warning = null
   return response;
 }
 
-async function musicBrainzGet(path, params) {
-  const baseUrl = getConfigValue('musicbrainzBaseUrl');
-  const userAgent = getConfigValue('userAgent');
-  const timeout = getConfigValue('upstreamTimeoutMs');
 
-  let lastError;
-
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await axios.get(`${baseUrl}${path}`, {
-        headers: {
-          'User-Agent': userAgent
-        },
-        httpsAgent,
-        params: {
-          fmt: 'json',
-          ...params
-        },
-        timeout
-      });
-
-      return response.data;
-    } catch (error) {
-      lastError = error;
-
-      if (error.response?.status && error.response.status < 500 && error.response.status !== 429) {
-        throw error;
-      }
-
-      if (attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 500));
-      }
-    }
-  }
-
-  throw lastError;
-}
 
 async function handleArtistLookup(req, res) {
   const term = String(req.query.term || '').trim();
@@ -174,7 +138,7 @@ async function handleArtistLookup(req, res) {
   metrics.recordCache(false);
 
   try {
-    const artistSearch = await musicBrainzGet('/artist', {
+    const artistSearch = await upstreamService.musicBrainzGet('/artist', {
       query: `artist:"${mbQueryValue(term)}"`,
       limit: 5
     });
@@ -198,7 +162,7 @@ async function handleArtistLookup(req, res) {
     let warning = null;
 
     try {
-      const releaseGroupResult = await musicBrainzGet('/release-group', {
+      const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
         artist: artist.id,
         type: 'album|ep',
         limit: 100,

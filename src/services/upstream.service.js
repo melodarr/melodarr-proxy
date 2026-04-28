@@ -10,6 +10,29 @@ const httpsAgent = new https.Agent({
   }
 });
 
+let lastRequestTime = 0;
+let requestQueue = Promise.resolve();
+
+async function enqueueRequest(fn) {
+  const minInterval = getConfigValue('minRequestIntervalMs') || 1100;
+  
+  const waitPromise = requestQueue.then(async () => {
+    const now = Date.now();
+    const timeSinceLast = now - lastRequestTime;
+    if (timeSinceLast < minInterval) {
+      await new Promise(resolve => setTimeout(resolve, minInterval - timeSinceLast));
+    }
+    lastRequestTime = Date.now();
+  }).catch(() => {
+    lastRequestTime = Date.now();
+  });
+  
+  requestQueue = waitPromise;
+  await waitPromise;
+  
+  return fn();
+}
+
 class UpstreamService {
   async checkHealth() {
     const baseUrl = getConfigValue('musicbrainzBaseUrl');
@@ -17,13 +40,14 @@ class UpstreamService {
     const timeout = getConfigValue('upstreamTimeoutMs');
 
     try {
-      // Just a lightweight request to see if it's reachable
-      const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
-        headers: { 'User-Agent': userAgent },
-        httpsAgent,
-        timeout
+      return await enqueueRequest(async () => {
+        const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
+          headers: { 'User-Agent': userAgent },
+          httpsAgent,
+          timeout
+        });
+        return res.status === 200 ? 'reachable' : 'unreachable';
       });
-      return res.status === 200 ? 'reachable' : 'unreachable';
     } catch (err) {
       return 'unreachable';
     }
@@ -34,15 +58,49 @@ class UpstreamService {
     const userAgent = getConfigValue('userAgent');
     const timeout = getConfigValue('upstreamTimeoutMs');
 
-    const url = `${baseUrl}/artist/?query=${encodeURIComponent(query)}&fmt=json`;
-    const res = await axios.get(url, {
-      headers: {
-        'User-Agent': userAgent
-      },
-      httpsAgent,
-      timeout
+    return enqueueRequest(async () => {
+      const url = `${baseUrl}/artist/?query=${encodeURIComponent(query)}&fmt=json`;
+      const res = await axios.get(url, {
+        headers: { 'User-Agent': userAgent },
+        httpsAgent,
+        timeout
+      });
+      return res.data;
     });
-    return res.data;
+  }
+
+  async musicBrainzGet(path, params) {
+    const baseUrl = getConfigValue('musicbrainzBaseUrl');
+    const userAgent = getConfigValue('userAgent');
+    const timeout = getConfigValue('upstreamTimeoutMs');
+
+    let lastError;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await enqueueRequest(async () => {
+          const response = await axios.get(`${baseUrl}${path}`, {
+            headers: { 'User-Agent': userAgent },
+            httpsAgent,
+            params: { fmt: 'json', ...params },
+            timeout
+          });
+          return response.data;
+        });
+      } catch (error) {
+        lastError = error;
+
+        if (error.response?.status && error.response.status < 500 && error.response.status !== 429) {
+          throw error;
+        }
+
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
+      }
+    }
+
+    throw lastError;
   }
 }
 
