@@ -103,7 +103,7 @@ function resetPassword() {
 // Precedence: saved (settings.json) > env var > built-in fallback.
 // The env var values serve as *defaults*, not locks.
 const EDITABLE_KEYS = {
-  userAgent:               { env: 'APP_USER_AGENT',                      fallback: 'melodarr-proxy/0.1.0 (replace-with-contact@example.com)', type: 'string' },
+  userAgent:               { env: 'APP_USER_AGENT',                      fallback: `proxy-${crypto.randomBytes(4).toString('hex')}/1.0 (contact-${crypto.randomBytes(4).toString('hex')}@example.com)`, type: 'string' },
   cacheTtlSeconds:         { env: 'CACHE_TTL_SECONDS',                   fallback: 86400,  type: 'number' },
   musicbrainzBaseUrl:      { env: 'MUSICBRAINZ_BASE_URL',                fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   minRequestIntervalMs:    { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100,   type: 'number' },

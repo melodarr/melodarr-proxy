@@ -6,7 +6,6 @@ services:
     environment:
       PORT: 3000
       REDIS_URL: redis://redis:6379
-      APP_USER_AGENT: ${APP_USER_AGENT:-melodarr-proxy/0.1.0 (replace-with-contact@example.com)}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       SETTINGS_SESSION_SECRET: ${SETTINGS_SESSION_SECRET:-}
       DATA_DIR: /data

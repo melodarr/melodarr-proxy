@@ -44,7 +44,7 @@ Returns in-memory runtime counters for requests, artist lookups, cache hits, ups
 
 ## Run With Docker
 
-Set `APP_USER_AGENT` to include real contact information before public use.
+The proxy generates a randomized `APP_USER_AGENT` on first boot, but you can set a custom one via the UI or `APP_USER_AGENT` env var.
 
 Keep personal contact details out of git by putting them in your local `.env` file:
 
@@ -55,7 +55,7 @@ cp .env.example .env
 Then edit `.env`:
 
 ```env
-APP_USER_AGENT=melodarr-proxy/0.1.0 (your-contact@example.com)
+APP_USER_AGENT=proxy-1234abcd/1.0 (contact-5678efgh@example.com) # dynamically randomized by default
 ```
 
 ```bash
@@ -120,7 +120,7 @@ REDIS_URL=redis://localhost:6379 npm start
 | --- | --- |
 | `PORT` | `3000` |
 | `REDIS_URL` | `redis://localhost:6379` |
-| `APP_USER_AGENT` | placeholder service user agent |
+| `APP_USER_AGENT` | dynamically randomized placeholder service user agent |
 | `DATA_DIR` | `./data` locally, `/data` in Docker |
 | `ADMIN_PASSWORD` | unset |
 | `SETTINGS_SESSION_SECRET` | falls back to `ADMIN_PASSWORD` |
