@@ -28,9 +28,9 @@ Melodarr Proxy is designed differently:
 ## 🧪 Verify it yourself
 
 ```bash
-curl http://localhost:3001/api/health
-curl http://localhost:3001/api/stats
-curl "http://localhost:3001/api/search?q=radiohead"
+curl http://localhost:3055/api/health
+curl http://localhost:3055/api/stats
+curl "http://localhost:3055/api/search?q=radiohead"
 ```
 
 If it doesn’t pass these checks — something is wrong. That’s intentional.
@@ -59,7 +59,7 @@ docker compose up --build
 
 App will be available at:
 
-👉 http://localhost:3001
+👉 http://localhost:3055
 
 ---
 

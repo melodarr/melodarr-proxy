@@ -25,7 +25,7 @@ node src/server.js
 docker compose up --build
 ```
 
-If the default port (`3000`) is busy on your host machine, override it with `HOST_PORT`:
+If the default port (`3055`) is busy on your host machine, override it with `HOST_PORT`:
 
 ```bash
 HOST_PORT=3100 docker compose up --build
@@ -37,19 +37,19 @@ Run these commands to verify your deployment is healthy and responding.
 
 Check the overall health of the proxy, upstream connection, and caching layer:
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost:3055/api/health
 ```
 *(Expected output: JSON containing `"status": "ok"` and `"proxy": "running"`)*
 
 Check runtime metrics (such as cache hit rates and total proxy duration):
 ```bash
-curl http://localhost:3000/api/stats
+curl http://localhost:3055/api/stats
 ```
 *(Expected output: JSON containing request counts, cache metrics, and application state)*
 
 Run a live artist search through the proxy:
 ```bash
-curl "http://localhost:3000/api/v1/artist/lookup?term=drake"
+curl "http://localhost:3055/api/v1/artist/lookup?term=drake"
 ```
 *(Expected output: JSON payload with `artistName` and a list of `albums` matching the search)*
 
