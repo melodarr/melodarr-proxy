@@ -1,0 +1,65 @@
+name: Deploy Ecosystem
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy via SSH Image Transfer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Ecosystem Images
+        run: |
+          docker compose build proxy auth
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
+
+      - name: Transfer and Load Proxy Image
+        env:
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+        run: |
+          echo "Compressing and transferring proxy image..."
+          docker save melodarr-proxy-proxy:latest | gzip | ssh $SSH_USER@$SSH_HOST "gunzip | docker load"
+
+      - name: Transfer and Load Auth Service Image
+        env:
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+        run: |
+          echo "Compressing and transferring auth service image..."
+          docker save melodarr-proxy-auth:latest | gzip | ssh $SSH_USER@$SSH_HOST "gunzip | docker load"
+
+      - name: Restart Remote Ecosystem
+        env:
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
+        run: |
+          echo "Restarting services on remote host..."
+          ssh $SSH_USER@$SSH_HOST "cd $DEPLOY_PATH && docker compose up -d proxy auth"
+
+      - name: Health Check Verification Loop
+        env:
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+        run: |
+          echo "Verifying Proxy Health..."
+          ssh $SSH_USER@$SSH_HOST 'for i in {1..5}; do curl -sf http://localhost:3001/api/health && echo "Proxy Healthy" && exit 0; sleep 2; done; echo "Proxy Health Check Failed"; exit 1'
+          
+          echo "Verifying Auth Service Health..."
+          ssh $SSH_USER@$SSH_HOST 'for i in {1..5}; do curl -sf http://localhost:4001/api/health && echo "Auth Healthy" && exit 0; sleep 2; done; echo "Auth Health Check Failed"; exit 1'
