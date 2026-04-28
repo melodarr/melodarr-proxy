@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:25-alpine
 WORKDIR /app
 RUN corepack enable
 COPY package*.json ./
