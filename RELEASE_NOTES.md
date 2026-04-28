@@ -1,17 +1,17 @@
-# Melodarr Proxy v0.1.0
+# Melodarr Proxy v0.1.1
 
-Initial open-source release for Melodarr Proxy, a lightweight music metadata proxy for personal Lidarr-style automation setups.
+Patch release focused on open-source hardening, install documentation, and regression coverage after the initial `v0.1.0` release.
 
 ## Highlights
 
-- Multi-provider artist metadata lookup with MusicBrainz, iTunes, TheAudioDB, Last.fm, and Discogs support.
-- Redis-backed caching with in-memory fallback.
-- Web UI for login, testing, settings, provider selection, API keys, stats, and dark/light mode.
-- Persistent API-key authentication for Lidarr-facing endpoints.
-- Provider visibility in lookup responses, response headers, and stats.
-- Docker Compose setup with Redis, health checks, random host ports, and optional service profiles.
-- Yarn-based development workflow with lint, tests, CI, Dependabot, and GHCR image publishing.
-- Production container starts as root only to repair `/data` volume ownership, then runs the Node process as the `melodarr` user.
+- Added `scripts/install-proxmox-lxc.sh` for Proxmox LXC installs.
+- Added Lidarr setup documentation.
+- Protected `main` with required CI checks.
+- Tuned Dependabot to avoid unplanned major Node Docker and Express upgrades.
+- Pinned optional service dependencies and added Yarn lockfiles.
+- Added immutable Yarn installs for optional service Docker builds.
+- Tightened Docker build contexts.
+- Added tests for artist lookup cache behavior, response shape, provider failure handling, and API-key middleware.
 
 ## Compatibility
 
@@ -28,7 +28,10 @@ Known gaps are tracked in `docs/lidarr-compatibility.md` and `ROADMAP.md`.
 Release checks run locally:
 
 - `yarn lint`
+- `yarn lint:auth`
+- `yarn lint:devdash`
 - `yarn test`
 - `docker compose config --quiet`
+- `docker compose build auth`
+- `docker compose build devdash`
 - `docker compose --profile test build test`
-- `docker compose up -d --build proxy`
