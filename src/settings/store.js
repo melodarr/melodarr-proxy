@@ -100,7 +100,8 @@ function resetPassword() {
 
 // ── Runtime config (editable from UI) ────────────────────────────
 // Keys that can be changed at runtime via the settings page.
-// Each maps to the env-var name so env vars still win when set.
+// Precedence: saved (settings.json) > env var > built-in fallback.
+// The env var values serve as *defaults*, not locks.
 const EDITABLE_KEYS = {
   userAgent:               { env: 'APP_USER_AGENT',                      fallback: 'melodarr-proxy/0.1.0 (replace-with-contact@example.com)', type: 'string' },
   cacheTtlSeconds:         { env: 'CACHE_TTL_SECONDS',                   fallback: 86400,  type: 'number' },
@@ -114,13 +115,15 @@ function getRuntimeConfig() {
   const config = {};
 
   for (const [key, spec] of Object.entries(EDITABLE_KEYS)) {
-    const envValue = process.env[spec.env];
     const storedValue = settings.runtime?.[key];
+    const envValue = process.env[spec.env];
 
-    if (envValue !== undefined && envValue !== '') {
-      config[key] = { value: spec.type === 'number' ? Number(envValue) : envValue, source: 'env' };
-    } else if (storedValue !== undefined) {
+    if (storedValue !== undefined) {
+      // Saved value always wins — user explicitly set it
       config[key] = { value: storedValue, source: 'saved' };
+    } else if (envValue !== undefined && envValue !== '') {
+      // Env var as the default (editable)
+      config[key] = { value: spec.type === 'number' ? Number(envValue) : envValue, source: 'default' };
     } else {
       config[key] = { value: spec.fallback, source: 'default' };
     }
@@ -136,14 +139,15 @@ function getConfigValue(key) {
     return undefined;
   }
 
+  // Saved values always win
+  if (settings.runtime?.[key] !== undefined) {
+    return settings.runtime[key];
+  }
+
   const envValue = process.env[spec.env];
 
   if (envValue !== undefined && envValue !== '') {
     return spec.type === 'number' ? Number(envValue) : envValue;
-  }
-
-  if (settings.runtime?.[key] !== undefined) {
-    return settings.runtime[key];
   }
 
   return spec.fallback;
@@ -158,12 +162,6 @@ function updateRuntimeConfig(updates) {
 
     if (!spec) {
       skipped[key] = 'Unknown setting';
-      continue;
-    }
-
-    // Env vars take precedence — can't override from UI
-    if (process.env[spec.env] && process.env[spec.env] !== '') {
-      skipped[key] = `Locked by ${spec.env} env var`;
       continue;
     }
 

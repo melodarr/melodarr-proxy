@@ -28,6 +28,18 @@ function renderLogin() {
         </label>
         <button type="submit">Unlock</button>
       </form>
+      <details class="reset-help">
+        <summary>Forgot password?</summary>
+        <div class="reset-help-body">
+          <p>Reset via the CLI, then reload this page:</p>
+          <pre><code># Local
+npm run reset-password
+
+# Docker
+docker compose exec proxy \
+  node src/server.js --reset-password</code></pre>
+        </div>
+      </details>
     </section>
   `;
 

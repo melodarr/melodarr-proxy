@@ -579,18 +579,69 @@ pre::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 
   margin-top: var(--space-sm);
 }
 
-.lock-badge {
+.saved-badge {
   display: inline-block;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: rgba(58, 157, 110, 0.12);
+  color: var(--success);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   margin-left: 6px;
   vertical-align: middle;
+}
+
+/* ── Reset Help (Login page) ──────────────────────────────────── */
+
+.reset-help {
+  margin: 0 var(--space-lg) var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-md);
+}
+
+.reset-help summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reset-help summary::before {
+  content: '▸';
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+}
+
+.reset-help[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.reset-help summary::-webkit-details-marker { display: none; }
+
+.reset-help-body {
+  margin-top: var(--space-sm);
+}
+
+.reset-help-body p {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin: 0 0 var(--space-sm);
+}
+
+.reset-help-body pre {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  border-top: none;
+  padding: var(--space-md);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-x: auto;
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */

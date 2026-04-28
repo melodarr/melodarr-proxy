@@ -34,17 +34,16 @@ function renderSettings(data) {
   entries.forEach(([key, info]) => {
     const label = document.createElement('label');
     const labelText = LABELS[key] || key;
-    const isLocked = info.source === 'env';
+    const isSaved = info.source === 'saved';
 
     label.innerHTML = `
       ${labelText}
-      ${isLocked ? '<span class="lock-badge" title="Locked by environment variable">env</span>' : ''}
+      ${isSaved ? '<span class="saved-badge" title="Customized — saved to settings.json">saved</span>' : ''}
     `;
 
     const input = document.createElement('input');
     input.name = key;
     input.value = info.value;
-    input.disabled = isLocked;
     input.type = typeof info.value === 'number' ? 'number' : 'text';
 
     if (typeof info.value === 'number') {
@@ -104,7 +103,7 @@ function renderSettings(data) {
     for (const [key, value] of formData.entries()) {
       const original = data.config[key];
 
-      if (!original || original.source === 'env') {
+      if (!original) {
         continue;
       }
 
