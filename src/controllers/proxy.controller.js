@@ -2,10 +2,18 @@ const metrics = require('../metrics');
 const cache = require('../cache');
 const upstreamService = require('../services/upstream.service');
 const axios = require('axios');
+const dns = require('dns');
+const https = require('https');
 const { getConfigValue } = require('../settings/store');
 
 // Bonus: Track top queries and repeated queries
 const queryCounts = new Map();
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  lookup(hostname, options, callback) {
+    return dns.lookup(hostname, { ...options, family: 4 }, callback);
+  }
+});
 
 async function handleSearch(req, res) {
   const { q } = req.query;
@@ -101,18 +109,37 @@ async function musicBrainzGet(path, params) {
   const userAgent = getConfigValue('userAgent');
   const timeout = getConfigValue('upstreamTimeoutMs');
 
-  const response = await axios.get(`${baseUrl}${path}`, {
-    headers: {
-      'User-Agent': userAgent
-    },
-    params: {
-      fmt: 'json',
-      ...params
-    },
-    timeout
-  });
+  let lastError;
 
-  return response.data;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await axios.get(`${baseUrl}${path}`, {
+        headers: {
+          'User-Agent': userAgent
+        },
+        httpsAgent,
+        params: {
+          fmt: 'json',
+          ...params
+        },
+        timeout
+      });
+
+      return response.data;
+    } catch (error) {
+      lastError = error;
+
+      if (error.response?.status && error.response.status < 500 && error.response.status !== 429) {
+        throw error;
+      }
+
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 async function handleArtistLookup(req, res) {
@@ -183,19 +210,25 @@ async function handleArtistLookup(req, res) {
   } catch (error) {
     console.error('[Proxy] Artist lookup failed:', error.message);
     const status = [403, 429, 503, 504].includes(error.response?.status) ? 503 : 502;
+    const isConnReset = error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED';
+    const networkWarning = isConnReset
+      ? 'MusicBrainz rejected the connection. Update the User-Agent in Settings with a real contact email.'
+      : error.code || error.message
+        ? `MusicBrainz network request failed: ${error.code || error.message}`
+        : 'MusicBrainz network request failed';
     metrics.recordArtistLookup({
       term,
       upstreamCalls: 0,
       partial: true,
       statusCode: status,
-      error: error.response?.data?.error || error.message || 'Artist lookup failed'
+      error: error.response?.data?.error || networkWarning
     });
     return res.status(status).json({
       artistName: term,
       foreignArtistId: '',
       albums: [],
       partial: true,
-      warning: error.response?.data?.error || error.message || 'Artist lookup failed'
+      warning: error.response?.data?.error || networkWarning
     });
   }
 }
