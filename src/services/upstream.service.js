@@ -34,9 +34,16 @@ async function enqueueRequest(fn) {
 }
 
 class UpstreamService {
+  getUserAgent() {
+    const appName = getConfigValue('appName');
+    const appVersion = getConfigValue('appVersion');
+    const appContact = getConfigValue('appContact');
+    return `${appName}/${appVersion} (${appContact})`;
+  }
+
   async checkHealth() {
     const baseUrl = getConfigValue('musicbrainzBaseUrl');
-    const userAgent = getConfigValue('userAgent');
+    const userAgent = this.getUserAgent();
     const timeout = getConfigValue('upstreamTimeoutMs');
 
     try {
@@ -55,7 +62,7 @@ class UpstreamService {
 
   async search(query) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl');
-    const userAgent = getConfigValue('userAgent');
+    const userAgent = this.getUserAgent();
     const timeout = getConfigValue('upstreamTimeoutMs');
 
     return enqueueRequest(async () => {
@@ -71,7 +78,7 @@ class UpstreamService {
 
   async musicBrainzGet(path, params) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl');
-    const userAgent = getConfigValue('userAgent');
+    const userAgent = this.getUserAgent();
     const timeout = getConfigValue('upstreamTimeoutMs');
 
     let lastError;

@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 
 const { getHealth } = require('../controllers/health.controller');
-const { getStats } = require('../controllers/stats.controller');
+const { getStats, getHistory } = require('../controllers/stats.controller');
 const { handleArtistLookup, handleSearch } = require('../controllers/proxy.controller');
 const { startProxy, stopProxy, clearCache, triggerSync } = require('../controllers/control.controller');
 const {
+  generateName,
+  getNameHistory,
   getSettings,
   getSettingsStatus,
   loginSettings,
@@ -16,6 +18,7 @@ const {
 } = require('../controllers/settings.controller');
 
 const proxyStateMiddleware = require('../middleware/proxy.middleware');
+const rateLimit = require('../middleware/rateLimit.middleware');
 
 // Public monitoring
 router.get('/health', getHealth);
@@ -26,12 +29,16 @@ router.post('/settings/logout', logoutSettings);
 
 // Authenticated monitoring/configuration
 router.get('/stats', requireSettingsAuth, getStats);
+router.get('/stats/history', requireSettingsAuth, getHistory);
 router.get('/settings', requireSettingsAuth, getSettings);
 router.patch('/settings', requireSettingsAuth, updateSettings);
+router.post('/settings/generate-name', requireSettingsAuth, generateName);
+router.get('/settings/name-history', requireSettingsAuth, getNameHistory);
 
 // Main proxy route (requires proxy to be running)
-router.get('/search', proxyStateMiddleware, handleSearch);
-router.get('/v1/artist/lookup', proxyStateMiddleware, handleArtistLookup);
+const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
+router.get('/search', proxyRateLimiter, proxyStateMiddleware, handleSearch);
+router.get('/v1/artist/lookup', proxyRateLimiter, proxyStateMiddleware, handleArtistLookup);
 
 // Control routes
 router.post('/proxy/start', startProxy);

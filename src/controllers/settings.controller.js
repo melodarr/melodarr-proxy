@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const {
   bootstrapAdminPassword,
   canBootstrapAdmin,
+  generateRandomName,
   getRuntimeConfig,
   getSessionSecret,
   hasAdminPassword,
@@ -160,6 +161,21 @@ function getSettings(_req, res) {
   res.json(getSettingsPayload());
 }
 
+const nameHistory = [];
+
+function getNameHistory(_req, res) {
+  res.json(nameHistory);
+}
+
+function generateName(_req, res) {
+  const newName = generateRandomName();
+  nameHistory.unshift(newName);
+  if (nameHistory.length > 10) {
+    nameHistory.pop();
+  }
+  res.json({ name: newName });
+}
+
 function updateSettings(req, res) {
   const updates = req.body;
 
@@ -177,6 +193,8 @@ function updateSettings(req, res) {
 }
 
 module.exports = {
+  generateName,
+  getNameHistory,
   getSettings,
   getSettingsStatus,
   isAuthenticated,

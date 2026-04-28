@@ -1,4 +1,5 @@
 const Redis = require('ioredis');
+const logger = require('../utils/logger');
 
 class CacheLayer {
   constructor() {
@@ -23,12 +24,12 @@ class CacheLayer {
       });
 
       this.redis.on('connect', () => {
-        console.log('[Cache] Redis connected');
+        logger.info('Redis connected', { context: 'Cache' });
         this.isRedisHealthy = true;
       });
 
       this.redis.on('error', (err) => {
-        console.warn('[Cache] Redis error, falling back to in-memory:', err.message);
+        logger.warn('Redis error, falling back to in-memory', { context: 'Cache', error: err.message });
         this.isRedisHealthy = false;
       });
       
@@ -36,7 +37,7 @@ class CacheLayer {
         this.isRedisHealthy = false;
       });
     } catch (err) {
-      console.warn('[Cache] Could not init Redis, using in-memory only', err);
+      logger.warn('Could not init Redis, using in-memory only', { context: 'Cache', error: err.message });
       this.isRedisHealthy = false;
     }
   }
@@ -47,7 +48,7 @@ class CacheLayer {
         const val = await this.redis.get(key);
         return val ? JSON.parse(val) : null;
       } catch (err) {
-        console.warn(`[Cache] Redis get failed for ${key}, trying memory`, err.message);
+        logger.warn(`Redis get failed for ${key}, trying memory`, { context: 'Cache', error: err.message });
       }
     }
     
@@ -67,7 +68,7 @@ class CacheLayer {
         await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
         return;
       } catch (err) {
-        console.warn(`[Cache] Redis set failed for ${key}, using memory`, err.message);
+        logger.warn(`Redis set failed for ${key}, using memory`, { context: 'Cache', error: err.message });
       }
     }
 
@@ -83,10 +84,14 @@ class CacheLayer {
       try {
         await this.redis.flushdb();
       } catch (err) {
-        console.warn('[Cache] Redis clear failed', err.message);
+        logger.warn('Redis clear failed', { context: 'Cache', error: err.message });
       }
     }
     this.fallbackMap.clear();
+  }
+
+  async isReady() {
+    return this.isRedisHealthy;
   }
 
   getHealth() {

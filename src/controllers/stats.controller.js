@@ -4,4 +4,8 @@ function getStats(req, res) {
   res.json(metrics.getStats());
 }
 
-module.exports = { getStats };
+function getHistory(req, res) {
+  res.json({ history: metrics.getHistory() });
+}
+
+module.exports = { getStats, getHistory };

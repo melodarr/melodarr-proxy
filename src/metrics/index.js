@@ -28,6 +28,10 @@ class MetricsManager extends EventEmitter {
     // Latency samples (last 1000)
     this.latencySamples = [];
     this.maxLatencySamples = 1000;
+    
+    // History snapshots
+    this.snapshots = [];
+    setInterval(() => this.takeSnapshot(), 60000); // 1 minute interval
   }
 
   recordRequest() {
@@ -177,6 +181,25 @@ class MetricsManager extends EventEmitter {
 
   stopProxy() {
     this.state.isRunning = false;
+  }
+
+  takeSnapshot() {
+    const stats = this.getStats();
+    const snapshot = {
+      timestamp: new Date().toISOString(),
+      requestsPerMinute: stats.requests.perMinute,
+      latencyAvgMs: stats.latency.avgMs,
+      errorRate: stats.errors.rate
+    };
+    
+    this.snapshots.push(snapshot);
+    if (this.snapshots.length > 10) {
+      this.snapshots.shift();
+    }
+  }
+
+  getHistory() {
+    return this.snapshots;
   }
 }
 

@@ -5,6 +5,7 @@ const axios = require('axios');
 const dns = require('dns');
 const https = require('https');
 const { getConfigValue } = require('../settings/store');
+const logger = require('../utils/logger');
 
 // Bonus: Track top queries and repeated queries
 const queryCounts = new Map();
@@ -49,7 +50,11 @@ async function handleSearch(req, res) {
 
     res.json(data);
   } catch (err) {
-    console.error('[Proxy] Upstream error in handleSearch:', err.message, 'User-Agent sent:', err.config?.headers?.['User-Agent']);
+    logger.error('Upstream error in handleSearch', { 
+      context: 'Proxy', 
+      error: err.message, 
+      userAgent: err.config?.headers?.['User-Agent'] 
+    });
     const diagnostic = {
       message: err.message,
       code: err.code,
@@ -182,7 +187,11 @@ async function handleArtistLookup(req, res) {
     res.set('X-Upstream-Calls', '2');
     return res.json(response);
   } catch (error) {
-    console.error('[Proxy] Artist lookup failed:', error.message, 'User-Agent sent:', error.config?.headers?.['User-Agent']);
+    logger.error('Artist lookup failed', { 
+      context: 'Proxy', 
+      error: error.message, 
+      userAgent: error.config?.headers?.['User-Agent'] 
+    });
     const status = [403, 429, 503, 504].includes(error.response?.status) ? 503 : 502;
     const isConnReset = error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED';
     const networkWarning = isConnReset

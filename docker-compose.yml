@@ -3,6 +3,7 @@ name: melodarr-proxy
 services:
   proxy:
     build: .
+    restart: unless-stopped
     environment:
       PORT: 3000
       REDIS_URL: redis://redis:6379
@@ -15,7 +16,7 @@ services:
       UPSTREAM_TIMEOUT_MS: 8000
       SLOW_REQUEST_MS: 2000
     ports:
-      - "${HOST_PORT:-0}:3000"
+      - "${HOST_PORT:-3001}:3000"
     volumes:
       - melodarr_proxy_data:/data
     depends_on:
@@ -23,6 +24,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
 volumes:

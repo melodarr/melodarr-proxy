@@ -10,7 +10,9 @@ function setStatus(message, isError = false) {
 
 // Human-readable labels for each config key
 const LABELS = {
-  userAgent:            'User-Agent',
+  appName:              'Product Name',
+  appVersion:           'Version',
+  appContact:           'Contact',
   cacheTtlSeconds:      'Cache TTL (seconds)',
   musicbrainzBaseUrl:   'MusicBrainz Base URL',
   minRequestIntervalMs: 'Min Request Interval (ms)',
@@ -50,7 +52,99 @@ function renderSettings(data) {
       input.min = '1';
     }
 
-    label.append(input);
+    if (key === 'appName') {
+      const container = document.createElement('div');
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.gap = '8px';
+
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.gap = '8px';
+      
+      input.style.flex = '1';
+      wrapper.append(input);
+      
+      const regenBtn = document.createElement('button');
+      regenBtn.type = 'button';
+      regenBtn.textContent = 'Generate New';
+      regenBtn.style.whiteSpace = 'nowrap';
+      regenBtn.style.padding = '4px 12px';
+      wrapper.append(regenBtn);
+
+      const historyContainer = document.createElement('div');
+      historyContainer.className = 'name-history';
+      historyContainer.style.display = 'flex';
+      historyContainer.style.flexWrap = 'wrap';
+      historyContainer.style.gap = '6px';
+
+      const loadNameHistory = async () => {
+        try {
+          const res = await fetch('/api/settings/name-history');
+          if (res.ok) {
+            const data = await res.json();
+            historyContainer.replaceChildren();
+            data.history.forEach(name => {
+              const pill = document.createElement('span');
+              pill.textContent = name;
+              pill.className = 'history-pill';
+              pill.title = 'Click to use this name';
+              pill.style.cursor = 'pointer';
+              pill.style.fontSize = '0.75rem';
+              pill.style.padding = '2px 8px';
+              pill.style.background = 'var(--bg-surface-alt)';
+              pill.style.borderRadius = 'var(--radius-sm)';
+              pill.style.border = '1px solid var(--border-subtle)';
+              pill.style.color = 'var(--text-secondary)';
+              pill.style.transition = 'all 0.15s ease';
+              
+              pill.addEventListener('click', () => {
+                input.value = name;
+              });
+              
+              pill.addEventListener('mouseenter', () => {
+                pill.style.background = 'var(--accent-dim)';
+                pill.style.color = 'var(--accent)';
+                pill.style.borderColor = 'var(--accent-ring)';
+              });
+              
+              pill.addEventListener('mouseleave', () => {
+                pill.style.background = 'var(--bg-surface-alt)';
+                pill.style.color = 'var(--text-secondary)';
+                pill.style.borderColor = 'var(--border-subtle)';
+              });
+              
+              historyContainer.append(pill);
+            });
+          }
+        } catch (e) {
+          console.error('Failed to load name history', e);
+        }
+      };
+
+      regenBtn.addEventListener('click', async () => {
+        try {
+          regenBtn.disabled = true;
+          const res = await fetch('/api/settings/generate-name', { method: 'POST' });
+          if (!res.ok) throw new Error('Failed to generate name');
+          const data = await res.json();
+          input.value = data.name;
+          await loadNameHistory();
+        } catch (e) {
+          setStatus(e.message, true);
+        } finally {
+          regenBtn.disabled = false;
+        }
+      });
+
+      loadNameHistory();
+
+      container.append(wrapper, historyContainer);
+      label.append(container);
+    } else {
+      label.append(input);
+    }
+
     form.append(label);
   });
 

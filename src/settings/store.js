@@ -98,12 +98,35 @@ function resetPassword() {
   return { cleared: true };
 }
 
+const ADJECTIVES = [
+  'Silver', 'Crimson', 'Silent', 'Azure', 'Golden', 'Cosmic', 'Lunar', 'Solar',
+  'Velvet', 'Crystal', 'Iron', 'Neon', 'Aqua', 'Jade', 'Obsidian', 'Radiant',
+  'Mystic', 'Electric', 'Stellar', 'Digital', 'Ghost', 'Shadow', 'Ruby', 'Sapphire',
+  'Astral', 'Lucid', 'Quantum', 'Sonic', 'Hyper', 'Cyber'
+];
+
+const NOUNS = [
+  'Harmony', 'Wave', 'Horizon', 'Echo', 'Nexus', 'Pulse', 'Aura', 'Zenith',
+  'Nova', 'Vortex', 'Prism', 'Vertex', 'Matrix', 'Engine', 'Core', 'Relay',
+  'Bridge', 'Proxy', 'Gateway', 'Signal', 'Station', 'Beacon', 'Forge', 'Node',
+  'Stream', 'Flow', 'Link', 'Cloud', 'Grid', 'Sphere'
+];
+
+function generateRandomName() {
+  const adj = ADJECTIVES[crypto.randomInt(ADJECTIVES.length)];
+  const noun = NOUNS[crypto.randomInt(NOUNS.length)];
+  const num = crypto.randomInt(10, 999);
+  return `${adj} ${noun} ${num}`;
+}
+
 // ── Runtime config (editable from UI) ────────────────────────────
 // Keys that can be changed at runtime via the settings page.
 // Precedence: saved (settings.json) > env var > built-in fallback.
 // The env var values serve as *defaults*, not locks.
 const EDITABLE_KEYS = {
-  userAgent:               { env: 'APP_USER_AGENT',                      fallback: `proxy-${crypto.randomBytes(4).toString('hex')}/1.0 (contact-${crypto.randomBytes(4).toString('hex')}@example.com)`, type: 'string' },
+  appName:                 { env: 'APP_NAME',                            fallback: generateRandomName(), type: 'string' },
+  appVersion:              { env: 'APP_VERSION',                         fallback: '1.0', type: 'string' },
+  appContact:              { env: 'APP_CONTACT',                         fallback: `contact-${crypto.randomBytes(4).toString('hex')}@example.com`, type: 'string' },
   cacheTtlSeconds:         { env: 'CACHE_TTL_SECONDS',                   fallback: 86400,  type: 'number' },
   musicbrainzBaseUrl:      { env: 'MUSICBRAINZ_BASE_URL',                fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   minRequestIntervalMs:    { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100,   type: 'number' },
@@ -188,6 +211,7 @@ function updateRuntimeConfig(updates) {
 module.exports = {
   bootstrapAdminPassword,
   canBootstrapAdmin,
+  generateRandomName,
   getConfigValue,
   getRuntimeConfig,
   getSessionSecret,

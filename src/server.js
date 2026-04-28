@@ -1,5 +1,8 @@
 const express = require('express');
 const path = require('path');
+const logger = require('./utils/logger');
+const cacheLayer = require('./cache');
+const upstreamService = require('./services/upstream.service');
 
 // ── CLI Commands (run before server boots) ───────────────────────
 if (process.argv.includes('--reset-password')) {
@@ -7,9 +10,9 @@ if (process.argv.includes('--reset-password')) {
   const result = resetPassword();
 
   if (result.cleared) {
-    console.log('[CLI] Password cleared. The setup flow will appear on next login.');
+    logger.info('Password cleared. The setup flow will appear on next login.', { context: 'CLI' });
   } else {
-    console.log(`[CLI] ${result.reason}`);
+    logger.error(result.reason, { context: 'CLI' });
   }
 
   process.exit(0);
@@ -58,6 +61,15 @@ app.use((req, res, next) => {
 // Serve frontend static files
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Versioning + Release Identity Endpoint
+app.get('/api/version', (req, res) => {
+  res.json({
+    app: process.env.APP_NAME || 'Melodarr Proxy',
+    version: process.env.APP_VERSION || '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // API Routes
 app.use('/api', apiRoutes);
 app.use('/api', (req, res) => {
@@ -71,8 +83,47 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`[Server] Production proxy running on port ${PORT}`);
-  console.log(`[Server] Health Check: http://localhost:${PORT}/api/health`);
-});
+// ── Startup Validation (Fail-Fast System) ───────────────────────
+async function boot() {
+  logger.info('Starting boot sequence...');
+  
+  // 1. Verify required environment variables
+  const requiredEnv = ['UPSTREAM_URL'];
+  const missing = requiredEnv.filter(env => !process.env[env]);
+  if (missing.length > 0) {
+    logger.error(`Boot failed: Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+
+  // 2. Validate Cache Connection
+  try {
+    const isCacheConnected = await cacheLayer.isReady();
+    if (isCacheConnected) {
+      logger.info('Cache connection validated.');
+    } else {
+      logger.warn('Redis cache is not connected. Will fallback to in-memory caching.');
+    }
+  } catch (err) {
+    logger.warn('Failed to validate cache connection.', { error: err.message });
+  }
+
+  // 3. Validate Upstream Connectivity
+  try {
+    const upstreamHealth = await upstreamService.checkHealth();
+    if (!upstreamHealth) {
+      throw new Error('Upstream API is unreachable.');
+    }
+    logger.info('Upstream connectivity validated.');
+  } catch (err) {
+    logger.error('Boot failed: Upstream validation error.', { error: err.message });
+    process.exit(1);
+  }
+
+  // Start server
+  app.listen(PORT, '0.0.0.0', () => {
+    logger.info(`Production proxy running on port ${PORT}`);
+    logger.info(`Health Check: http://localhost:${PORT}/api/health`);
+  });
+}
+
+boot();
