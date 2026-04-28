@@ -19,6 +19,11 @@ This file tracks the work needed to make Melodarr Proxy easy to run, contribute 
 - [x] Add `.dockerignore`.
 - [x] Run production container as non-root.
 - [x] Add GHCR image publishing workflow.
+- [x] Add Proxmox LXC install script.
+- [x] Add Lidarr setup guide.
+- [x] Protect `main` with required PR checks.
+- [x] Tune Dependabot to avoid unplanned major runtime/framework bumps.
+- [x] Pin optional service dependencies and add lockfiles.
 
 ## Next
 
@@ -27,6 +32,7 @@ This file tracks the work needed to make Melodarr Proxy easy to run, contribute 
 - [ ] Add release workflow and release notes automation.
 - [ ] Add cached lazy artwork endpoints.
 - [ ] Add integration tests for cache hits, partial provider failure, and auth setup.
+- [ ] Test Proxmox installer on a real Proxmox host.
 - [ ] Test against a real Lidarr instance and document compatibility gaps.
 
 ## Later

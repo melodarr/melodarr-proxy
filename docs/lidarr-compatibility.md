@@ -34,7 +34,7 @@ X-Api-Key: mp_...
 
 ## Testing Checklist
 
-- [ ] Configure Lidarr to use Melodarr Proxy.
+- [ ] Configure Lidarr to use Melodarr Proxy. See [lidarr-setup.md](lidarr-setup.md).
 - [ ] Search for a well-known artist.
 - [ ] Add the artist.
 - [ ] Confirm albums populate.
