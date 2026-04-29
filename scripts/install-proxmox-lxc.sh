@@ -19,9 +19,11 @@ TEMPLATE_FILE="${TEMPLATE_FILE:-debian-12-standard_12.12-1_amd64.tar.zst}"
 UNPRIVILEGED="${UNPRIVILEGED:-1}"
 
 HOST_PORT="${HOST_PORT:-3055}"
+DEVDASH_HOST_PORT="${DEVDASH_HOST_PORT:-55026}"
 APP_CONTACT="${APP_CONTACT:-admin@example.com}"
 APP_VERSION="${APP_VERSION:-latest}"
 IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:${APP_VERSION}}"
+DEVDASH_IMAGE="${DEVDASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-devdash:${APP_VERSION}}"
 REPO_URL="${REPO_URL:-https://github.com/melodarr/melodarr-proxy.git}"
 ALLOW_SOURCE_FALLBACK="${ALLOW_SOURCE_FALLBACK:-false}"
 
@@ -255,14 +257,25 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
+  devdash:
+    image: ${DEVDASH_IMAGE}
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      PROXY_API_URL: http://proxy:3000/api
+    ports:
+      - "${DEVDASH_HOST_PORT}:3000"
+    depends_on:
+      - proxy
+
 volumes:
   melodarr_proxy_data:
 COMPOSE
 
 cd /opt/melodarr-proxy
-if ! docker compose pull proxy > /tmp/pull.log 2>&1; then
+if ! docker compose pull proxy devdash > /tmp/pull.log 2>&1; then
   echo
-  echo "Failed to pull image ${IMAGE}."
+  echo "Failed to pull image ${IMAGE} or ${DEVDASH_IMAGE}."
   
   PULL_OUTPUT=\$(cat /tmp/pull.log)
   if echo "\$PULL_OUTPUT" | grep -qi "unauthorized"; then
@@ -347,6 +360,18 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
+  devdash:
+    build:
+      context: ./src/devdash
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      PROXY_API_URL: http://proxy:3000/api
+    ports:
+      - "${DEVDASH_HOST_PORT}:3000"
+    depends_on:
+      - proxy
+
 volumes:
   melodarr_proxy_data:
 SOURCE_COMPOSE
@@ -364,6 +389,8 @@ echo
 echo "Melodarr Proxy installed."
 echo "Test locally with:"
 echo "  curl http://127.0.0.1:${HOST_PORT}/api/health"
+echo "Open DevDash at:"
+echo "  http://<container-ip>:${DEVDASH_HOST_PORT}/dashboard"
 EOF
 
 chmod +x "$BOOTSTRAP_SCRIPT"
@@ -432,6 +459,28 @@ if ! pct exec "\$CTID" -- bash -c "test -f \$COMPOSE_FILE"; then
 fi
 
 IS_SOURCE_BUILD=\$(pct exec "\$CTID" -- grep -c "image: melodarr-proxy:local" "\$COMPOSE_FILE" || true)
+HAS_DEVDASH=\$(pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx devdash" || true)
+
+if [[ "\$HAS_DEVDASH" -eq 0 ]]; then
+  echo "DevDash service missing from compose.yml. Adding it now..."
+  pct exec "\$CTID" -- bash -c "awk '
+    /^volumes:/ && !inserted {
+      print \"\"
+      print \"  devdash:\"
+      print \"    image: ghcr.io/melodarr/melodarr-proxy-devdash:latest\"
+      print \"    restart: unless-stopped\"
+      print \"    environment:\"
+      print \"      PORT: 3000\"
+      print \"      PROXY_API_URL: http://proxy:3000/api\"
+      print \"    ports:\"
+      print \"      - \\\"55026:3000\\\"\"
+      print \"    depends_on:\"
+      print \"      - proxy\"
+      inserted = 1
+    }
+    { print }
+  ' \$COMPOSE_FILE > /tmp/melodarr-compose.yml && mv /tmp/melodarr-compose.yml \$COMPOSE_FILE"
+fi
 
 if [[ "\$IS_SOURCE_BUILD" -gt 0 ]]; then
   echo "Detected SOURCE BUILD fallback installation."
@@ -443,11 +492,11 @@ if [[ "\$IS_SOURCE_BUILD" -gt 0 ]]; then
 else
   echo "Detected STANDARD IMAGE installation."
   echo "Pulling latest Docker image..."
-  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy"
+  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy devdash"
 fi
 
-echo "Recreating and restarting proxy container..."
-pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy"
+echo "Recreating and restarting containers..."
+pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis devdash"
 
 echo "Cleaning up dangling images to save space..."
 pct exec "\$CTID" -- docker image prune -f

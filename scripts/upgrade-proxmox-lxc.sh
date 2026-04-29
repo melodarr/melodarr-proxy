@@ -46,6 +46,28 @@ fi
 
 echo "Checking installation type..."
 IS_SOURCE_BUILD=$(pct exec "$CTID" -- grep -c "image: melodarr-proxy:local" "$COMPOSE_FILE" || true)
+HAS_DEVDASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx devdash" || true)
+
+if [[ "$HAS_DEVDASH" -eq 0 ]]; then
+  echo "DevDash service missing from compose.yml. Adding it now..."
+  pct exec "$CTID" -- bash -c "awk '
+    /^volumes:/ && !inserted {
+      print \"\"
+      print \"  devdash:\"
+      print \"    image: ghcr.io/melodarr/melodarr-proxy-devdash:latest\"
+      print \"    restart: unless-stopped\"
+      print \"    environment:\"
+      print \"      PORT: 3000\"
+      print \"      PROXY_API_URL: http://proxy:3000/api\"
+      print \"    ports:\"
+      print \"      - \\\"55026:3000\\\"\"
+      print \"    depends_on:\"
+      print \"      - proxy\"
+      inserted = 1
+    }
+    { print }
+  ' $COMPOSE_FILE > /tmp/melodarr-compose.yml && mv /tmp/melodarr-compose.yml $COMPOSE_FILE"
+fi
 
 if [[ "$IS_SOURCE_BUILD" -gt 0 ]]; then
   echo "Detected SOURCE BUILD fallback installation."
@@ -56,12 +78,12 @@ if [[ "$IS_SOURCE_BUILD" -gt 0 ]]; then
   pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker build -t melodarr-proxy:local --target production src/"
 else
   echo "Detected STANDARD IMAGE installation."
-  echo "Pulling latest Docker image..."
-  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy"
+  echo "Pulling latest Docker images..."
+  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy devdash"
 fi
 
-echo "Recreating and restarting proxy container..."
-pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy"
+echo "Recreating and restarting containers..."
+pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis devdash"
 
 echo "Cleaning up dangling images to save space..."
 pct exec "$CTID" -- docker image prune -f
@@ -71,4 +93,5 @@ echo "Upgrade Complete!"
 echo "Verify status with:"
 echo "  pct exec $CTID -- docker ps"
 echo "  pct exec $CTID -- curl -s http://127.0.0.1:3055/api/health"
+echo "  open http://<lxc-ip>:55026/dashboard"
 echo "=========================================================="

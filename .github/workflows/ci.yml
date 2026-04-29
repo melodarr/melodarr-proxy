@@ -29,6 +29,14 @@ jobs:
       - name: Test
         run: yarn test
 
+      - name: Install DevDash dependencies
+        working-directory: devdash
+        run: yarn install --immutable
+
+      - name: DevDash typecheck
+        working-directory: devdash
+        run: yarn run lint
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
@@ -36,6 +44,9 @@ jobs:
 
       - name: Build production image
         run: docker compose build proxy
+
+      - name: Build DevDash image
+        run: docker compose build devdash
 
       - name: Build test image
         run: docker compose --profile test build test

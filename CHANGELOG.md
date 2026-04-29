@@ -2,6 +2,12 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.11 - 2026-04-29
+
+- Restored the separate DevDash container as a first-class deployed service.
+- Added a production DevDash image at `ghcr.io/melodarr/melodarr-proxy-devdash`.
+- Updated Compose and Proxmox install/update flows so standard installs run `proxy`, `redis`, and `devdash` with DevDash exposed on port `55026`.
+
 ## v0.3.10 - 2026-04-29
 
 - Added packaged dashboard aliases so `/dashboard`, `/settings`, `/stats`, and `/login` serve the bundled operator UI without requiring `.html` paths.
