@@ -215,9 +215,17 @@ jobs:
             exit 1
           fi
           
-          echo "Running basic API query (/api/v1/artist/discover?q=test)..."
-          if ! curl -sf "http://localhost:3055/api/v1/artist/discover?q=test" > /dev/null; then
-            echo "❌ Canary validation failed! API query failed."
+          echo "Validating public API contract endpoints..."
+          if ! curl -sf "http://localhost:3055/openapi.json" | grep -q '"openapi"'; then
+            echo "❌ Canary validation failed! /openapi.json did not return the OpenAPI document."
+            docker logs proxy
+            docker rm -f proxy redis
+            docker network rm smoke-test-net
+            exit 1
+          fi
+
+          if ! curl -sf "http://localhost:3055/docs" | grep -q "Scalar"; then
+            echo "❌ Canary validation failed! /docs did not return the Scalar docs page."
             docker logs proxy
             docker rm -f proxy redis
             docker network rm smoke-test-net

@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.15 - 2026-04-29
+
+- Fixed release canary validation to check public health, OpenAPI, and Scalar docs endpoints instead of calling authenticated artist lookup without an API key.
+
 ## v0.3.14 - 2026-04-29
 
 - Removed bundled global npm/npx from final runtime images after dependency installation to avoid scanning unused npm internals.
