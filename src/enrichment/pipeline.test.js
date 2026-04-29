@@ -56,10 +56,17 @@ function loadPipeline ({ cacheStore = new Map(), configValues = {}, metricsRecor
     }
   }
 
-  // Keep real axios in cache so no network call is triggered –
-  // enrichArtistData only calls axios when an API key is configured.
-  // Since configValues will have empty keys, no axios calls happen.
-  require.cache[axiosPath] = require.cache[axiosPath] || { exports: require('axios') }
+  let axiosMock = require('axios')
+  if (configValues.mockAxios) {
+    axiosMock = { get: configValues.mockAxios }
+  }
+
+  require.cache[axiosPath] = {
+    id: axiosPath,
+    filename: axiosPath,
+    loaded: true,
+    exports: axiosMock
+  }
 
   return require('./pipeline')
 }
@@ -190,7 +197,7 @@ test('enrichResult records latencyMs in metrics', async () => {
 after(() => {
   // Clean up require.cache entries introduced by the tests
   const paths = [
-    './pipeline', '../cache', '../settings/store', '../utils/logger', '../metrics'
+    './pipeline', '../cache', '../settings/store', '../utils/logger', '../metrics', 'axios'
   ].map(p => {
     try { return require.resolve(p) } catch (_) { return null }
   }).filter(Boolean)
@@ -198,4 +205,127 @@ after(() => {
   for (const p of paths) {
     delete require.cache[p]
   }
+})
+
+// ── Enrichment APIs (LastFM & Discogs) ──────────────────────────
+
+test('enrichArtistData calls Last.fm and Discogs and handles success', async () => {
+  const cacheStore = new Map()
+  const mockAxios = async (url, options) => {
+    if (url.includes('audioscrobbler.com')) {
+      return {
+        data: {
+          artist: {
+            stats: { listeners: '123', playcount: '456' },
+            tags: { tag: [{ name: 'pop' }, { name: 'indie' }] }
+          }
+        }
+      }
+    }
+    if (url.includes('api.discogs.com')) {
+      return {
+        data: {
+          results: [
+            { title: 'The Band', genre: ['Rock', 'Folk'] }
+          ]
+        }
+      }
+    }
+    return { data: {} }
+  }
+
+  const { enrichResult } = loadPipeline({
+    cacheStore,
+    configValues: {
+      lastfmApiKey: 'fake-lastfm-key',
+      discogsToken: 'fake-discogs-token',
+      appName: 'TestApp',
+      appVersion: '1.0.0',
+      mockAxios
+    }
+  })
+
+  const result = await enrichResult({ artistName: 'The Band', albums: [] })
+  assert.equal(result.popularity.listeners, 123)
+  assert.equal(result.popularity.playcount, 456)
+  assert.deepEqual(result.tags, ['pop', 'indie'])
+  assert.deepEqual(result.genres, ['pop', 'indie', 'Rock', 'Folk'])
+})
+
+test('enrichArtistData handles Last.fm single tag and Discogs empty results', async () => {
+  const cacheStore = new Map()
+  const mockAxios = async (url, options) => {
+    // Also tests the dns.lookup logic inside the https agent because it is instantiated at module level
+    // Wait, dns.lookup doesn't get called in mocks but we can't easily test it.
+    if (url.includes('audioscrobbler.com')) {
+      return {
+        data: {
+          artist: {
+            tags: { tag: { name: 'single-tag' } }
+          }
+        }
+      }
+    }
+    if (url.includes('api.discogs.com')) {
+      return {
+        data: { results: [] }
+      }
+    }
+  }
+
+  const { enrichResult } = loadPipeline({
+    cacheStore,
+    configValues: {
+      lastfmApiKey: 'fake-key',
+      discogsToken: 'fake-token',
+      mockAxios
+    }
+  })
+
+  const result = await enrichResult({ artistName: 'Single Tag Artist', albums: [] })
+  assert.deepEqual(result.tags, ['single-tag'])
+  assert.deepEqual(result.genres, ['single-tag'])
+})
+
+test('enrichArtistData handles Last.fm and Discogs errors gracefully', async () => {
+  const cacheStore = new Map()
+  const mockAxios = async (url) => {
+    throw new Error('Network error')
+  }
+
+  const { enrichResult } = loadPipeline({
+    cacheStore,
+    configValues: {
+      lastfmApiKey: 'fake-key',
+      discogsToken: 'fake-token',
+      mockAxios
+    }
+  })
+
+  const result = await enrichResult({ artistName: 'Error Artist', albums: [] })
+  // Should return defaults without failing the whole process
+  assert.deepEqual(result.tags, [])
+  assert.deepEqual(result.genres, [])
+  assert.equal(result.popularity.listeners, 0)
+})
+
+test('enrichResult handles general errors correctly (e.g. cache failing or mockAxios throwing outside Promise.all)', async () => {
+  // To test the catch block around `await enrichArtistData`, we'll make getConfigValue throw.
+  const pipelinePath = require.resolve('./pipeline')
+  const storePath = require.resolve('../settings/store')
+  delete require.cache[pipelinePath]
+  require.cache[storePath] = {
+    id: storePath,
+    filename: storePath,
+    loaded: true,
+    exports: {
+      getConfigValue () { throw new Error('Simulated config error') }
+    }
+  }
+
+  const pipeline = require('./pipeline')
+  const result = await pipeline.enrichResult({ artistName: 'Throws Artist', albums: [] }, true)
+
+  assert.equal(result._enrichmentDebug.error, 'Simulated config error')
+  assert.equal(result._enrichmentDebug.cached, false)
 })

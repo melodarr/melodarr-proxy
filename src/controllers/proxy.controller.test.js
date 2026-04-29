@@ -32,6 +32,8 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   const settingsPath = require.resolve('../settings/store')
   const snapshotsPath = require.resolve('../snapshots')
   const loggerPath = require.resolve('../utils/logger')
+  const upstreamPath = require.resolve('../services/upstream.service')
+  const artistDiscoveryPath = require.resolve('../providers/artist-discovery')
 
   delete require.cache[controllerPath]
   delete require.cache[providersPath]
@@ -43,6 +45,8 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   delete require.cache[settingsPath]
   delete require.cache[snapshotsPath]
   delete require.cache[loggerPath]
+  delete require.cache[upstreamPath]
+  delete require.cache[artistDiscoveryPath]
 
   const fakeCache = {
     async get (key) {
@@ -56,7 +60,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
       })
     },
     async acquireLock () {
-      return 'test-lock'
+      return cacheStore.get('_lock_fail') ? false : 'test-lock'
     },
     async releaseLock () {
       return true
@@ -153,6 +157,27 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
       error () {},
       warn () {},
       info () {}
+    }
+  }
+
+  require.cache[upstreamPath] = {
+    id: upstreamPath,
+    filename: upstreamPath,
+    loaded: true,
+    exports: {
+      search: arguments[0]?.search || (async () => {
+        throw new Error('search stub was not configured')
+      })
+    }
+  }
+
+  require.cache[artistDiscoveryPath] = {
+    id: artistDiscoveryPath,
+    filename: artistDiscoveryPath,
+    loaded: true,
+    exports: {
+      discoverArtists: arguments[0]?.discoverArtists || (async () => []),
+      findSongAlbums: arguments[0]?.findSongAlbums || (async () => ({}))
     }
   }
 
@@ -262,4 +287,209 @@ test('artist lookup returns partial error response when all providers fail', asy
   assert.deepEqual(res.body.albums, [])
   assert.equal(res.body.partial, true)
   assert.equal(res.body.warning, 'All metadata providers failed')
+})
+
+// handleSearch tests
+test('handleSearch requires a query parameter', async () => {
+  const { controller } = loadController()
+  const res = makeResponse()
+  await controller.handleSearch({ query: {} }, res)
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.body.error, 'Missing query parameter "q"')
+})
+
+test('handleSearch returns cached response', async () => {
+  const cacheStore = new Map([
+    ['search:test song', {
+      data: { albums: [] },
+      generatedAt: '2026-04-28T00:00:00.000Z'
+    }]
+  ])
+  const { controller } = loadController({ cacheStore })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: ' Test Song ' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Cache-Generated-At'], '2026-04-28T00:00:00.000Z')
+})
+
+test('handleSearch fetches upstream, caches, and returns', async () => {
+  let searchCalled = false
+  const { controller, cacheStore } = loadController({
+    search: async (q) => {
+      searchCalled = true
+      return { albums: [{ provider: 'test', name: 'Hit' }] }
+    }
+  })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: 'Test Song' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.ok(searchCalled)
+  assert.equal(res.body.albums[0].name, 'Hit')
+  assert.ok(cacheStore.has('search:test song'))
+})
+
+test('handleSearch handles upstream error', async () => {
+  const { controller } = loadController({
+    search: async () => { throw new Error('Upstream failed') }
+  })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: 'fail' }, headers: {} }, res)
+  assert.equal(res.statusCode, 502)
+  assert.equal(res.body.error, 'Failed to fetch from upstream API')
+  assert.equal(res.body.details.message, 'Upstream failed')
+})
+
+test('handleSearch handles lock timeout', async () => {
+  const cacheStore = new Map([['_lock_fail', true]])
+  const { controller } = loadController({ cacheStore })
+  const res = makeResponse()
+  const originalNow = Date.now
+  let calls = 0
+  Date.now = () => originalNow() + (calls++ * 5000)
+  await controller.handleSearch({ query: { q: 'locked' } }, res)
+  Date.now = originalNow
+  assert.equal(res.statusCode, 502)
+  assert.equal(res.body.error, 'Failed to acquire distributed lock for upstream fetch')
+})
+
+test('handleSearch coalescing returns cached data', async () => {
+  const cacheStore = new Map([['_lock_fail', true]])
+  const { controller } = loadController({ cacheStore })
+  const res = makeResponse()
+
+  const originalGet = cacheStore.get
+  let attempts = 0
+  cacheStore.get = function (key) {
+    if (key === 'search:coalesce') {
+      attempts++
+      if (attempts > 1) {
+        return { data: { albums: [] }, generatedAt: '2026-04-28' }
+      }
+    }
+    return originalGet.call(cacheStore, key)
+  }
+
+  await controller.handleSearch({ query: { q: 'coalesce' } }, res)
+  assert.equal(res.statusCode, 200)
+})
+
+// handleArtistLookup branches
+test('artist lookup handles lock timeout', async () => {
+  const cacheStore = new Map([['_lock_fail', true]])
+  const { controller } = loadController({ cacheStore })
+  const res = makeResponse()
+  const originalNow = Date.now
+  let calls = 0
+  Date.now = () => originalNow() + (calls++ * 5000)
+  await controller.handleArtistLookup({ query: { term: 'locked' } }, res)
+  Date.now = originalNow
+  assert.equal(res.statusCode, 502)
+  assert.equal(res.body.warning, 'Upstream request failed during coalescing (lock timeout)')
+})
+
+test('artist lookup coalescing returns cached data', async () => {
+  const cacheStore = new Map([['_lock_fail', true]])
+  const { controller } = loadController({ cacheStore })
+  const res = makeResponse()
+
+  const originalGet = cacheStore.get
+  let attempts = 0
+  cacheStore.get = function (key) {
+    if (key === 'artist:coalesce') {
+      attempts++
+      if (attempts > 1) {
+        return { data: { albums: [] }, generatedAt: '2026-04-28' }
+      }
+    }
+    return originalGet.call(cacheStore, key)
+  }
+
+  await controller.handleArtistLookup({ query: { term: 'coalesce' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Cache'], 'HIT')
+})
+
+test('artist lookup coalescing returns cached data with debug', async () => {
+  const cacheStore = new Map([['_lock_fail', true]])
+  const { controller } = loadController({ cacheStore })
+  const res = makeResponse()
+
+  const originalGet = cacheStore.get
+  let attempts = 0
+  cacheStore.get = function (key) {
+    if (key === 'artist:coalesce') {
+      attempts++
+      if (attempts > 1) {
+        return { data: { albums: [], debug: true }, generatedAt: '2026-04-28' }
+      }
+    }
+    return originalGet.call(cacheStore, key)
+  }
+
+  await controller.handleArtistLookup({ query: { term: 'coalesce', debug: 'true' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Cache'], 'HIT')
+  assert.equal(res.body.debug, true)
+})
+
+// handleArtistDiscover tests
+test('handleArtistDiscover requires query', async () => {
+  const { controller } = loadController()
+  const res = makeResponse()
+  await controller.handleArtistDiscover({ query: {} }, res)
+  assert.equal(res.statusCode, 400)
+})
+
+test('handleArtistDiscover returns candidates', async () => {
+  const { controller } = loadController({
+    discoverArtists: async ({ query, type }) => [{ id: 1, name: query, type }]
+  })
+  const res = makeResponse()
+  await controller.handleArtistDiscover({ query: { q: 'test' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.candidates[0].name, 'test')
+})
+
+test('handleArtistDiscover handles errors', async () => {
+  const { controller } = loadController({
+    discoverArtists: async () => {
+      const err = new Error('Discovery failed')
+      err.code = 'ERR'
+      err.response = { status: 404 }
+      throw err
+    }
+  })
+  const res = makeResponse()
+  await controller.handleArtistDiscover({ query: { q: 'test' } }, res)
+  assert.equal(res.statusCode, 502)
+  assert.equal(res.body.error, 'Discovery failed')
+  assert.equal(res.body.details.status, 404)
+})
+
+// handleSongAlbums tests
+test('handleSongAlbums requires artist and song', async () => {
+  const { controller } = loadController()
+  const res = makeResponse()
+  await controller.handleSongAlbums({ query: { artist: 'a' } }, res)
+  assert.equal(res.statusCode, 400)
+})
+
+test('handleSongAlbums returns albums', async () => {
+  const { controller } = loadController({
+    findSongAlbums: async ({ artist, song }) => ({ source: 'test', albums: [] })
+  })
+  const res = makeResponse()
+  await controller.handleSongAlbums({ query: { artist: 'a', song: 's' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.source, 'test')
+})
+
+test('handleSongAlbums handles errors', async () => {
+  const { controller } = loadController({
+    findSongAlbums: async () => { throw new Error('Albums failed') }
+  })
+  const res = makeResponse()
+  await controller.handleSongAlbums({ query: { artist: 'a', song: 's' } }, res)
+  assert.equal(res.statusCode, 502)
+  assert.equal(res.body.error, 'Albums failed')
 })

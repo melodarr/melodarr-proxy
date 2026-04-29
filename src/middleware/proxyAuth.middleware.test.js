@@ -44,7 +44,6 @@ function loadMiddleware ({ isAuthenticated, apiKeyResult } = {}) {
   return require('./proxyAuth.middleware')
 }
 
-
 // ── Settings-authenticated session → calls next directly ─────────
 
 test('proxyAuth calls next directly when session is authenticated', () => {

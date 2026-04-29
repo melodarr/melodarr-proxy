@@ -2,6 +2,13 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.21 - 2026-04-29
+
+- Achieved 94%+ test coverage for proxy.controller by adding comprehensive unit tests with module mocking.
+- Added unit tests for external dependencies including Cache, Providers, and Upstream Services.
+- Resolved various linting issues caught by `standard` by cleaning up test code unused variables and spacing.
+- Enforced `XDG_CACHE_HOME=.cache` for consistent lint caching across environments.
+
 ## v0.3.18 - 2026-04-29
 
 - Granted the release workflow `contents: write` so GitHub release creation can generate and publish release notes after validation passes.
