@@ -424,58 +424,58 @@ echo "=========================================================="
 echo "Creating Upgrade Script..."
 echo "=========================================================="
 UPGRADE_SCRIPT="upgrade-melodarr-proxy-${CTID}.sh"
-cat > "\$UPGRADE_SCRIPT" <<'EOF_UPGRADE'
+cat > "$UPGRADE_SCRIPT" <<'EOF_UPGRADE'
 #!/usr/bin/env bash
 set -euo pipefail
 
 CTID="%%CTID%%"
 
-if [[ \$EUID -ne 0 ]]; then
+if [[ $EUID -ne 0 ]]; then
   echo "Run this as root on the Proxmox host."
   exit 1
 fi
 
-if ! pct status "\$CTID" >/dev/null 2>&1; then
-  echo "Container ID \$CTID does not exist."
+if ! pct status "$CTID" >/dev/null 2>&1; then
+  echo "Container ID $CTID does not exist."
   exit 1
 fi
 
-STATUS=\$(pct status "\$CTID" | awk '{print \$2}')
-if [[ "\$STATUS" != "running" ]]; then
-  echo "Container \$CTID is not running. Starting it now..."
-  pct start "\$CTID"
+STATUS=$(pct status "$CTID" | awk '{print $2}')
+if [[ "$STATUS" != "running" ]]; then
+  echo "Container $CTID is not running. Starting it now..."
+  pct start "$CTID"
   sleep 5
 fi
 
 echo "=========================================================="
-echo "Upgrading Melodarr Proxy in LXC Container: \$CTID"
+echo "Upgrading Melodarr Proxy in LXC Container: $CTID"
 echo "=========================================================="
 
 COMPOSE_FILE="/opt/melodarr-proxy/compose.yml"
 
-if ! pct exec "\$CTID" -- bash -c "test -f \$COMPOSE_FILE"; then
-  echo "Error: \$COMPOSE_FILE not found in container \$CTID."
+if ! pct exec "$CTID" -- bash -c "test -f $COMPOSE_FILE"; then
+  echo "Error: $COMPOSE_FILE not found in container $CTID."
   exit 1
 fi
 
-IS_SOURCE_BUILD=\$(pct exec "\$CTID" -- grep -c "image: melodarr-proxy:local" "\$COMPOSE_FILE" || true)
+IS_SOURCE_BUILD=$(pct exec "$CTID" -- grep -c "image: melodarr-proxy:local" "$COMPOSE_FILE" || true)
 
-if pct exec "\$CTID" -- grep -q "devdash\\|melodarr-proxy-devdash\\|DEVDASH" "\$COMPOSE_FILE"; then
+if pct exec "$CTID" -- grep -q "devdash\|melodarr-proxy-devdash\|DEVDASH" "$COMPOSE_FILE"; then
   echo "Renaming legacy DevDash compose entries to Melodash..."
-  pct exec "\$CTID" -- sed -i \\
-    -e 's/devdash/melodash/g' \\
-    -e 's/DevDash/Melodash/g' \\
-    -e 's/DEVDASH/MELODASH/g' \\
-    -e 's/melodarr-proxy-devdash/melodarr-proxy-melodash/g' \\
-    -e 's#src/devdash#src/melodash#g' \\
-    "\$COMPOSE_FILE"
+  pct exec "$CTID" -- sed -i \
+    -e 's/devdash/melodash/g' \
+    -e 's/DevDash/Melodash/g' \
+    -e 's/DEVDASH/MELODASH/g' \
+    -e 's/melodarr-proxy-devdash/melodarr-proxy-melodash/g' \
+    -e 's#src/devdash#src/melodash#g' \
+    "$COMPOSE_FILE"
 fi
 
-HAS_MELODASH=\$(pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)
+HAS_MELODASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)
 
-if [[ "\$HAS_MELODASH" -eq 0 ]]; then
+if [[ "$HAS_MELODASH" -eq 0 ]]; then
   echo "Melodash service missing from compose.yml. Adding it now..."
-  pct exec "\$CTID" -- bash -c "awk '
+  pct exec "$CTID" -- bash -c "awk '
     /^volumes:/ && !inserted {
       print \"\"
       print \"  melodash:\"
@@ -491,35 +491,35 @@ if [[ "\$HAS_MELODASH" -eq 0 ]]; then
       inserted = 1
     }
     { print }
-  ' \$COMPOSE_FILE > /tmp/melodarr-compose.yml && mv /tmp/melodarr-compose.yml \$COMPOSE_FILE"
+  ' $COMPOSE_FILE > /tmp/melodarr-compose.yml && mv /tmp/melodarr-compose.yml $COMPOSE_FILE"
 fi
 
-if [[ "\$IS_SOURCE_BUILD" -gt 0 ]]; then
+if [[ "$IS_SOURCE_BUILD" -gt 0 ]]; then
   echo "Detected SOURCE BUILD fallback installation."
   echo "Pulling latest code from git..."
-  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy/src && git fetch --all && git reset --hard origin/main && git pull"
+  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy/src && git fetch --all && git reset --hard origin/main && git pull"
   
   echo "Building new local image..."
-  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker build -t melodarr-proxy:local --target production src/"
+  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker build -t melodarr-proxy:local --target production src/"
 else
   echo "Detected STANDARD IMAGE installation."
   echo "Pulling latest Docker image..."
-  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy melodash"
+  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy melodash"
 fi
 
 echo "Recreating and restarting containers..."
-pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash"
+pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash"
 
 echo "Cleaning up dangling images to save space..."
-pct exec "\$CTID" -- docker image prune -f
+pct exec "$CTID" -- docker image prune -f
 
 echo "=========================================================="
 echo "Upgrade Complete!"
 echo "=========================================================="
 EOF_UPGRADE
 
-sed -i "s/%%CTID%%/\$CTID/g" "\$UPGRADE_SCRIPT"
-chmod +x "\$UPGRADE_SCRIPT"
+sed -i "s/%%CTID%%/${CTID}/g" "$UPGRADE_SCRIPT"
+chmod +x "$UPGRADE_SCRIPT"
 
-echo "An upgrade script has been created for this container: ./\$UPGRADE_SCRIPT"
+echo "An upgrade script has been created for this container: ./$UPGRADE_SCRIPT"
 echo "You can run it anytime to pull the latest version and update the proxy."
