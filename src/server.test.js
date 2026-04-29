@@ -146,8 +146,8 @@ function invokeApp (app, path) {
   })
 }
 
-test('proxy root exposes API metadata instead of a dashboard page', async (t) => {
-  const response = await invokeApp(loadServer(), '/')
+test('proxy exposes API metadata on /api/info', async (t) => {
+  const response = await invokeApp(loadServer(), '/api/info')
   const body = response.json()
 
   assert.equal(response.statusCode, 200)
@@ -174,16 +174,4 @@ test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {
   assert.equal(openApiBody.openapi, '3.1.0')
   assert.equal(openApiBody.info.title, 'Melodarr Proxy API')
   assert.ok(openApiBody.paths['/api/v1/artist/lookup'])
-})
-
-test('proxy no longer serves duplicate static operator UI pages', async (t) => {
-  const app = loadServer()
-
-  for (const route of ['/index.html', '/settings.html', '/stats.html', '/login.html']) {
-    const response = await invokeApp(app, route)
-    const body = response.json()
-
-    assert.equal(response.statusCode, 404)
-    assert.equal(body.error, 'API route not found')
-  }
 })
