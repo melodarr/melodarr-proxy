@@ -1,4 +1,4 @@
-const version = process.env.APP_VERSION || '0.3.16'
+const version = process.env.APP_VERSION || '0.3.17'
 
 const openApiDocument = {
   openapi: '3.1.0',
