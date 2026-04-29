@@ -2,6 +2,11 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.10 - 2026-04-29
+
+- Added packaged dashboard aliases so `/dashboard`, `/settings`, `/stats`, and `/login` serve the bundled operator UI without requiring `.html` paths.
+- Added server coverage for the packaged dashboard routes.
+
 ## v0.3.9 - 2026-04-29
 
 - Fixed the production Docker image build by removing an invalid Node base-image digest that prevented Buildx from resolving `node:20-bookworm-slim` for both `linux/amd64` and `linux/arm64`.

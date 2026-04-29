@@ -175,3 +175,24 @@ test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {
   assert.equal(openApiBody.info.title, 'Melodarr Proxy API')
   assert.ok(openApiBody.paths['/api/v1/artist/lookup'])
 })
+
+test('proxy serves operator dashboard aliases', async (t) => {
+  const app = loadServer()
+  const dashboardResponse = await invokeApp(app, '/dashboard')
+  const settingsResponse = await invokeApp(app, '/settings')
+  const statsResponse = await invokeApp(app, '/stats')
+  const loginResponse = await invokeApp(app, '/login')
+
+  assert.equal(dashboardResponse.statusCode, 200)
+  assert.match(dashboardResponse.headers['content-type'] || '', /text\/html/)
+  assert.match(dashboardResponse.text, /Melodarr Proxy/)
+
+  assert.equal(settingsResponse.statusCode, 200)
+  assert.match(settingsResponse.text, /Runtime config/)
+
+  assert.equal(statsResponse.statusCode, 200)
+  assert.match(statsResponse.text, /Runtime counters/)
+
+  assert.equal(loginResponse.statusCode, 200)
+  assert.match(loginResponse.text, /Melodarr Proxy/)
+})

@@ -53,7 +53,7 @@ app.use(metricsMiddleware)
 app.get('/api/version', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.9',
+    version: process.env.APP_VERSION || '0.3.10',
     revision: process.env.APP_REVISION || 'unknown',
     created: process.env.APP_CREATED || 'unknown',
     environment: process.env.NODE_ENV || 'development'
@@ -68,10 +68,26 @@ app.get('/docs', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/docs.html'))
 })
 
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'))
+})
+
+app.get('/stats', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/stats.html'))
+})
+
+app.get('/settings', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/settings.html'))
+})
+
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/login.html'))
+})
+
 app.get('/api/info', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.9',
+    version: process.env.APP_VERSION || '0.3.10',
     role: 'api',
     docs: '/docs',
     openapi: '/openapi.json',
