@@ -17,6 +17,14 @@ const nextConfig = {
       {
         source: '/debug/:path*',
         destination: `${proxyOrigin}/debug/:path*`
+      },
+      {
+        source: '/docs',
+        destination: `${proxyOrigin}/docs`
+      },
+      {
+        source: '/openapi.json',
+        destination: `${proxyOrigin}/openapi.json`
       }
     ]
   }

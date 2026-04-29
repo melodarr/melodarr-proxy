@@ -7,7 +7,7 @@ let memoryTraces = [] // fallback
 let traceBuffer = []
 const BATCH_SIZE = 50
 
-function createTrace(query) {
+function createTrace (query) {
   return {
     id: crypto.randomUUID(),
     query,
@@ -20,7 +20,7 @@ function createTrace(query) {
   }
 }
 
-function addStep(trace, name, duration, status = 'success') {
+function addStep (trace, name, duration, status = 'success') {
   if (trace) {
     trace.steps.push({ name, duration, status })
     trace.totalTime = Date.now() - trace.startTime
@@ -28,7 +28,7 @@ function addStep(trace, name, duration, status = 'success') {
   }
 }
 
-async function finalizeTrace(trace, additionalData = {}) {
+async function finalizeTrace (trace, additionalData = {}) {
   if (!trace) return
 
   trace.totalTime = Date.now() - trace.startTime
@@ -41,7 +41,7 @@ async function finalizeTrace(trace, additionalData = {}) {
   }
 }
 
-async function flushTraces() {
+async function flushTraces () {
   if (traceBuffer.length === 0) return
   const batch = [...traceBuffer]
   traceBuffer = []
@@ -65,11 +65,11 @@ async function flushTraces() {
         pipeline.zadd(`traces:query:${t.query}`, score, t.id)
         pipeline.expire(`traces:query:${t.query}`, TRACE_TTL)
 
-        pipeline.zadd(`traces:recent`, score, t.id)
+        pipeline.zadd('traces:recent', score, t.id)
       }
 
       // Trim global recent to last 1000 to save memory
-      pipeline.zremrangebyrank(`traces:recent`, 0, -1001)
+      pipeline.zremrangebyrank('traces:recent', 0, -1001)
 
       await pipeline.exec()
       return
@@ -89,9 +89,12 @@ async function flushTraces() {
 }
 
 // 4. Write Buffering: Flush periodically (every 5s)
-setInterval(flushTraces, 5000)
+const flushInterval = setInterval(flushTraces, 5000)
+if (flushInterval.unref) {
+  flushInterval.unref()
+}
 
-async function getTraces(limit = MAX_TRACES) {
+async function getTraces (limit = MAX_TRACES) {
   if (cache.isRedisHealthy && cache.redis) {
     try {
       // 2. Indexing: timestamp DESC
@@ -108,12 +111,12 @@ async function getTraces(limit = MAX_TRACES) {
   return memoryTraces.slice(0, limit)
 }
 
-async function getTrace(id) {
+async function getTrace (id) {
   if (cache.isRedisHealthy && cache.redis) {
     try {
       const t = await cache.redis.get(`trace:${id}`)
       if (t) return JSON.parse(t)
-    } catch(err) {}
+    } catch (err) {}
   }
   return memoryTraces.find(t => t.id === id)
 }

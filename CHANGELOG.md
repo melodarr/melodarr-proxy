@@ -2,6 +2,17 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.0 - 2026-04-29
+
+- Added Scalar API documentation at `/docs` backed by `/openapi.json`.
+- Split responsibilities so the proxy exposes API/docs only and DevDash owns the operator UI.
+- Added an Updates page in DevDash with release status, changelog display, and a guarded update action.
+- Added proxy update status and apply endpoints with GitHub release lookup and runner availability checks.
+- Added `manage.sh` options to run proxy lint, proxy tests, DevDash typecheck, and all checks inside containers.
+- Added tests for proxy API/docs routing, duplicate static UI removal, and update version comparison.
+- Fixed backend lint issues and made background timers non-blocking so the test suite exits cleanly.
+- Stabilized provider scoring tests so they are isolated from Compose runtime provider-priority settings.
+
 ## v0.2.0 - 2026-04-28
 
 - Redesigned DevDash around Melodarr Proxy with Dashboard, Insights, Analytics, Requests, Explorer, and Settings views.

@@ -3,11 +3,11 @@ const cache = require('../cache')
 
 const SNAPSHOT_PREFIX = 'snapshot:'
 
-function hashData(data) {
+function hashData (data) {
   return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex')
 }
 
-async function saveSnapshot(query, data) {
+async function saveSnapshot (query, data) {
   const key = `${SNAPSHOT_PREFIX}${query}`
   const current = await cache.get(key)
 
@@ -39,7 +39,7 @@ async function saveSnapshot(query, data) {
   await cache.set(key, history, ttl)
 }
 
-async function getSnapshots(query) {
+async function getSnapshots (query) {
   const key = `${SNAPSHOT_PREFIX}${query}`
   const history = await cache.get(key)
   return Array.isArray(history) ? history : []

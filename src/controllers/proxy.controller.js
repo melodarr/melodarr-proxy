@@ -11,15 +11,12 @@ const logger = require('../utils/logger')
 const { saveSnapshot } = require('../snapshots')
 
 const withTimeout = (promise, ms) => {
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
+  let timer
+  const timeoutPromise = new Promise((_resolve, reject) => {
     timer = setTimeout(() => reject(new Error(`Upstream request timed out after ${ms}ms`)), ms)
   })
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer))
 }
-
-const queryCounts = new Map()
-const inflightRequests = new Map()
 
 async function handleSearch (req, res) {
   const { q } = req.query
@@ -52,15 +49,15 @@ async function handleSearch (req, res) {
   const startWait = Date.now()
   const ttlMs = 15000
 
-  let attempt = 0;
+  let attempt = 0
   while (Date.now() - startWait < ttlMs) {
     hasLock = await cache.acquireLock(lockKey, ttlMs)
     if (hasLock) break
 
-    attempt++;
-    const baseWait = Math.min(100 * Math.pow(2, attempt - 1), 2000);
-    const jitter = Math.floor(Math.random() * 50);
-    const waitTime = baseWait + jitter;
+    attempt++
+    const baseWait = Math.min(100 * Math.pow(2, attempt - 1), 2000)
+    const jitter = Math.floor(Math.random() * 50)
+    const waitTime = baseWait + jitter
 
     tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
     await new Promise(resolve => setTimeout(resolve, waitTime))
@@ -86,7 +83,7 @@ async function handleSearch (req, res) {
     tracer.addStep(trace, 'upstreamSearch', Date.now() - startUpstream, 'success')
 
     // Handle stateless query count for adaptive TTL via Redis/Cache (optional simplified)
-    let ttl = 86400 // 24h default
+    const ttl = 86400 // 24h default
 
     const startCacheSet = Date.now()
     await cache.set(cacheKey, data, ttl)
@@ -196,15 +193,15 @@ async function handleArtistLookup (req, res) {
   const startWait = Date.now()
   const ttlMs = 15000
 
-  let attempt = 0;
+  let attempt = 0
   while (Date.now() - startWait < ttlMs) {
     hasLock = await cache.acquireLock(lockKey, ttlMs)
     if (hasLock) break
 
-    attempt++;
-    const baseWait = Math.min(100 * Math.pow(2, attempt - 1), 2000);
-    const jitter = Math.floor(Math.random() * 50);
-    const waitTime = baseWait + jitter;
+    attempt++
+    const baseWait = Math.min(100 * Math.pow(2, attempt - 1), 2000)
+    const jitter = Math.floor(Math.random() * 50)
+    const waitTime = baseWait + jitter
 
     tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
     await new Promise(resolve => setTimeout(resolve, waitTime))

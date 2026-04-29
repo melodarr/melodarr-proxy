@@ -126,6 +126,23 @@ class CacheLayer {
     })
   }
 
+  async ttlSeconds (key) {
+    if (this.isRedisHealthy && this.redis) {
+      try {
+        return await this.redis.ttl(key)
+      } catch (err) {
+        logger.warn(`Redis ttl failed for ${key}, trying memory`, { context: 'Cache', error: err.message })
+      }
+    }
+
+    const item = this.fallbackMap.get(key)
+    if (!item || !item.expiresAt) {
+      return -2
+    }
+
+    return Math.max(0, Math.ceil((item.expiresAt - Date.now()) / 1000))
+  }
+
   async clear () {
     if (this.isRedisHealthy && this.redis) {
       try {

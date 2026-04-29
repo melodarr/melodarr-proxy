@@ -38,6 +38,15 @@ type SongAlbumResult = {
   traceId?: string;
 };
 
+type CacheMeta = {
+  hit: boolean;
+  status: "HIT" | "MISS";
+  ttlSeconds: number;
+  remainingSeconds: number;
+  generatedAt?: string | null;
+  expiresAt?: string | null;
+};
+
 type ResultView = "visual" | "json";
 
 type AlbumCard = {
@@ -92,6 +101,18 @@ function AlbumArtwork({ album }: { album: AlbumCard }) {
       <Disc3 className="h-8 w-8" />
     </div>
   );
+}
+
+function formatDuration(seconds?: number | null) {
+  const safeSeconds = Math.max(0, Number(seconds || 0));
+  const days = Math.floor(safeSeconds / 86400);
+  const hours = Math.floor((safeSeconds % 86400) / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${safeSeconds}s`;
 }
 
 export default function ExplorerPage() {
@@ -161,6 +182,7 @@ export default function ExplorerPage() {
   const currentMode = modes.find((item) => item.id === mode) ?? modes[0];
   const queryRequired = mode === "artistSong" ? query.trim() && artistQuery.trim() : query.trim();
   const artistAlbums = getArtistAlbums(artistResult);
+  const cacheMeta = artistResult?.cache as CacheMeta | undefined;
 
   return (
     <main className="container mx-auto max-w-screen-2xl space-y-8 p-8">
@@ -289,27 +311,40 @@ export default function ExplorerPage() {
             )}
           </div>
           {artistResult && (
-            <div className="inline-flex rounded-md border border-border/70 bg-background p-1">
-              <button
-                type="button"
-                onClick={() => setResultView("visual")}
-                className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors ${
-                  resultView === "visual" ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
-                }`}
-              >
-                <Grid2X2 className="h-4 w-4" />
-                Visual
-              </button>
-              <button
-                type="button"
-                onClick={() => setResultView("json")}
-                className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors ${
-                  resultView === "json" ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
-                }`}
-              >
-                <Braces className="h-4 w-4" />
-                JSON
-              </button>
+            <div className="flex flex-wrap items-center gap-3">
+              {cacheMeta && (
+                <div className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-2 text-sm">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cacheMeta.hit ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
+                    Cache {cacheMeta.status}
+                  </span>
+                  <span className="text-gray-500">
+                    TTL {formatDuration(cacheMeta.ttlSeconds)}
+                    {cacheMeta.hit ? ` / ${formatDuration(cacheMeta.remainingSeconds)} left` : ""}
+                  </span>
+                </div>
+              )}
+              <div className="inline-flex rounded-md border border-border/70 bg-background p-1">
+                <button
+                  type="button"
+                  onClick={() => setResultView("visual")}
+                  className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors ${
+                    resultView === "visual" ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Grid2X2 className="h-4 w-4" />
+                  Visual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultView("json")}
+                  className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm transition-colors ${
+                    resultView === "json" ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Braces className="h-4 w-4" />
+                  JSON
+                </button>
+              </div>
             </div>
           )}
         </div>

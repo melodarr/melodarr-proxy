@@ -10,6 +10,7 @@ const links = [
   { href: "/requests", label: "Requests" },
   { href: "/explorer", label: "Explorer" },
   { href: "/settings", label: "Settings" },
+  { href: "/updates", label: "Updates" },
 ];
 
 export function HeaderNav() {
@@ -35,6 +36,12 @@ export function HeaderNav() {
           </Link>
         );
       })}
+      <a
+        href="/docs"
+        className="rounded-md px-3 py-1.5 transition-colors hover:bg-white/5 hover:text-white"
+      >
+        API Docs
+      </a>
     </nav>
   );
 }

@@ -250,7 +250,7 @@ function generateRandomName () {
 // The env var values serve as *defaults*, not locks.
 const EDITABLE_KEYS = {
   appName: { env: 'APP_NAME', fallback: generateRandomName(), type: 'string' },
-  appVersion: { env: 'APP_VERSION', fallback: '0.2.0', type: 'string' },
+  appVersion: { env: 'APP_VERSION', fallback: '0.3.0', type: 'string' },
   appContact: { env: 'APP_CONTACT', fallback: `contact-${crypto.randomBytes(4).toString('hex')}@example.com`, type: 'string' },
   cacheTtlSeconds: { env: 'CACHE_TTL_SECONDS', fallback: 86400, type: 'number' },
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },

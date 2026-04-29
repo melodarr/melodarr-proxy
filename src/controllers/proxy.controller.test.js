@@ -26,18 +26,40 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   const providersPath = require.resolve('../providers')
   const cachePath = require.resolve('../cache')
   const metricsPath = require.resolve('../metrics')
+  const tracerPath = require.resolve('../tracer')
+  const rankingPath = require.resolve('../ranking/engine')
+  const enrichmentPath = require.resolve('../enrichment/pipeline')
+  const settingsPath = require.resolve('../settings/store')
+  const snapshotsPath = require.resolve('../snapshots')
+  const loggerPath = require.resolve('../utils/logger')
 
   delete require.cache[controllerPath]
   delete require.cache[providersPath]
   delete require.cache[cachePath]
   delete require.cache[metricsPath]
+  delete require.cache[tracerPath]
+  delete require.cache[rankingPath]
+  delete require.cache[enrichmentPath]
+  delete require.cache[settingsPath]
+  delete require.cache[snapshotsPath]
+  delete require.cache[loggerPath]
 
   const fakeCache = {
     async get (key) {
       return cacheStore.get(key) || null
     },
-    async set (key, value) {
-      cacheStore.set(key, value)
+    async set (key, value, ttlSeconds = 86400) {
+      cacheStore.set(key, {
+        data: value,
+        generatedAt: new Date('2026-04-28T00:00:00.000Z').toISOString(),
+        ttlSeconds
+      })
+    },
+    async acquireLock () {
+      return 'test-lock'
+    },
+    async releaseLock () {
+      return true
     }
   }
 
@@ -71,6 +93,67 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     filename: metricsPath,
     loaded: true,
     exports: noopMetrics
+  }
+
+  require.cache[tracerPath] = {
+    id: tracerPath,
+    filename: tracerPath,
+    loaded: true,
+    exports: {
+      createTrace: (query) => ({ id: 'trace-1', query, steps: [], startTime: Date.now() }),
+      addStep () {},
+      async finalizeTrace () {}
+    }
+  }
+
+  require.cache[rankingPath] = {
+    id: rankingPath,
+    filename: rankingPath,
+    loaded: true,
+    exports: {
+      rankResults: (input) => ({
+        results: input.results.map((result) => ({ ...result, score: 100, confidence: result.confidence || 1 })),
+        debug: { strategy: 'test' }
+      })
+    }
+  }
+
+  require.cache[enrichmentPath] = {
+    id: enrichmentPath,
+    filename: enrichmentPath,
+    loaded: true,
+    exports: {
+      enrichResult: async (result) => result
+    }
+  }
+
+  require.cache[settingsPath] = {
+    id: settingsPath,
+    filename: settingsPath,
+    loaded: true,
+    exports: {
+      getConfigValue: () => 86400
+    }
+  }
+
+  require.cache[snapshotsPath] = {
+    id: snapshotsPath,
+    filename: snapshotsPath,
+    loaded: true,
+    exports: {
+      async saveSnapshot () {}
+    }
+  }
+
+  require.cache[loggerPath] = {
+    id: loggerPath,
+    filename: loggerPath,
+    loaded: true,
+    exports: {
+      error () {},
+      warn () {},
+      info () {}
+    }
   }
 
   return {
@@ -136,11 +219,14 @@ test('artist lookup normalizes provider data and caches the response', async () 
 test('artist lookup returns cached response without debug data by default', async () => {
   const cacheStore = new Map([
     ['artist:cached artist', {
-      artistName: 'Cached Artist',
-      foreignArtistId: '',
-      providers: [{ name: 'itunes', albumCount: 1 }],
-      albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020' }],
-      debug: { ranking: true }
+      data: {
+        artistName: 'Cached Artist',
+        foreignArtistId: '',
+        providers: [{ name: 'itunes', albumCount: 1 }],
+        albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020' }],
+        debug: { ranking: true }
+      },
+      generatedAt: '2026-04-28T00:00:00.000Z'
     }]
   ])
   const { controller } = loadController({

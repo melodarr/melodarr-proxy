@@ -8,12 +8,13 @@ const { enrichResult } = require('../enrichment/pipeline')
 const { getSnapshots } = require('../snapshots')
 const { buildHealthPayload } = require('./health.controller')
 const { testCustomProvider } = require('../providers/custom.provider')
+const { getConfigValue } = require('../settings/store')
 
-async function getDiff(req, res) {
+async function getDiff (req, res) {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'Missing query parameter "q"' })
 
-  let type = req.query.type || 'search'
+  const type = req.query.type || 'search'
   const snapshots = await getSnapshots(`${type}:${q}`)
 
   if (!snapshots || snapshots.length < 2) {
@@ -84,7 +85,7 @@ async function buildPerformancePayload () {
   }
 }
 
-async function getPerformance(req, res) {
+async function getPerformance (req, res) {
   res.json(await buildPerformancePayload())
 }
 
@@ -115,7 +116,7 @@ async function buildAlertsPayload () {
   return { alerts }
 }
 
-async function getAlerts(req, res) {
+async function getAlerts (req, res) {
   res.json(await buildAlertsPayload())
 }
 
@@ -123,11 +124,11 @@ async function buildRequestsPayload () {
   return await tracer.getTraces()
 }
 
-async function getRequests(req, res) {
+async function getRequests (req, res) {
   res.json(await buildRequestsPayload())
 }
 
-async function getRequestById(req, res) {
+async function getRequestById (req, res) {
   const trace = await tracer.getTrace(req.params.id)
   if (!trace) return res.status(404).json({ error: 'Trace not found' })
   res.json(trace)
@@ -136,15 +137,15 @@ async function getRequestById(req, res) {
 function buildProvidersPayload () {
   return {
     providers: [
-      { name: "musicbrainz", status: "active" },
-      { name: "discogs", status: "active" },
-      { name: "itunes", status: "active" },
-      { name: "theaudiodb", status: "active" }
+      { name: 'musicbrainz', status: 'active' },
+      { name: 'discogs', status: 'active' },
+      { name: 'itunes', status: 'active' },
+      { name: 'theaudiodb', status: 'active' }
     ]
   }
 }
 
-function getProviders(req, res) {
+function getProviders (req, res) {
   res.json(buildProvidersPayload())
 }
 
@@ -163,7 +164,7 @@ async function buildCacheStatePayload () {
   }
 }
 
-async function getCacheState(req, res) {
+async function getCacheState (req, res) {
   res.json(await buildCacheStatePayload())
 }
 
@@ -186,7 +187,7 @@ async function getOverview (req, res) {
 const crypto = require('crypto')
 const INSTANCE_ID = process.env.INSTANCE_ID || crypto.randomBytes(4).toString('hex')
 
-async function getHealth(req, res) {
+async function getHealth (req, res) {
   res.json({
     instanceId: INSTANCE_ID,
     redis: cache.isRedisHealthy ? 'up' : 'down',
@@ -196,7 +197,7 @@ async function getHealth(req, res) {
   })
 }
 
-async function getCluster(req, res) {
+async function getCluster (req, res) {
   if (!cache.isRedisHealthy || !cache.redis) {
     return res.json({ nodes: [{ instanceId: INSTANCE_ID, lastSeen: new Date().toISOString() }] })
   }
@@ -213,7 +214,7 @@ async function getCluster(req, res) {
   }
 }
 
-async function getClusterSummary(req, res) {
+async function getClusterSummary (req, res) {
   let totalNodes = 1
   let healthyNodes = 1
 
@@ -240,7 +241,7 @@ async function getClusterSummary(req, res) {
   })
 }
 
-async function verifyCache(req, res) {
+async function verifyCache (req, res) {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'Missing query parameter "q"' })
 
@@ -283,13 +284,15 @@ async function verifyCache(req, res) {
     }
   }
 
-  const cachedSummary = cachedData ? {
-    artistName: cachedData.data.artistName,
-    albumsCount: cachedData.data.albums?.length || 0,
-    confidence: cachedData.data.confidence,
-    score: cachedData.data.score,
-    generatedAt: cachedData.generatedAt
-  } : null
+  const cachedSummary = cachedData
+    ? {
+        artistName: cachedData.data.artistName,
+        albumsCount: cachedData.data.albums?.length || 0,
+        confidence: cachedData.data.confidence,
+        score: cachedData.data.score,
+        generatedAt: cachedData.generatedAt
+      }
+    : null
 
   const liveSummary = {
     artistName: liveComputed.artistName,
@@ -313,13 +316,53 @@ async function verifyCache(req, res) {
   })
 }
 
-async function handleDebugSearch(req, res) {
+async function handleDebugSearch (req, res) {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'Missing query parameter "q"' })
 
   const trace = tracer.createTrace(q)
+  const normalizedQuery = String(q).toLowerCase().replace(/\s+/g, ' ')
+  const cacheKey = `artist:${normalizedQuery}`
+  const cacheTtlSeconds = getConfigValue('cacheTtlSeconds') || 86400
+
+  function buildCacheMeta (hit, cachedData, remainingSeconds) {
+    const generatedAt = cachedData?.generatedAt || null
+    const expiresAt = generatedAt && remainingSeconds >= 0
+      ? new Date(Date.now() + remainingSeconds * 1000).toISOString()
+      : null
+
+    return {
+      hit,
+      status: hit ? 'HIT' : 'MISS',
+      ttlSeconds: cacheTtlSeconds,
+      remainingSeconds: hit && remainingSeconds >= 0 ? remainingSeconds : cacheTtlSeconds,
+      generatedAt,
+      expiresAt
+    }
+  }
 
   try {
+    const startCache = Date.now()
+    const cachedData = await cache.get(cacheKey)
+
+    if (cachedData) {
+      const remainingSeconds = cache.ttlSeconds ? await cache.ttlSeconds(cacheKey) : -1
+      const cachedObj = cachedData.data
+      tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
+      await tracer.finalizeTrace(trace, { providersUsed: cachedObj.providers?.map(p => p.name) || [], cacheHit: true })
+
+      return res.json({
+        query: q,
+        traceId: trace.id,
+        cache: buildCacheMeta(true, cachedData, remainingSeconds),
+        rawResults: cachedObj,
+        normalizedResults: [cachedObj],
+        ranking: null
+      })
+    }
+
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
+
     const startAgg = Date.now()
     const data = await aggregateArtist(q)
     tracer.addStep(trace, 'aggregateArtist', Date.now() - startAgg, 'success')
@@ -347,11 +390,31 @@ async function handleDebugSearch(req, res) {
     tracer.addStep(trace, 'rankResults', Date.now() - startRank, 'success')
 
     const providersUsed = Array.from(new Set(data.albums.map(a => a.provider)))
+    const responseForCache = rankedResults[0]
+      ? {
+          artistName: rankedResults[0].artistName,
+          foreignArtistId: '',
+          providers: data.providers,
+          albums: rankedResults[0].albums,
+          partial: data.partial,
+          warning: data.warning
+        }
+      : {
+          artistName: data.artistName,
+          foreignArtistId: '',
+          providers: data.providers,
+          albums: [],
+          partial: data.partial,
+          warning: data.warning
+        }
+
+    await cache.set(cacheKey, responseForCache, cacheTtlSeconds)
     await tracer.finalizeTrace(trace, { providersUsed, cacheHit: false })
 
     res.json({
       query: q,
       traceId: trace.id,
+      cache: buildCacheMeta(false, null, -1),
       rawResults: data,
       normalizedResults: rankedResults,
       ranking: rankingDebug

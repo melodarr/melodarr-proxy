@@ -8,7 +8,7 @@ if (!process.env.INSTANCE_ID) {
 
 const logger = require('./utils/logger')
 const cacheLayer = require('./cache')
-const upstreamService = require('./services/upstream.service')
+const upstreamMonitor = require('./monitors/upstream.monitor')
 
 // ── CLI Commands (run before server boots) ───────────────────────
 if (process.argv.includes('--reset-password')) {
@@ -27,6 +27,7 @@ if (process.argv.includes('--reset-password')) {
 const metricsMiddleware = require('./middleware/metrics.middleware')
 const apiRoutes = require('./routes/api.routes')
 const debugRoutes = require('./routes/debug.routes')
+const openApiDocument = require('./openapi')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -36,7 +37,7 @@ const PORT = process.env.PORT || 3000
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Api-Key')
   if (req.method === 'OPTIONS') {
     res.sendStatus(200)
   } else {
@@ -52,17 +53,33 @@ app.use(metricsMiddleware)
 app.get('/api/version', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.2.0',
+    version: process.env.APP_VERSION || '0.3.0',
     environment: process.env.NODE_ENV || 'development'
+  })
+})
+
+app.get('/openapi.json', (req, res) => {
+  res.json(openApiDocument)
+})
+
+app.get('/docs', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/docs.html'))
+})
+
+app.get('/', (req, res) => {
+  res.json({
+    app: process.env.APP_NAME || 'Melodarr Proxy',
+    version: process.env.APP_VERSION || '0.3.0',
+    role: 'api',
+    docs: '/docs',
+    openapi: '/openapi.json',
+    health: '/api/health'
   })
 })
 
 // API Routes
 app.use('/api', apiRoutes)
 app.use('/debug', debugRoutes)
-
-// Serve static frontend
-app.use(express.static(path.join(__dirname, '../public')))
 
 // Fallback for unmatched routes
 app.use((req, res) => {
@@ -87,16 +104,19 @@ async function boot () {
     logger.warn('Failed to validate cache connection.', { error: err.message })
   }
 
-  // 2. Validate Upstream Connectivity
-  try {
-    const upstreamHealth = await upstreamService.checkHealth()
-    if (!upstreamHealth) {
-      throw new Error('Upstream API is unreachable.')
-    }
-    logger.info('Upstream connectivity validated.')
-  } catch (err) {
-    logger.error('Boot failed: Upstream validation error.', { error: err.message })
+  // 2. Prime upstream monitor with a single direct probe (no queue)
+  const initial = await upstreamMonitor.runCheck()
+  if (initial.status === 'unreachable') {
+    logger.error('Boot failed: upstream unreachable.', { error: initial.lastError })
     process.exit(1)
+  }
+  if (initial.status !== 'healthy') {
+    logger.warn('Upstream not fully healthy at boot; continuing.', {
+      status: initial.status,
+      error: initial.lastError
+    })
+  } else {
+    logger.info('Upstream connectivity validated.')
   }
 
   // Start background jobs

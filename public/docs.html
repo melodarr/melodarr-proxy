@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Melodarr Proxy API Reference</title>
+    <style>
+      body {
+        margin: 0;
+        background: #08090b;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <script>
+      Scalar.createApiReference('#app', {
+        url: '/openapi.json',
+        darkMode: true,
+        layout: 'modern',
+        theme: 'deepSpace',
+        defaultHttpClient: {
+          targetKey: 'shell',
+          clientKey: 'curl'
+        },
+        authentication: {
+          preferredSecurityScheme: 'apiKeyHeader'
+        },
+        agent: {
+          disabled: true
+        },
+        metaData: {
+          title: 'Melodarr Proxy API Reference',
+          description: 'OpenAPI reference for Melodarr Proxy'
+        }
+      })
+    </script>
+  </body>
+</html>

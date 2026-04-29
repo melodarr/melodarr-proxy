@@ -18,6 +18,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN yarn install --immutable
 COPY src ./src
+COPY public ./public
 RUN groupadd --system melodarr \
   && useradd --system --gid melodarr --home-dir /app --shell /usr/sbin/nologin melodarr \
   && mkdir -p /data \

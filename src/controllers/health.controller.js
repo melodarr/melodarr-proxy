@@ -1,10 +1,26 @@
 const metrics = require('../metrics')
 const cache = require('../cache')
-const upstreamService = require('../services/upstream.service')
+const upstreamMonitor = require('../monitors/upstream.monitor')
 const { getProviderScore } = require('../providers/scoring')
 
-async function buildHealthPayload () {
-  const upstreamStatus = await upstreamService.checkHealth()
+const DEGRADED_UPSTREAM = new Set(['degraded', 'rate_limited', 'timeout'])
+
+function buildLivenessPayload () {
+  const memoryUsage = process.memoryUsage()
+  const memoryMb = Math.round(memoryUsage.rss / 1024 / 1024)
+  const memoryStatus = memoryMb > 500 ? 'critical' : (memoryMb > 300 ? 'warning' : 'ok')
+
+  return {
+    status: memoryStatus === 'critical' ? 'down' : 'ok',
+    instanceId: process.env.INSTANCE_ID,
+    proxy: metrics.state.isRunning ? 'running' : 'stopped',
+    memory: { status: memoryStatus, usageMb: memoryMb },
+    uptime: process.uptime()
+  }
+}
+
+function buildHealthPayload () {
+  const upstream = upstreamMonitor.getStatus()
   const cacheStatus = cache.getHealth()
   const proxyStatus = metrics.state.isRunning ? 'running' : 'stopped'
 
@@ -12,11 +28,15 @@ async function buildHealthPayload () {
   const memoryMb = Math.round(memoryUsage.rss / 1024 / 1024)
   const memoryStatus = memoryMb > 500 ? 'critical' : (memoryMb > 300 ? 'warning' : 'ok')
 
+  const upstreamDegraded = DEGRADED_UPSTREAM.has(upstream.status)
+  const upstreamUnreachable = upstream.status === 'unreachable'
+  const upstreamUnknown = upstream.status === 'unknown'
+
   let status = 'ok'
-  if (upstreamStatus === 'unreachable' || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning') {
+  if (upstreamDegraded || upstreamUnreachable || upstreamUnknown || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning') {
     status = 'degraded'
   }
-  if ((upstreamStatus === 'unreachable' && proxyStatus === 'stopped') || memoryStatus === 'critical') {
+  if ((upstreamUnreachable && proxyStatus === 'stopped') || memoryStatus === 'critical') {
     status = 'down'
   }
 
@@ -29,22 +49,31 @@ async function buildHealthPayload () {
     status,
     instanceId: process.env.INSTANCE_ID,
     proxy: proxyStatus,
-    upstream: upstreamStatus,
+    upstream: upstream.status,
+    upstreamDetail: {
+      status: upstream.status,
+      lastCheckedAt: upstream.lastCheckedAt,
+      lastError: upstream.lastError,
+      consecutiveFailures: upstream.consecutiveFailures
+    },
     cache: cacheStatus,
     mode: cache.isRedisHealthy ? 'normal' : 'degraded',
     redisConnected: cache.isRedisHealthy,
-    memory: {
-      status: memoryStatus,
-      usageMb: memoryMb
-    },
+    memory: { status: memoryStatus, usageMb: memoryMb },
     uptime: process.uptime(),
     lastQueryAt: metrics.state.lastQueryAt,
     providers: providerScores
   }
 }
 
-async function getHealth (req, res) {
-  res.json(await buildHealthPayload())
+function getLiveness (req, res) {
+  res.json(buildLivenessPayload())
 }
 
-module.exports = { getHealth, buildHealthPayload }
+function getReadiness (req, res) {
+  const payload = buildHealthPayload()
+  const code = payload.status === 'down' ? 503 : 200
+  res.status(code).json(payload)
+}
+
+module.exports = { getLiveness, getReadiness, buildHealthPayload, buildLivenessPayload, getHealth: getLiveness }

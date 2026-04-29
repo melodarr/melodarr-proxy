@@ -1,5 +1,6 @@
 const cache = require('./cache')
 const tracer = require('./tracer')
+const upstreamMonitor = require('./monitors/upstream.monitor')
 
 const ALERTS_KEY = 'system_alerts'
 const PERFORMANCE_VIEW_KEY = 'query_performance_view'
@@ -7,7 +8,7 @@ const PERFORMANCE_VIEW_KEY = 'query_performance_view'
 // Run every minute
 const JOB_INTERVAL_MS = 60000
 
-async function updateMaterializedViews() {
+async function updateMaterializedViews () {
   if (!cache.isRedisHealthy || !cache.redis) return
 
   try {
@@ -54,7 +55,7 @@ async function updateMaterializedViews() {
   }
 }
 
-async function runAlertsEngine() {
+async function runAlertsEngine () {
   if (!cache.isRedisHealthy || !cache.redis) return
 
   try {
@@ -79,28 +80,36 @@ async function runAlertsEngine() {
     })
 
     await cache.redis.set(ALERTS_KEY, JSON.stringify({ alerts, lastUpdated: new Date().toISOString() }), 'EX', 3600)
-  } catch(err) {
+  } catch (err) {
     console.error('Alerts engine failed:', err)
   }
 }
 
-function startJobs() {
-  setInterval(() => {
+function startJobs () {
+  const viewInterval = setInterval(() => {
     updateMaterializedViews()
     runAlertsEngine()
   }, JOB_INTERVAL_MS)
 
-  setInterval(heartbeat, 5000)
+  const heartbeatInterval = setInterval(heartbeat, 5000)
 
   // run once on startup
-  setTimeout(() => {
+  const startupTimer = setTimeout(() => {
     updateMaterializedViews()
     runAlertsEngine()
     heartbeat()
   }, 1000)
+
+  upstreamMonitor.start()
+
+  for (const timer of [viewInterval, heartbeatInterval, startupTimer]) {
+    if (timer.unref) {
+      timer.unref()
+    }
+  }
 }
 
-async function heartbeat() {
+async function heartbeat () {
   if (!cache.isRedisHealthy || !cache.redis) return
   try {
     const instanceId = process.env.INSTANCE_ID
