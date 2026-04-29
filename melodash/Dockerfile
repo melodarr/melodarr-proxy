@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 
 WORKDIR /app
 
@@ -10,7 +10,8 @@ COPY . .
 RUN yarn build
 RUN rm -rf node_modules .yarn/cache \
   && node -e "const fs=require('fs'); const p=require('./package.json'); delete p.devDependencies; fs.writeFileSync('package.json', JSON.stringify(p, null, 2))" \
-  && npm install --omit=dev --ignore-scripts
+  && npm install --omit=dev --ignore-scripts \
+  && rm -f yarn.lock .yarnrc.yml
 
 EXPOSE 3000
 

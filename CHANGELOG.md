@@ -2,6 +2,11 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.13 - 2026-04-29
+
+- Removed build-time lockfiles from the final proxy and Melodash runtime images so vulnerability scans only evaluate runtime dependencies.
+- Moved CI and container builds to Node.js 24 LTS.
+
 ## v0.3.12 - 2026-04-29
 
 - Renamed the dashboard service and published image to Melodash.
