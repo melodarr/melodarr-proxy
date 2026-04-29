@@ -10,15 +10,13 @@ function makeRes () {
   }
 }
 
-function loadMiddleware ({ isAuthenticated, externalAuthResult, apiKeyResult } = {}) {
+function loadMiddleware ({ isAuthenticated, apiKeyResult } = {}) {
   const middlewarePath = require.resolve('./proxyAuth.middleware')
   const apiKeyPath = require.resolve('./apiKey.middleware')
-  const authPath = require.resolve('./auth.middleware')
   const settingsPath = require.resolve('../controllers/settings.controller')
 
   delete require.cache[middlewarePath]
   delete require.cache[apiKeyPath]
-  delete require.cache[authPath]
   delete require.cache[settingsPath]
 
   require.cache[settingsPath] = {
@@ -27,19 +25,6 @@ function loadMiddleware ({ isAuthenticated, externalAuthResult, apiKeyResult } =
     loaded: true,
     exports: {
       isAuthenticated: () => isAuthenticated || false
-    }
-  }
-
-  require.cache[authPath] = {
-    id: authPath,
-    filename: authPath,
-    loaded: true,
-    exports: async (req, res, next) => {
-      if (externalAuthResult) {
-        res.status(externalAuthResult.status).json(externalAuthResult.body)
-      } else {
-        next()
-      }
     }
   }
 
@@ -59,27 +44,6 @@ function loadMiddleware ({ isAuthenticated, externalAuthResult, apiKeyResult } =
   return require('./proxyAuth.middleware')
 }
 
-// ── AUTH_ENABLED=true → delegates to external auth middleware ─────
-
-test('proxyAuth delegates to external auth when AUTH_ENABLED is true', () => {
-  process.env.AUTH_ENABLED = 'true'
-  const middleware = loadMiddleware({ externalAuthResult: { status: 401, body: { error: 'Unauthorized' } } })
-  const res = makeRes()
-  let nextCalled = false
-  middleware({}, res, () => { nextCalled = true })
-  assert.equal(nextCalled, false)
-  assert.equal(res.statusCode, 401)
-  delete process.env.AUTH_ENABLED
-})
-
-test('proxyAuth passes through external auth when AUTH_ENABLED is true and token valid', () => {
-  process.env.AUTH_ENABLED = 'true'
-  const middleware = loadMiddleware({ externalAuthResult: null })
-  let nextCalled = false
-  middleware({}, makeRes(), () => { nextCalled = true })
-  assert.ok(nextCalled)
-  delete process.env.AUTH_ENABLED
-})
 
 // ── Settings-authenticated session → calls next directly ─────────
 
