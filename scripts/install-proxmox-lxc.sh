@@ -20,7 +20,7 @@ UNPRIVILEGED="${UNPRIVILEGED:-1}"
 
 HOST_PORT="${HOST_PORT:-3055}"
 APP_CONTACT="${APP_CONTACT:-admin@example.com}"
-APP_VERSION="${APP_VERSION:-v0.3.2}"
+APP_VERSION="${APP_VERSION:-v0.3.3}"
 IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:${APP_VERSION}}"
 ### =========================
 
@@ -187,13 +187,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y \\
-  ca-certificates \\
-  curl \\
-  gnupg \\
-  lsb-release \\
-  apt-transport-https \\
-  software-properties-common
+apt-get install -y ca-certificates curl
 
 install -m 0755 -d /etc/apt/keyrings
 
