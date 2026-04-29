@@ -146,16 +146,15 @@ function invokeApp (app, path) {
   })
 }
 
-test('proxy root exposes API metadata instead of a dashboard page', async (t) => {
-  const response = await invokeApp(loadServer(), '/')
-  const body = response.json()
+test('proxy root and /dashboard serve the bundled dashboard HTML', async (t) => {
+  const app = loadServer()
 
-  assert.equal(response.statusCode, 200)
-  assert.equal(body.app, 'Melodarr Proxy')
-  assert.equal(body.role, 'api')
-  assert.equal(body.docs, '/docs')
-  assert.equal(body.openapi, '/openapi.json')
-  assert.equal(body.health, '/api/health')
+  for (const route of ['/', '/dashboard']) {
+    const response = await invokeApp(app, route)
+    assert.equal(response.statusCode, 200)
+    assert.match(response.headers['content-type'] || '', /text\/html/)
+    assert.match(response.text, /<title>Melodarr Proxy<\/title>/)
+  }
 })
 
 test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {
@@ -174,16 +173,4 @@ test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {
   assert.equal(openApiBody.openapi, '3.1.0')
   assert.equal(openApiBody.info.title, 'Melodarr Proxy API')
   assert.ok(openApiBody.paths['/api/v1/artist/lookup'])
-})
-
-test('proxy no longer serves duplicate static operator UI pages', async (t) => {
-  const app = loadServer()
-
-  for (const route of ['/index.html', '/settings.html', '/stats.html', '/login.html']) {
-    const response = await invokeApp(app, route)
-    const body = response.json()
-
-    assert.equal(response.statusCode, 404)
-    assert.equal(body.error, 'API route not found')
-  }
 })

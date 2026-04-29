@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.6 - 2026-04-29
+
+- Re-enabled the embedded operator dashboard. The proxy now serves the bundled UI from `public/`: `GET /` and `GET /dashboard` render `index.html`, and the static assets (`/settings.html`, `/stats.html`, `/login.html`, JS, CSS) are served alongside the API. `/docs` (Scalar) and `/openapi.json` are unchanged.
+
 ## v0.3.5 - 2026-04-29
 
 - Fixed proxy crash-looping on container start when the boot upstream probe failed (e.g. transient `ECONNRESET`/TLS resets reaching MusicBrainz). Boot now logs the unhealthy probe and continues; the upstream monitor retries on its own interval and `/api/ready` reflects cached state. Operators can reach Settings to reconfigure (e.g. switch `musicbrainzIpFamily` to `6`) instead of being locked out of the UI by a dying process.
