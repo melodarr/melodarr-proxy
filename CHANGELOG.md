@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.18 - 2026-04-29
+
+- Granted the release workflow `contents: write` so GitHub release creation can generate and publish release notes after validation passes.
+
 ## v0.3.17 - 2026-04-29
 
 - Published Melodash as `linux/amd64` in the release workflow to avoid the Next.js dashboard build hanging under ARM emulation. The proxy image remains multi-arch.
