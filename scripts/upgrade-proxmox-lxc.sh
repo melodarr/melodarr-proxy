@@ -54,7 +54,8 @@ if pct exec "$CTID" -- grep -q "devdash\\|melodarr-proxy-devdash\\|DEVDASH" "$CO
     -e 's/DevDash/Melodash/g' \
     -e 's/DEVDASH/MELODASH/g' \
     -e 's/melodarr-proxy-devdash/melodarr-proxy-melodash/g' \
-    -e 's#src/devdash#src/melodash#g' \
+    -e 's#src/devdash#melodash#g' \
+    -e 's#\./devdash#\./melodash#g' \
     "$COMPOSE_FILE"
 fi
 
