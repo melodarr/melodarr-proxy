@@ -19,11 +19,11 @@ TEMPLATE_FILE="${TEMPLATE_FILE:-debian-12-standard_12.12-1_amd64.tar.zst}"
 UNPRIVILEGED="${UNPRIVILEGED:-1}"
 
 HOST_PORT="${HOST_PORT:-3055}"
-DEVDASH_HOST_PORT="${DEVDASH_HOST_PORT:-55026}"
+MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
 APP_CONTACT="${APP_CONTACT:-admin@example.com}"
 APP_VERSION="${APP_VERSION:-latest}"
 IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:${APP_VERSION}}"
-DEVDASH_IMAGE="${DEVDASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-devdash:${APP_VERSION}}"
+MELODASH_IMAGE="${MELODASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-melodash:${APP_VERSION}}"
 REPO_URL="${REPO_URL:-https://github.com/melodarr/melodarr-proxy.git}"
 ALLOW_SOURCE_FALLBACK="${ALLOW_SOURCE_FALLBACK:-false}"
 
@@ -257,14 +257,14 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
-  devdash:
-    image: ${DEVDASH_IMAGE}
+  melodash:
+    image: ${MELODASH_IMAGE}
     restart: unless-stopped
     environment:
       PORT: 3000
       PROXY_API_URL: http://proxy:3000/api
     ports:
-      - "${DEVDASH_HOST_PORT}:3000"
+      - "${MELODASH_HOST_PORT}:3000"
     depends_on:
       - proxy
 
@@ -273,9 +273,9 @@ volumes:
 COMPOSE
 
 cd /opt/melodarr-proxy
-if ! docker compose pull proxy devdash > /tmp/pull.log 2>&1; then
+if ! docker compose pull proxy melodash > /tmp/pull.log 2>&1; then
   echo
-  echo "Failed to pull image ${IMAGE} or ${DEVDASH_IMAGE}."
+  echo "Failed to pull image ${IMAGE} or ${MELODASH_IMAGE}."
   
   PULL_OUTPUT=\$(cat /tmp/pull.log)
   if echo "\$PULL_OUTPUT" | grep -qi "unauthorized"; then
@@ -360,15 +360,15 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
-  devdash:
+  melodash:
     build:
-      context: ./src/devdash
+      context: ./src/melodash
     restart: unless-stopped
     environment:
       PORT: 3000
       PROXY_API_URL: http://proxy:3000/api
     ports:
-      - "${DEVDASH_HOST_PORT}:3000"
+      - "${MELODASH_HOST_PORT}:3000"
     depends_on:
       - proxy
 
@@ -389,8 +389,8 @@ echo
 echo "Melodarr Proxy installed."
 echo "Test locally with:"
 echo "  curl http://127.0.0.1:${HOST_PORT}/api/health"
-echo "Open DevDash at:"
-echo "  http://<container-ip>:${DEVDASH_HOST_PORT}/dashboard"
+echo "Open Melodash at:"
+echo "  http://<container-ip>:${MELODASH_HOST_PORT}/dashboard"
 EOF
 
 chmod +x "$BOOTSTRAP_SCRIPT"
@@ -459,15 +459,27 @@ if ! pct exec "\$CTID" -- bash -c "test -f \$COMPOSE_FILE"; then
 fi
 
 IS_SOURCE_BUILD=\$(pct exec "\$CTID" -- grep -c "image: melodarr-proxy:local" "\$COMPOSE_FILE" || true)
-HAS_DEVDASH=\$(pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx devdash" || true)
 
-if [[ "\$HAS_DEVDASH" -eq 0 ]]; then
-  echo "DevDash service missing from compose.yml. Adding it now..."
+if pct exec "\$CTID" -- grep -q "devdash\\|melodarr-proxy-devdash\\|DEVDASH" "\$COMPOSE_FILE"; then
+  echo "Renaming legacy DevDash compose entries to Melodash..."
+  pct exec "\$CTID" -- sed -i \\
+    -e 's/devdash/melodash/g' \\
+    -e 's/DevDash/Melodash/g' \\
+    -e 's/DEVDASH/MELODASH/g' \\
+    -e 's/melodarr-proxy-devdash/melodarr-proxy-melodash/g' \\
+    -e 's#src/devdash#src/melodash#g' \\
+    "\$COMPOSE_FILE"
+fi
+
+HAS_MELODASH=\$(pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)
+
+if [[ "\$HAS_MELODASH" -eq 0 ]]; then
+  echo "Melodash service missing from compose.yml. Adding it now..."
   pct exec "\$CTID" -- bash -c "awk '
     /^volumes:/ && !inserted {
       print \"\"
-      print \"  devdash:\"
-      print \"    image: ghcr.io/melodarr/melodarr-proxy-devdash:latest\"
+      print \"  melodash:\"
+      print \"    image: ghcr.io/melodarr/melodarr-proxy-melodash:latest\"
       print \"    restart: unless-stopped\"
       print \"    environment:\"
       print \"      PORT: 3000\"
@@ -492,11 +504,11 @@ if [[ "\$IS_SOURCE_BUILD" -gt 0 ]]; then
 else
   echo "Detected STANDARD IMAGE installation."
   echo "Pulling latest Docker image..."
-  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy devdash"
+  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy melodash"
 fi
 
 echo "Recreating and restarting containers..."
-pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis devdash"
+pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash"
 
 echo "Cleaning up dangling images to save space..."
 pct exec "\$CTID" -- docker image prune -f

@@ -46,15 +46,27 @@ fi
 
 echo "Checking installation type..."
 IS_SOURCE_BUILD=$(pct exec "$CTID" -- grep -c "image: melodarr-proxy:local" "$COMPOSE_FILE" || true)
-HAS_DEVDASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx devdash" || true)
 
-if [[ "$HAS_DEVDASH" -eq 0 ]]; then
-  echo "DevDash service missing from compose.yml. Adding it now..."
+if pct exec "$CTID" -- grep -q "devdash\\|melodarr-proxy-devdash\\|DEVDASH" "$COMPOSE_FILE"; then
+  echo "Renaming legacy DevDash compose entries to Melodash..."
+  pct exec "$CTID" -- sed -i \
+    -e 's/devdash/melodash/g' \
+    -e 's/DevDash/Melodash/g' \
+    -e 's/DEVDASH/MELODASH/g' \
+    -e 's/melodarr-proxy-devdash/melodarr-proxy-melodash/g' \
+    -e 's#src/devdash#src/melodash#g' \
+    "$COMPOSE_FILE"
+fi
+
+HAS_MELODASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)
+
+if [[ "$HAS_MELODASH" -eq 0 ]]; then
+  echo "Melodash service missing from compose.yml. Adding it now..."
   pct exec "$CTID" -- bash -c "awk '
     /^volumes:/ && !inserted {
       print \"\"
-      print \"  devdash:\"
-      print \"    image: ghcr.io/melodarr/melodarr-proxy-devdash:latest\"
+      print \"  melodash:\"
+      print \"    image: ghcr.io/melodarr/melodarr-proxy-melodash:latest\"
       print \"    restart: unless-stopped\"
       print \"    environment:\"
       print \"      PORT: 3000\"
@@ -79,11 +91,11 @@ if [[ "$IS_SOURCE_BUILD" -gt 0 ]]; then
 else
   echo "Detected STANDARD IMAGE installation."
   echo "Pulling latest Docker images..."
-  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy devdash"
+  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy melodash"
 fi
 
 echo "Recreating and restarting containers..."
-pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis devdash"
+pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash"
 
 echo "Cleaning up dangling images to save space..."
 pct exec "$CTID" -- docker image prune -f

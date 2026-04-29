@@ -45,10 +45,10 @@ services:
       timeout: 5s
       retries: 3
 
-  devdash:
-    image: ${DEVDASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-devdash:latest}
+  melodash:
+    image: ${MELODASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-melodash:latest}
     build:
-      context: ./devdash
+      context: ./melodash
     restart: unless-stopped
     dns:
       - 8.8.8.8
@@ -57,7 +57,7 @@ services:
       PORT: 3000
       PROXY_API_URL: http://proxy:3000/api
     ports:
-      - "${DEVDASH_HOST_PORT:-55026}:3000"
+      - "${MELODASH_HOST_PORT:-55026}:3000"
     depends_on:
       - proxy
 

@@ -2,7 +2,7 @@
 
 Melodarr Proxy is designed as the first node in a broader, observable service ecosystem. It establishes the baseline pattern for all future services built within this infrastructure.
 
-This document outlines the architectural pattern ("Observable Service Layer") and the integration contract required for the overarching control plane (DevDash).
+This document outlines the architectural pattern ("Observable Service Layer") and the integration contract required for the overarching control plane (Melodash).
 
 ---
 
@@ -39,16 +39,16 @@ graph TD
     end
     
     subgraph Control Plane
-        DevDash[DevDash\nMonitoring + Control]
+        Melodash[Melodash\nMonitoring + Control]
     end
 
     APIGateway --> Melodarr
     APIGateway --> Auth
     APIGateway --> NextService
 
-    DevDash -.->|Polls /health & /stats| Melodarr
-    DevDash -.->|Polls /health & /stats| Auth
-    DevDash -.->|Polls /health & /stats| NextService
+    Melodash -.->|Polls /health & /stats| Melodarr
+    Melodash -.->|Polls /health & /stats| Auth
+    Melodash -.->|Polls /health & /stats| NextService
 
     Melodarr --> Upstream1[MusicBrainz / External APIs]
     Auth --> DB[(Shared Database)]
@@ -60,13 +60,13 @@ graph TD
 
 ---
 
-## 🧠 2. DevDash Integration Specification
+## 🧠 2. Melodash Integration Specification
 
-**DevDash** acts as the central control plane. It does not manage the services directly; it observes them and issues control commands via their exposed APIs.
+**Melodash** acts as the central control plane. It does not manage the services directly; it observes them and issues control commands via their exposed APIs.
 
 ### Service Registry Definition
 
-DevDash maintains a dynamic or static registry of all observable services. A sample registry configuration block looks like this:
+Melodash maintains a dynamic or static registry of all observable services. A sample registry configuration block looks like this:
 
 ```json
 {
@@ -90,7 +90,7 @@ DevDash maintains a dynamic or static registry of all observable services. A sam
 
 ### Polling Strategy
 
-DevDash implements an aggressive but efficient polling loop against registered services to maintain live state:
+Melodash implements an aggressive but efficient polling loop against registered services to maintain live state:
 * **Health (`/api/health`)**: Every 5 seconds
 * **Metrics (`/api/stats`)**: Every 10 seconds
 * **History (`/api/stats/history`)**: Every 30 seconds
@@ -102,9 +102,9 @@ Services are evaluated strictly based on their endpoint responses:
 * **`stats` fails but `health` passes** → Service marked **DEGRADED** (🟡)
 * **Timeouts** trigger an exponential backoff to prevent cascading failures.
 
-### DevDash UI Requirements
+### Melodash UI Requirements
 
-For every registered service, DevDash must render a standard Service Card containing:
+For every registered service, Melodash must render a standard Service Card containing:
 
 1. **Status Header**
    * Indicator: 🟢 Healthy / 🟡 Degraded / 🔴 Down
@@ -123,6 +123,6 @@ For every registered service, DevDash must render a standard Service Card contai
 ## 🚀 3. Strategic Advantage
 
 By standardizing `health`, `stats`, and `control`, the ecosystem achieves:
-* **Instant Onboarding:** Plug any new service into DevDash simply by providing its URL.
+* **Instant Onboarding:** Plug any new service into Melodash simply by providing its URL.
 * **Unified Monitoring:** Look at one dashboard to understand the health of the entire stack.
 * **Scale Without Chaos:** Infrastructure grows horizontally without introducing bespoke monitoring requirements for each new application.

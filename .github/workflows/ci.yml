@@ -29,12 +29,12 @@ jobs:
       - name: Test
         run: yarn test
 
-      - name: Install DevDash dependencies
-        working-directory: devdash
+      - name: Install Melodash dependencies
+        working-directory: melodash
         run: yarn install --immutable
 
-      - name: DevDash typecheck
-        working-directory: devdash
+      - name: Melodash typecheck
+        working-directory: melodash
         run: yarn run lint
 
   docker-build:
@@ -45,8 +45,8 @@ jobs:
       - name: Build production image
         run: docker compose build proxy
 
-      - name: Build DevDash image
-        run: docker compose build devdash
+      - name: Build Melodash image
+        run: docker compose build melodash
 
       - name: Build test image
         run: docker compose --profile test build test

@@ -37,6 +37,6 @@ This file tracks the work needed to make Melodarr Proxy easy to run, contribute 
 
 ## Later
 
-- [ ] Split optional Auth and DevDash services if they grow beyond this project.
+- [ ] Split optional Auth and Melodash services if they grow beyond this project.
 - [ ] Add background cache warming.
 - [ ] Add stricter provider result ranking and filtering.

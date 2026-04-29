@@ -2,11 +2,17 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.12 - 2026-04-29
+
+- Renamed the dashboard service and published image to Melodash.
+- Updated Compose, Proxmox install/update scripts, docs, and release workflows to use `melodash` and `ghcr.io/melodarr/melodarr-proxy-melodash`.
+- Removed development/test tooling from the production proxy image install path so vulnerability scans do not flag non-runtime packages.
+
 ## v0.3.11 - 2026-04-29
 
-- Restored the separate DevDash container as a first-class deployed service.
-- Added a production DevDash image at `ghcr.io/melodarr/melodarr-proxy-devdash`.
-- Updated Compose and Proxmox install/update flows so standard installs run `proxy`, `redis`, and `devdash` with DevDash exposed on port `55026`.
+- Restored the separate dashboard container as a first-class deployed service.
+- Added a production dashboard image so the operator UI can be deployed outside the proxy API image.
+- Updated Compose and Proxmox install/update flows so standard installs can run `proxy`, `redis`, and the dashboard with the dashboard exposed on port `55026`.
 
 ## v0.3.10 - 2026-04-29
 
@@ -51,17 +57,17 @@ All notable changes to Melodarr Proxy will be documented here.
 ## v0.3.0 - 2026-04-29
 
 - Added Scalar API documentation at `/docs` backed by `/openapi.json`.
-- Split responsibilities so the proxy exposes API/docs only and DevDash owns the operator UI.
-- Added an Updates page in DevDash with release status, changelog display, and a guarded update action.
+- Split responsibilities so the proxy exposes API/docs only and Melodash owns the operator UI.
+- Added an Updates page in Melodash with release status, changelog display, and a guarded update action.
 - Added proxy update status and apply endpoints with GitHub release lookup and runner availability checks.
-- Added `manage.sh` options to run proxy lint, proxy tests, DevDash typecheck, and all checks inside containers.
+- Added `manage.sh` options to run proxy lint, proxy tests, Melodash typecheck, and all checks inside containers.
 - Added tests for proxy API/docs routing, duplicate static UI removal, and update version comparison.
 - Fixed backend lint issues and made background timers non-blocking so the test suite exits cleanly.
 - Stabilized provider scoring tests so they are isolated from Compose runtime provider-priority settings.
 
 ## v0.2.0 - 2026-04-28
 
-- Redesigned DevDash around Melodarr Proxy with Dashboard, Insights, Analytics, Requests, Explorer, and Settings views.
+- Redesigned Melodash around Melodarr Proxy with Dashboard, Insights, Analytics, Requests, Explorer, and Settings views.
 - Added Explorer search modes for artist, song, album, and artist plus song workflows.
 - Added visual Explorer results with artwork cards and a JSON tab for raw debug output.
 - Added richer request trace inspection with provider timing, steps, raw details, and copyable logs.
@@ -69,7 +75,7 @@ All notable changes to Melodarr Proxy will be documented here.
 - Added custom provider configuration and a visual mapping builder backed by proxy-side JSONPath transforms.
 - Added MusicBrainz API key support and moved MusicBrainz identity/contact into runtime configuration.
 - Fixed MusicBrainz TLS resets in Docker by running the proxy on a Debian Node image and routing MusicBrainz over IPv6.
-- Restored DevDash Compose support on `DEVDASH_HOST_PORT` and added `manage.sh` network setup for local operation.
+- Restored Melodash Compose support on `MELODASH_HOST_PORT` and added `manage.sh` network setup for local operation.
 - Added debug endpoints for artist discovery, song-to-album lookup, provider tests, snapshots, and request tracing.
 
 ## v0.1.1 - 2026-04-28

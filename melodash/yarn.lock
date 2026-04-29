@@ -890,30 +890,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"devdash@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "devdash@workspace:."
-  dependencies:
-    "@tailwindcss/postcss": "npm:4.2.4"
-    "@types/node": "npm:25.6.0"
-    "@types/react": "npm:19.2.14"
-    "@types/react-dom": "npm:19.2.3"
-    autoprefixer: "npm:10.5.0"
-    clsx: "npm:2.1.1"
-    lucide-react: "npm:1.11.0"
-    next: "npm:16.2.4"
-    postcss: "npm:8.5.12"
-    react: "npm:19.2.5"
-    react-dom: "npm:19.2.5"
-    react-is: "npm:19.2.5"
-    recharts: "npm:3.8.1"
-    swr: "npm:2.4.1"
-    tailwind-merge: "npm:3.5.0"
-    tailwindcss: "npm:4.2.4"
-    typescript: "npm:6.0.3"
-  languageName: unknown
-  linkType: soft
-
 "electron-to-chromium@npm:^1.5.328":
   version: 1.5.344
   resolution: "electron-to-chromium@npm:1.5.344"
@@ -1138,6 +1114,30 @@ __metadata:
   checksum: 10c0/299378e38f9a270069fc62358522ddfb44e94244baa0d6a8980ab2a9b2490a1d03b236b447eee309e17eb3bddfa482c61259d47960eb018a904f0ded52780c4a
   languageName: node
   linkType: hard
+
+"melodash@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "melodash@workspace:."
+  dependencies:
+    "@tailwindcss/postcss": "npm:4.2.4"
+    "@types/node": "npm:25.6.0"
+    "@types/react": "npm:19.2.14"
+    "@types/react-dom": "npm:19.2.3"
+    autoprefixer: "npm:10.5.0"
+    clsx: "npm:2.1.1"
+    lucide-react: "npm:1.11.0"
+    next: "npm:16.2.4"
+    postcss: "npm:8.5.12"
+    react: "npm:19.2.5"
+    react-dom: "npm:19.2.5"
+    react-is: "npm:19.2.5"
+    recharts: "npm:3.8.1"
+    swr: "npm:2.4.1"
+    tailwind-merge: "npm:3.5.0"
+    tailwindcss: "npm:4.2.4"
+    typescript: "npm:6.0.3"
+  languageName: unknown
+  linkType: soft
 
 "nanoid@npm:^3.3.11, nanoid@npm:^3.3.6":
   version: 3.3.11

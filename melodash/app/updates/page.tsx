@@ -81,7 +81,7 @@ export default function UpdatesPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Updates</h1>
-          <p className="mt-2 text-gray-400">Review releases, read the changelog, and apply updates from DevDash.</p>
+          <p className="mt-2 text-gray-400">Review releases, read the changelog, and apply updates from Melodash.</p>
         </div>
         <button
           type="button"
@@ -155,7 +155,7 @@ export default function UpdatesPage() {
           <div>
             <h2 className="text-xl font-semibold">Apply update</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
-              DevDash will fetch the release, fast-forward the local checkout, rebuild the Compose stack, and restart services.
+              Melodash will fetch the release, fast-forward the local checkout, rebuild the Compose stack, and restart services.
             </p>
             {!runnerEnabled && (
               <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">

@@ -67,11 +67,11 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - name: DevDash Docker metadata
-        id: meta-devdash
+      - name: Melodash Docker metadata
+        id: meta-melodash
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/melodarr/melodarr-proxy-devdash
+          images: ghcr.io/melodarr/melodarr-proxy-melodash
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -92,14 +92,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push DevDash version tags
+      - name: Build and push Melodash version tags
         uses: docker/build-push-action@v7
         with:
-          context: ./devdash
+          context: ./melodash
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta-devdash.outputs.tags }}
-          labels: ${{ steps.meta-devdash.outputs.labels }}
+          tags: ${{ steps.meta-melodash.outputs.tags }}
+          labels: ${{ steps.meta-melodash.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -108,17 +108,17 @@ jobs:
         run: |
           export DOCKER_CLI_EXPERIMENTAL=enabled
           IMAGE="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
-          DEVDASH_IMAGE="ghcr.io/melodarr/melodarr-proxy-devdash:${{ steps.vars.outputs.VERSION }}"
+          MELODASH_IMAGE="ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}"
           echo "Verifying image exists and is pullable: $IMAGE"
-          echo "Verifying image exists and is pullable: $DEVDASH_IMAGE"
+          echo "Verifying image exists and is pullable: $MELODASH_IMAGE"
           
           MAX_RETRIES=6
           RETRY_INTERVAL=5
           SUCCESS=0
           
           for i in $(seq 1 $MAX_RETRIES); do
-            if docker manifest inspect "$IMAGE" > /dev/null 2>&1 && docker manifest inspect "$DEVDASH_IMAGE" > /dev/null 2>&1; then
-              echo "✅ Images $IMAGE and $DEVDASH_IMAGE are verified and available in GHCR!"
+            if docker manifest inspect "$IMAGE" > /dev/null 2>&1 && docker manifest inspect "$MELODASH_IMAGE" > /dev/null 2>&1; then
+              echo "✅ Images $IMAGE and $MELODASH_IMAGE are verified and available in GHCR!"
               SUCCESS=1
               break
             else
@@ -236,13 +236,13 @@ jobs:
           
           IMAGE_VERSION="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
           IMAGE_LATEST="ghcr.io/melodarr/melodarr-proxy:latest"
-          DEVDASH_VERSION="ghcr.io/melodarr/melodarr-proxy-devdash:${{ steps.vars.outputs.VERSION }}"
-          DEVDASH_LATEST="ghcr.io/melodarr/melodarr-proxy-devdash:latest"
+          MELODASH_VERSION="ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}"
+          MELODASH_LATEST="ghcr.io/melodarr/melodarr-proxy-melodash:latest"
           
           echo "Publishing $IMAGE_LATEST..."
           docker buildx imagetools create -t "$IMAGE_LATEST" "$IMAGE_VERSION"
-          echo "Publishing $DEVDASH_LATEST..."
-          docker buildx imagetools create -t "$DEVDASH_LATEST" "$DEVDASH_VERSION"
+          echo "Publishing $MELODASH_LATEST..."
+          docker buildx imagetools create -t "$MELODASH_LATEST" "$MELODASH_VERSION"
 
       # 5. Optional Release Step
       - name: Create GitHub Release

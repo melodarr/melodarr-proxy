@@ -168,7 +168,7 @@ async function applyUpdate (_req, res) {
 
     steps.push({ name: 'fetch', ...(await runStep('git', ['fetch', '--tags', 'origin'], { cwd })) })
     steps.push({ name: 'pull', ...(await runStep('git', ['pull', '--ff-only'], { cwd })) })
-    steps.push({ name: 'build and restart', ...(await runStep('docker', ['compose', '--profile', 'devdash', 'up', '-d', '--build'], { cwd })) })
+    steps.push({ name: 'build and restart', ...(await runStep('docker', ['compose', 'up', '-d', '--build', 'proxy', 'redis', 'melodash'], { cwd })) })
 
     return res.json({
       ok: true,

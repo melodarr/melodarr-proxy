@@ -25,14 +25,14 @@ run_proxy_tests() {
   compose_cmd run --rm --no-deps --entrypoint "yarn test" proxy
 }
 
-run_devdash_lint() {
-  echo "Running DevDash typecheck inside a container..."
-  compose_cmd --profile devdash build devdash
-  compose_cmd --profile devdash run --rm --no-deps --entrypoint "yarn run lint" devdash
+run_melodash_lint() {
+  echo "Running Melodash typecheck inside a container..."
+  compose_cmd build melodash
+  compose_cmd run --rm --no-deps --entrypoint "yarn run lint" melodash
 }
 
 run_all_checks() {
-  run_proxy_lint && run_proxy_tests && run_devdash_lint
+  run_proxy_lint && run_proxy_tests && run_melodash_lint
 }
 
 ensure_network() {
@@ -66,9 +66,9 @@ show_menu() {
   clear
 
   local proxy_url
-  local devdash_url
+  local melodash_url
   proxy_url="$(mapped_url proxy 3000)"
-  devdash_url="$(mapped_url devdash 3000)"
+  melodash_url="$(mapped_url melodash 3000)"
 
   cat <<MENU
 =====================================================
@@ -76,7 +76,7 @@ show_menu() {
 =====================================================
 Active Endpoints:
   Proxy API: ${proxy_url}
-  DevDash:   ${devdash_url}
+  Melodash:   ${melodash_url}
 =====================================================
 1) Start services
 2) Stop services
@@ -87,7 +87,7 @@ Active Endpoints:
 7) Clean up all containers, volumes, and images
 8) Run proxy lint in container
 9) Run proxy tests in container
-10) Run DevDash typecheck in container
+10) Run Melodash typecheck in container
 11) Run all checks in containers
 0) Exit
 =====================================================
@@ -101,9 +101,9 @@ while true; do
 
   case "$choice" in
     1)
-      echo "Starting proxy and Redis on http://localhost:${HOST_PORT}..."
+      echo "Starting proxy, Redis, and Melodash..."
       ensure_network
-      compose_cmd up -d proxy redis
+      compose_cmd up -d proxy redis melodash
       pause
       ;;
     2)
@@ -117,9 +117,9 @@ while true; do
       pause
       ;;
     4)
-      echo "Rebuilding proxy and starting Redis..."
+      echo "Rebuilding proxy, Redis, and Melodash..."
       ensure_network
-      compose_cmd up -d --build proxy redis
+      compose_cmd up -d --build proxy redis melodash
       pause
       ;;
     5)
@@ -159,7 +159,7 @@ while true; do
       ;;
     10)
       ensure_network
-      run_devdash_lint
+      run_melodash_lint
       pause
       ;;
     11)

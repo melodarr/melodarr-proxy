@@ -4,7 +4,7 @@ Feature release focused on the Melodarr Proxy control plane, provider diagnostic
 
 ## Highlights
 
-- Redesigned DevDash with dedicated Dashboard, Insights, Analytics, Requests, Explorer, and Settings pages.
+- Redesigned Melodash with dedicated Dashboard, Insights, Analytics, Requests, Explorer, and Settings pages.
 - Added Explorer search modes for artist, song, album, and artist plus song lookups.
 - Added a visual Explorer result view with artwork cards, plus a JSON tab for the original debug payload.
 - Added request trace details, provider timing, raw diagnostics, and copyable log output.
@@ -12,7 +12,7 @@ Feature release focused on the Melodarr Proxy control plane, provider diagnostic
 - Added custom provider configuration with a visual JSON mapping builder.
 - Added MusicBrainz API key support and runtime identity/contact configuration.
 - Fixed MusicBrainz Docker TLS failures by moving the proxy runtime to Debian Node and preferring IPv6 for MusicBrainz.
-- Restored DevDash Compose support on `DEVDASH_HOST_PORT=55026`.
+- Restored Melodash Compose support on `MELODASH_HOST_PORT=55026`.
 - Added `manage.sh` network setup for local start/rebuild flows.
 
 ## Compatibility
@@ -30,7 +30,7 @@ Explorer and debug endpoints are intended for operator workflows and provider di
 Release checks run locally:
 
 - `docker compose config --quiet`
-- `docker compose --profile devdash build devdash`
+- `docker compose --profile melodash build melodash`
 - Browser smoke test for Explorer Visual and JSON tabs
 - MusicBrainz container connectivity check over IPv6
 
