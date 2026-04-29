@@ -15,7 +15,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20.x'
+          node-version: '24.x'
 
       - name: Enable Corepack
         run: corepack enable
@@ -29,6 +29,14 @@ jobs:
       - name: Test
         run: yarn test
 
+      - name: Install Melodash dependencies
+        working-directory: melodash
+        run: yarn install --immutable
+
+      - name: Melodash typecheck
+        working-directory: melodash
+        run: yarn run lint
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
@@ -36,6 +44,9 @@ jobs:
 
       - name: Build production image
         run: docker compose build proxy
+
+      - name: Build Melodash image
+        run: docker compose build melodash
 
       - name: Build test image
         run: docker compose --profile test build test

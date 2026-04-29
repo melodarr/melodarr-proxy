@@ -120,7 +120,7 @@ Next focus areas:
 
 * smarter query pattern detection
 * adaptive caching
-* deeper DevDash integration
+* deeper Melodash integration
 * multi-upstream support
 
 ---

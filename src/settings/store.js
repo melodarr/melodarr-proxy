@@ -250,10 +250,12 @@ function generateRandomName () {
 // The env var values serve as *defaults*, not locks.
 const EDITABLE_KEYS = {
   appName: { env: 'APP_NAME', fallback: generateRandomName(), type: 'string' },
-  appVersion: { env: 'APP_VERSION', fallback: '1.0', type: 'string' },
+  appVersion: { env: 'APP_VERSION', fallback: '0.3.0', type: 'string' },
   appContact: { env: 'APP_CONTACT', fallback: `contact-${crypto.randomBytes(4).toString('hex')}@example.com`, type: 'string' },
   cacheTtlSeconds: { env: 'CACHE_TTL_SECONDS', fallback: 86400, type: 'number' },
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
+  musicbrainzApiKey: { env: 'MUSICBRAINZ_API_KEY', fallback: '', type: 'string' },
+  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: 'auto', type: 'string' },
   minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number' },
   upstreamTimeoutMs: { env: 'UPSTREAM_TIMEOUT_MS', fallback: 8000, type: 'number' },
   slowRequestMs: { env: 'SLOW_REQUEST_MS', fallback: 2000, type: 'number' },
@@ -262,6 +264,15 @@ const EDITABLE_KEYS = {
   discogsToken: { env: 'DISCOGS_TOKEN', fallback: '', type: 'string' },
   theAudioDbApiKey: { env: 'THEAUDIODB_API_KEY', fallback: '', type: 'string' },
   itunesCountry: { env: 'ITUNES_COUNTRY', fallback: 'US', type: 'string' },
+  customProviderName: { env: 'CUSTOM_PROVIDER_NAME', fallback: 'Custom API', type: 'string' },
+  customProviderBaseUrl: { env: 'CUSTOM_PROVIDER_BASE_URL', fallback: '', type: 'string' },
+  customProviderSearchPath: { env: 'CUSTOM_PROVIDER_SEARCH_PATH', fallback: '', type: 'string' },
+  customProviderQueryParam: { env: 'CUSTOM_PROVIDER_QUERY_PARAM', fallback: 'q', type: 'string' },
+  customProviderAuthType: { env: 'CUSTOM_PROVIDER_AUTH_TYPE', fallback: 'none', type: 'string' },
+  customProviderHeaderName: { env: 'CUSTOM_PROVIDER_HEADER_NAME', fallback: '', type: 'string' },
+  customProviderQueryAuthName: { env: 'CUSTOM_PROVIDER_QUERY_AUTH_NAME', fallback: '', type: 'string' },
+  customProviderToken: { env: 'CUSTOM_PROVIDER_TOKEN', fallback: '', type: 'string' },
+  customProviderMapping: { env: 'CUSTOM_PROVIDER_MAPPING', fallback: '{}', type: 'string' },
   providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' }
 }
 

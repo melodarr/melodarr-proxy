@@ -1,0 +1,267 @@
+name: Release Validation and Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  validate-and-publish:
+    name: Validate, Build, Publish, and Release
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # 4. Release Validity: CI passes
+      # We run the CI steps (lint & test) as part of this workflow to ensure validity
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Test
+        run: yarn test
+
+      - name: Extract Version
+        id: vars
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "CREATED=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # 1. GHCR Authentication
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2 & 3. Tag Strategy and OCI Labels
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/melodarr/melodarr-proxy
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Melodash Docker metadata
+        id: meta-melodash
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/melodarr/melodarr-proxy-melodash
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push version tags
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: production
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.vars.outputs.VERSION }}
+            APP_REVISION=${{ github.sha }}
+            APP_CREATED=${{ steps.vars.outputs.CREATED }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Melodash version tags
+        uses: docker/build-push-action@v7
+        with:
+          context: ./melodash
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-melodash.outputs.tags }}
+          labels: ${{ steps.meta-melodash.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 5. Verification Robustness
+      - name: Verify Image Availability in GHCR
+        run: |
+          export DOCKER_CLI_EXPERIMENTAL=enabled
+          IMAGE="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
+          MELODASH_IMAGE="ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}"
+          echo "Verifying image exists and is pullable: $IMAGE"
+          echo "Verifying image exists and is pullable: $MELODASH_IMAGE"
+          
+          MAX_RETRIES=6
+          RETRY_INTERVAL=5
+          SUCCESS=0
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            if docker manifest inspect "$IMAGE" > /dev/null 2>&1 && docker manifest inspect "$MELODASH_IMAGE" > /dev/null 2>&1; then
+              echo "✅ Images $IMAGE and $MELODASH_IMAGE are verified and available in GHCR!"
+              SUCCESS=1
+              break
+            else
+              echo "⏳ Image not yet available. Retrying in $RETRY_INTERVAL seconds... ($i/$MAX_RETRIES)"
+              sleep $RETRY_INTERVAL
+              RETRY_INTERVAL=$((RETRY_INTERVAL + 5)) # Incremental backoff (5, 10, 15, 20, 25, 30)
+            fi
+          done
+          
+          if [ $SUCCESS -eq 0 ]; then
+            echo "❌ Failed to verify image in GHCR."
+            exit 1
+          fi
+
+      # 3. SBOM Generation
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}
+          artifact-name: sbom.spdx.json
+          output-file: ./sbom.spdx.json
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: ./sbom.spdx.json
+
+      # 4. Vulnerability Scanning
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: 'ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # 6. Public Visibility Check
+      - name: Public Visibility Check
+        run: |
+          echo "Logging out of GHCR to test unauthenticated pull..."
+          docker logout ghcr.io
+          
+          IMAGE="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
+          echo "Attempting unauthenticated pull of $IMAGE..."
+          
+          if ! docker pull "$IMAGE"; then
+            echo "=========================================================="
+            echo "❌ ERROR: Unauthenticated pull failed!"
+            echo "This means the package is not Public in GHCR."
+            echo "Please go to the GitHub Package settings and change visibility to Public."
+            echo "=========================================================="
+            exit 1
+          fi
+          echo "✅ Public visibility confirmed!"
+
+      # 5. Canary Validation
+      - name: Canary Validation
+        run: |
+          IMAGE="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
+          echo "Starting container from $IMAGE for canary validation..."
+          
+          docker network create smoke-test-net
+          docker run -d --name redis --network smoke-test-net redis:7-alpine
+          
+          docker run -d --name proxy --network smoke-test-net -p 3055:3000 \
+            -e REDIS_URL=redis://redis:6379 \
+            -e JWT_SECRET=smoketest \
+            "$IMAGE"
+            
+          echo "Waiting for proxy to start..."
+          MAX_RETRIES=15
+          RETRY_INTERVAL=2
+          SUCCESS=0
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            if curl -sf http://localhost:3055/api/health > /dev/null; then
+              echo "✅ Proxy is up and healthy!"
+              SUCCESS=1
+              break
+            else
+              echo "⏳ Waiting for health check... ($i/$MAX_RETRIES)"
+              sleep $RETRY_INTERVAL
+            fi
+          done
+          
+          if [ $SUCCESS -eq 0 ]; then
+            echo "❌ Canary validation failed! /api/health did not return 200 OK."
+            docker logs proxy
+            docker rm -f proxy redis
+            docker network rm smoke-test-net
+            exit 1
+          fi
+          
+          echo "Validating public API contract endpoints..."
+          if ! curl -sf "http://localhost:3055/openapi.json" | grep -q '"openapi"'; then
+            echo "❌ Canary validation failed! /openapi.json did not return the OpenAPI document."
+            docker logs proxy
+            docker rm -f proxy redis
+            docker network rm smoke-test-net
+            exit 1
+          fi
+
+          if ! curl -sf "http://localhost:3055/docs" | grep -q "Scalar"; then
+            echo "❌ Canary validation failed! /docs did not return the Scalar docs page."
+            docker logs proxy
+            docker rm -f proxy redis
+            docker network rm smoke-test-net
+            exit 1
+          fi
+          
+          echo "✅ Canary validation passed!"
+          docker rm -f proxy redis
+          docker network rm smoke-test-net
+
+      # 7. latest Safety
+      - name: Push latest tag
+        run: |
+          echo "Re-authenticating to GHCR to push latest tag..."
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          IMAGE_VERSION="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
+          IMAGE_LATEST="ghcr.io/melodarr/melodarr-proxy:latest"
+          MELODASH_VERSION="ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}"
+          MELODASH_LATEST="ghcr.io/melodarr/melodarr-proxy-melodash:latest"
+          
+          echo "Publishing $IMAGE_LATEST..."
+          docker buildx imagetools create -t "$IMAGE_LATEST" "$IMAGE_VERSION"
+          echo "Publishing $MELODASH_LATEST..."
+          docker buildx imagetools create -t "$MELODASH_LATEST" "$MELODASH_VERSION"
+
+      # 5. Optional Release Step
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release v${{ steps.vars.outputs.VERSION }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: ./sbom.spdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,5 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 coverage/
 .cache/
+**/.next/
+*.tsbuildinfo
 **/.yarn/install-state.gz
 .DS_Store

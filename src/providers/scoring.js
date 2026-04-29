@@ -1,5 +1,5 @@
 const metrics = require('../metrics')
-const { getConfigValue } = require('../settings/store')
+const settingsStore = require('../settings/store')
 
 function getProviderScore (providerName, resultData) {
   // 1. Success Rate & Latency
@@ -28,7 +28,7 @@ function getProviderScore (providerName, resultData) {
   let score = (successRate * 0.4) + (dataCompleteness * 0.4) + ((1 - normalizedLatency) * 0.2)
 
   // Apply priority multiplier (optional configured priority)
-  const priorityConfig = getConfigValue('providerPriority') || ''
+  const priorityConfig = settingsStore.getConfigValue('providerPriority') || ''
   if (priorityConfig) {
     const priorities = priorityConfig.split(',').map(s => s.trim().toLowerCase())
     const pIndex = priorities.indexOf(providerName)

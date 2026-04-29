@@ -1,14 +1,23 @@
 const axios = require('axios')
-const dns = require('dns')
 const https = require('https')
 const { getConfigValue } = require('../settings/store')
 
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  lookup (hostname, options, callback) {
-    return dns.lookup(hostname, { ...options, family: 4 }, callback)
+const musicBrainzAgents = new Map()
+
+function getMusicBrainzHttpsAgent () {
+  const configuredFamily = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
+  const family = configuredFamily === '6' ? 6 : configuredFamily === '4' ? 4 : undefined
+  const key = family || 'auto'
+
+  if (!musicBrainzAgents.has(key)) {
+    musicBrainzAgents.set(key, new https.Agent({
+      keepAlive: true,
+      ...(family ? { family } : {})
+    }))
   }
-})
+
+  return musicBrainzAgents.get(key)
+}
 
 let lastRequestTime = 0
 let requestQueue = Promise.resolve()
@@ -41,35 +50,78 @@ class UpstreamService {
     return `${appName}/${appVersion} (${appContact})`
   }
 
-  async checkHealth () {
+  getMusicBrainzHeaders () {
+    const headers = { 'User-Agent': this.getUserAgent() }
+    const apiKey = getConfigValue('musicbrainzApiKey')
+
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`
+    }
+
+    return headers
+  }
+
+  async probe () {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
-    const userAgent = this.getUserAgent()
-    const timeout = getConfigValue('upstreamTimeoutMs')
+    const configured = getConfigValue('upstreamTimeoutMs') || 8000
+    const timeout = Math.min(configured, 5000)
 
     try {
-      return await enqueueRequest(async () => {
-        const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
-          headers: { 'User-Agent': userAgent },
-          httpsAgent,
-          timeout
-        })
-        return res.status === 200 ? 'reachable' : 'unreachable'
+      const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
+        headers: this.getMusicBrainzHeaders(),
+        httpsAgent: getMusicBrainzHttpsAgent(),
+        timeout,
+        validateStatus: () => true
       })
+
+      if (res.status === 200) {
+        return { status: 'healthy', error: null }
+      }
+      if (res.status === 429) {
+        return {
+          status: 'rate_limited',
+          error: { message: 'Upstream rate limit hit', code: 'HTTP_429', status: 429 }
+        }
+      }
+      if (res.status >= 500) {
+        return {
+          status: 'degraded',
+          error: { message: `Upstream returned ${res.status}`, code: `HTTP_${res.status}`, status: res.status }
+        }
+      }
+      return {
+        status: 'degraded',
+        error: { message: `Unexpected upstream status ${res.status}`, code: `HTTP_${res.status}`, status: res.status }
+      }
     } catch (err) {
-      return 'unreachable'
+      const code = err.code || null
+      if (code === 'ECONNABORTED' || /timeout/i.test(err.message || '')) {
+        return {
+          status: 'timeout',
+          error: { message: err.message, code: code || 'TIMEOUT', status: null }
+        }
+      }
+      return {
+        status: 'unreachable',
+        error: { message: err.message, code, status: err.response?.status || null }
+      }
     }
+  }
+
+  async checkHealth () {
+    const result = await this.probe()
+    return result.status === 'healthy' ? 'reachable' : 'unreachable'
   }
 
   async search (query) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
-    const userAgent = this.getUserAgent()
     const timeout = getConfigValue('upstreamTimeoutMs')
 
     return enqueueRequest(async () => {
       const url = `${baseUrl}/artist/?query=${encodeURIComponent(query)}&fmt=json`
       const res = await axios.get(url, {
-        headers: { 'User-Agent': userAgent },
-        httpsAgent,
+        headers: this.getMusicBrainzHeaders(),
+        httpsAgent: getMusicBrainzHttpsAgent(),
         timeout
       })
       return res.data
@@ -78,7 +130,6 @@ class UpstreamService {
 
   async musicBrainzGet (path, params) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
-    const userAgent = this.getUserAgent()
     const timeout = getConfigValue('upstreamTimeoutMs')
 
     let lastError
@@ -87,8 +138,8 @@ class UpstreamService {
       try {
         return await enqueueRequest(async () => {
           const response = await axios.get(`${baseUrl}${path}`, {
-            headers: { 'User-Agent': userAgent },
-            httpsAgent,
+            headers: this.getMusicBrainzHeaders(),
+            httpsAgent: getMusicBrainzHttpsAgent(),
             params: { fmt: 'json', ...params },
             timeout
           })

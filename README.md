@@ -37,10 +37,15 @@ Ports are randomized by default. Find the active proxy port with:
 docker compose port proxy 3000
 ```
 
+Run the proxy:
+
+```bash
+docker compose up -d
+```
+
 Optional services use Compose profiles:
 
 ```bash
-docker compose --profile devdash up -d
 docker compose --profile auth up -d
 docker compose --profile test build test
 ```
@@ -183,6 +188,73 @@ See [ROADMAP.md](ROADMAP.md).
 See [docs/lidarr-compatibility.md](docs/lidarr-compatibility.md).
 
 For setup steps, see [docs/lidarr-setup.md](docs/lidarr-setup.md).
+
+### Point Lidarr Lookups at Melodarr Proxy
+
+Stock Lidarr builds generally use Lidarr's built-in metadata service and do not expose a simple metadata-server URL field. To change artist lookup traffic to Melodarr Proxy, use a Lidarr build with plugin support and configure a custom metadata source through a plugin such as Tubifarry.
+
+Start Melodarr Proxy and confirm the port:
+
+```bash
+docker compose up -d
+docker compose port proxy 3000
+```
+
+Use the reported port to verify the proxy is healthy:
+
+```bash
+curl http://localhost:3055/api/health
+```
+
+Create a Lidarr API key in Melodarr Proxy from `Settings`, then verify artist lookup:
+
+```bash
+curl \
+  -H "X-Api-Key: mp_your_key_here" \
+  "http://localhost:3055/api/v1/artist/lookup?term=radiohead"
+```
+
+If Lidarr runs in Docker Compose, switch it to a plugin-capable image before installing the metadata plugin. Back up Lidarr's `/config` volume first because plugin/nightly branches may run database migrations.
+
+```yaml
+services:
+  lidarr:
+    image: ghcr.io/hotio/lidarr:pr-plugins
+    container_name: lidarr
+    ports:
+      - "8686:8686"
+    volumes:
+      - /path/to/lidarr/config:/config
+      - /path/to/music:/music
+```
+
+Apply the image change:
+
+```bash
+docker compose pull lidarr
+docker compose up -d lidarr
+```
+
+In Lidarr, install Tubifarry:
+
+```text
+System -> Plugins -> GitHub URL -> Install
+https://github.com/TypNull/Tubifarry
+```
+
+Then configure the custom metadata source:
+
+```text
+Settings -> Metadata -> Lidarr Custom
+Metadata URL: http://<melodarr-host>:3055
+API key: mp_your_key_here
+```
+
+If Lidarr and Melodarr Proxy are in the same Compose network, use the Compose service name instead of `localhost`:
+
+```text
+http://proxy:3000
+```
 
 ## Contributing
 
