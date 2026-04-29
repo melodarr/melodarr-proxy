@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.2 - 2026-04-28
+
+- Fixed Proxmox LXC installer pinning fresh installs to a stale image and runtime version. The image tag and `APP_VERSION` now resolve from a single `APP_VERSION` env var (default `v0.3.2`), keeping installer, container image, and runtime version aligned.
+
 ## v0.3.1 - 2026-04-28
 
 - Fixed Proxmox LXC installer to list templates already on the chosen storage and let the operator pick one, falling back to `pveam available` when none are present locally. `TEMPLATE_FILE` env override is preserved for unattended runs; non-TTY runs without an override now exit with a clear error.
