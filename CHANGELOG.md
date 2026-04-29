@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.16 - 2026-04-29
+
+- Pinned release scanning to `aquasecurity/trivy-action@v0.36.0` and opted GitHub JavaScript actions into Node.js 24 during release validation.
+
 ## v0.3.15 - 2026-04-29
 
 - Fixed release canary validation to check public health, OpenAPI, and Scalar docs endpoints instead of calling authenticated artist lookup without an API key.

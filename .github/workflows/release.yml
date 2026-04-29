@@ -13,6 +13,8 @@ jobs:
   validate-and-publish:
     name: Validate, Build, Publish, and Release
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -149,7 +151,7 @@ jobs:
 
       # 4. Vulnerability Scanning
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}'
           format: 'table'
