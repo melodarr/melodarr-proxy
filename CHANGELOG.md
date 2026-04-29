@@ -2,9 +2,9 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
-## v0.3.6 - 2026-04-29
+## v0.3.7 - 2026-04-29
 
-- Re-enabled the embedded operator dashboard. The proxy now serves the bundled UI from `public/`: `GET /` and `GET /dashboard` render `index.html`, and the static assets (`/settings.html`, `/stats.html`, `/login.html`, JS, CSS) are served alongside the API. `/docs` (Scalar) and `/openapi.json` are unchanged.
+- Reverted v0.3.6. The proxy is API-only — `/api/*`, `/debug/*`, `/docs` (Scalar), `/openapi.json`. The operator dashboard is a separate web app and is not bundled into this image. `GET /` returns API metadata JSON, no static UI is served, and `public/` is no longer mounted.
 
 ## v0.3.5 - 2026-04-29
 
