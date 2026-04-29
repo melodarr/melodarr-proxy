@@ -2,6 +2,11 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.4 - 2026-04-28
+
+- Changed Proxmox installer default `APP_VERSION` from a pinned release tag to `latest`, so fresh installs pull whatever main has most recently published to GHCR. Pinning a specific build is still supported via `APP_VERSION=v0.3.3 ./install-proxmox-lxc.sh`. The `IMAGE` and runtime `APP_VERSION` env both derive from the same variable so they stay aligned with the override.
+- Note: GHCR package visibility for `ghcr.io/melodarr/melodarr-proxy` must be set to **Public** under the org's package settings, otherwise unauthenticated pulls will fail with `unauthorized` regardless of which tag is requested.
+
 ## v0.3.3 - 2026-04-28
 
 - Fixed Proxmox installer bootstrap failing on Debian 13 (trixie) because `software-properties-common` no longer exists. Trimmed the pre-Docker apt install list to the only packages the script actually uses (`ca-certificates`, `curl`); `gnupg`, `lsb-release`, `apt-transport-https`, and `software-properties-common` were unused.

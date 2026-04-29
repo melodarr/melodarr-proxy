@@ -20,7 +20,7 @@ UNPRIVILEGED="${UNPRIVILEGED:-1}"
 
 HOST_PORT="${HOST_PORT:-3055}"
 APP_CONTACT="${APP_CONTACT:-admin@example.com}"
-APP_VERSION="${APP_VERSION:-v0.3.3}"
+APP_VERSION="${APP_VERSION:-latest}"
 IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:${APP_VERSION}}"
 ### =========================
 
