@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS base
+FROM node:20-bookworm-slim@sha256:59bdcc083652886c9d74dfa98cc1b297cce30b05b8a69e38d49a37cce14ed4fa AS base
 WORKDIR /app
 RUN corepack enable
 COPY package.json yarn.lock .yarnrc.yml ./
@@ -13,6 +13,12 @@ RUN yarn test
 
 FROM base AS production
 ENV NODE_ENV=production
+ARG APP_VERSION
+ARG APP_REVISION
+ARG APP_CREATED
+ENV APP_VERSION=$APP_VERSION
+ENV APP_REVISION=$APP_REVISION
+ENV APP_CREATED=$APP_CREATED
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates gosu wget \
   && rm -rf /var/lib/apt/lists/*

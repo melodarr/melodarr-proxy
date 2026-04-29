@@ -64,21 +64,7 @@ app.get('/openapi.json', (req, res) => {
   res.json(openApiDocument)
 })
 
-app.get('/docs', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/docs.html'))
-})
-
-app.get('/', (req, res) => {
-  res.json({
-    app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.0',
-    role: 'api',
-    docs: '/docs',
-    openapi: '/openapi.json',
-    health: '/api/health'
-  })
-})
-
+app.use(express.static(path.join(__dirname, '../public')))
 // API Routes
 app.use('/api', apiRoutes)
 app.use('/debug', debugRoutes)

@@ -22,6 +22,12 @@ HOST_PORT="${HOST_PORT:-3055}"
 APP_CONTACT="${APP_CONTACT:-admin@example.com}"
 APP_VERSION="${APP_VERSION:-latest}"
 IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:${APP_VERSION}}"
+REPO_URL="${REPO_URL:-https://github.com/melodarr/melodarr-proxy.git}"
+ALLOW_SOURCE_FALLBACK="${ALLOW_SOURCE_FALLBACK:-false}"
+
+# Optional GitHub Container Registry auth if the image is private
+GHCR_USER="${GHCR_USER:-}"
+GHCR_TOKEN="${GHCR_TOKEN:-}"
 ### =========================
 
 if [[ $EUID -ne 0 ]]; then
@@ -185,6 +191,8 @@ cat > "$BOOTSTRAP_SCRIPT" <<EOF
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
+export LC_ALL=C
+export LANG=C
 
 apt-get update
 apt-get install -y ca-certificates curl
@@ -207,6 +215,11 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin do
 
 systemctl enable docker
 systemctl start docker
+
+if [[ -n "${GHCR_USER}" ]] && [[ -n "${GHCR_TOKEN}" ]]; then
+  echo "Authenticating with GHCR as ${GHCR_USER}..."
+  echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+fi
 
 mkdir -p /opt/melodarr-proxy
 
@@ -247,7 +260,105 @@ volumes:
 COMPOSE
 
 cd /opt/melodarr-proxy
-docker compose up -d
+if ! docker compose pull proxy > /tmp/pull.log 2>&1; then
+  echo
+  echo "Failed to pull image ${IMAGE}."
+  
+  PULL_OUTPUT=\$(cat /tmp/pull.log)
+  if echo "\$PULL_OUTPUT" | grep -qi "unauthorized"; then
+    echo "Reason: Unauthorized. This usually means the image is private or credentials are required."
+  elif echo "\$PULL_OUTPUT" | grep -qi "manifest unknown"; then
+    echo "Reason: Version ${APP_VERSION} not found (manifest unknown)."
+  else
+    echo "Reason: Network error or registry unreachable."
+    echo "Details: \$PULL_OUTPUT"
+  fi
+
+  if [[ "${ALLOW_SOURCE_FALLBACK}" != "true" ]]; then
+    echo "=========================================================="
+    echo "ERROR: Docker pull failed and ALLOW_SOURCE_FALLBACK is false."
+    echo "Set ALLOW_SOURCE_FALLBACK=true to build from source."
+    echo "=========================================================="
+    exit 1
+  fi
+
+  echo
+  echo "ALLOW_SOURCE_FALLBACK is enabled. Attempting to clone and build from source (${REPO_URL})..."
+  echo "=========================================================="
+  echo "WARNING: Building from source. This image may differ from the official pre-built image."
+  echo "=========================================================="
+  echo
+  
+  if docker image inspect melodarr-proxy:local >/dev/null 2>&1; then
+    echo "Found existing local build: melodarr-proxy:local. Reusing it."
+  else
+    apt-get update
+    apt-get install -y git
+    
+    if [[ ! -d "src" ]]; then
+      if ! git clone "${REPO_URL}" src; then
+        echo "=========================================================="
+        echo "ERROR: Failed to clone repository."
+        echo "The repository might be private or not exist yet."
+        echo "=========================================================="
+        exit 1
+      fi
+    fi
+    
+    echo "Building melodarr-proxy:local..."
+    if ! docker build -t melodarr-proxy:local --target production src/; then
+      echo "=========================================================="
+      echo "ERROR: Docker failed to build the image."
+      echo "=========================================================="
+      exit 1
+    fi
+  fi
+  
+  # Replace the compose file to build from source
+  cat > /opt/melodarr-proxy/compose.yml <<SOURCE_COMPOSE
+services:
+  proxy:
+    image: melodarr-proxy:local
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      DATA_DIR: /data
+      APP_NAME: melodarr-proxy
+      APP_VERSION: ${APP_VERSION}
+      APP_CONTACT: ${APP_CONTACT}
+      METADATA_PROVIDERS: musicbrainz,itunes
+      PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
+      MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
+      MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
+      CACHE_TTL_SECONDS: 86400
+      UPSTREAM_TIMEOUT_MS: 8000
+      SLOW_REQUEST_MS: 2000
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    ports:
+      - "${HOST_PORT}:3000"
+    volumes:
+      - melodarr_proxy_data:/data
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+volumes:
+  melodarr_proxy_data:
+SOURCE_COMPOSE
+
+fi
+
+if ! docker compose up -d; then
+  echo "=========================================================="
+  echo "ERROR: Docker failed to start the containers."
+  echo "=========================================================="
+  exit 1
+fi
 
 echo
 echo "Melodarr Proxy installed."
@@ -261,7 +372,10 @@ echo "Pushing bootstrap script into container..."
 pct push "$CTID" "$BOOTSTRAP_SCRIPT" /root/melodarr-proxy-bootstrap.sh -perms 755
 
 echo "Running bootstrap inside container..."
-pct exec "$CTID" -- bash /root/melodarr-proxy-bootstrap.sh
+if ! pct exec "$CTID" -- bash /root/melodarr-proxy-bootstrap.sh; then
+  echo "Bootstrap script failed. Container $CTID has been created but setup is incomplete."
+  exit 1
+fi
 
 echo
 echo "Done."
@@ -278,3 +392,73 @@ echo "  pct exec $CTID -- hostname -I"
 echo
 echo "Then open:"
 echo "  http://<container-ip>:${HOST_PORT}"
+echo
+echo "=========================================================="
+echo "Creating Upgrade Script..."
+echo "=========================================================="
+UPGRADE_SCRIPT="upgrade-melodarr-proxy-${CTID}.sh"
+cat > "\$UPGRADE_SCRIPT" <<'EOF_UPGRADE'
+#!/usr/bin/env bash
+set -euo pipefail
+
+CTID="%%CTID%%"
+
+if [[ \$EUID -ne 0 ]]; then
+  echo "Run this as root on the Proxmox host."
+  exit 1
+fi
+
+if ! pct status "\$CTID" >/dev/null 2>&1; then
+  echo "Container ID \$CTID does not exist."
+  exit 1
+fi
+
+STATUS=\$(pct status "\$CTID" | awk '{print \$2}')
+if [[ "\$STATUS" != "running" ]]; then
+  echo "Container \$CTID is not running. Starting it now..."
+  pct start "\$CTID"
+  sleep 5
+fi
+
+echo "=========================================================="
+echo "Upgrading Melodarr Proxy in LXC Container: \$CTID"
+echo "=========================================================="
+
+COMPOSE_FILE="/opt/melodarr-proxy/compose.yml"
+
+if ! pct exec "\$CTID" -- bash -c "test -f \$COMPOSE_FILE"; then
+  echo "Error: \$COMPOSE_FILE not found in container \$CTID."
+  exit 1
+fi
+
+IS_SOURCE_BUILD=\$(pct exec "\$CTID" -- grep -c "image: melodarr-proxy:local" "\$COMPOSE_FILE" || true)
+
+if [[ "\$IS_SOURCE_BUILD" -gt 0 ]]; then
+  echo "Detected SOURCE BUILD fallback installation."
+  echo "Pulling latest code from git..."
+  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy/src && git fetch --all && git reset --hard origin/main && git pull"
+  
+  echo "Building new local image..."
+  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker build -t melodarr-proxy:local --target production src/"
+else
+  echo "Detected STANDARD IMAGE installation."
+  echo "Pulling latest Docker image..."
+  pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy"
+fi
+
+echo "Recreating and restarting proxy container..."
+pct exec "\$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy"
+
+echo "Cleaning up dangling images to save space..."
+pct exec "\$CTID" -- docker image prune -f
+
+echo "=========================================================="
+echo "Upgrade Complete!"
+echo "=========================================================="
+EOF_UPGRADE
+
+sed -i "s/%%CTID%%/\$CTID/g" "\$UPGRADE_SCRIPT"
+chmod +x "\$UPGRADE_SCRIPT"
+
+echo "An upgrade script has been created for this container: ./\$UPGRADE_SCRIPT"
+echo "You can run it anytime to pull the latest version and update the proxy."
