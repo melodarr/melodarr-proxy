@@ -42,7 +42,7 @@ When you are creating an enhancement suggestion, please include as many details 
 ## Setup Local Environment
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/your-username/lidarr-lite-proxy.git`
+2. Clone your fork: `git clone https://github.com/your-username/melodarr-proxy.git`
 3. Install dependencies: `yarn install`
 4. Copy `.env.example` to `.env` and adjust the variables.
 5. Start the development server: `yarn dev`

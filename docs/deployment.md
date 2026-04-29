@@ -1,6 +1,6 @@
 # Deployment Manifests & Strategy
 
-This document outlines the deployment configurations for Jenkins and VMware Tanzu (Cloud Foundry) to support the Lidarr-Lite-Proxy.
+This document outlines the deployment configurations for Jenkins and VMware Tanzu (Cloud Foundry) to support the Melodarr Proxy.
 
 ## 1. Tanzu `manifest.yml`
 
@@ -9,7 +9,7 @@ This manifest configures the deployment for VMware Tanzu. It defines the proxy a
 ```yaml
 ---
 applications:
-  - name: lidarr-lite-proxy
+  - name: melodarr-proxy
     memory: 256M
     instances: 2
     buildpacks:
@@ -32,7 +32,7 @@ pipeline {
 
     environment {
         REGISTRY = "ghcr.io"
-        IMAGE_NAME = "jasonwalker/lidarr-lite-proxy"
+        IMAGE_NAME = "melodarr/melodarr-proxy"
     }
 
     stages {

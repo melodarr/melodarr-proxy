@@ -54,22 +54,6 @@ services:
       - 8.8.8.8
       - 1.1.1.1
 
-  devdash:
-    profiles: ["devdash"]
-    build:
-      context: ./devdash
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    environment:
-      PORT: 3000
-      PROXY_API_URL: http://proxy:3000/api
-    ports:
-      - "${DEVDASH_HOST_PORT:-55026}:3000"
-    depends_on:
-      - proxy
-
 
 volumes:
   melodarr_proxy_data:
