@@ -54,6 +54,8 @@ app.get('/api/version', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
     version: process.env.APP_VERSION || '0.3.0',
+    revision: process.env.APP_REVISION || 'unknown',
+    created: process.env.APP_CREATED || 'unknown',
     environment: process.env.NODE_ENV || 'development'
   })
 })
@@ -104,19 +106,20 @@ async function boot () {
     logger.warn('Failed to validate cache connection.', { error: err.message })
   }
 
-  // 2. Prime upstream monitor with a single direct probe (no queue)
+  // 2. Prime upstream monitor with a single direct probe (no queue).
+  // The monitor retries on its own interval, and /api/ready reflects
+  // cached state, so we never hard-fail boot on upstream issues. The
+  // proxy must start so operators can reach Settings and reconfigure
+  // (e.g., switch musicbrainzIpFamily) when transient TLS/DNS issues
+  // hit the boot probe.
   const initial = await upstreamMonitor.runCheck()
-  if (initial.status === 'unreachable') {
-    logger.error('Boot failed: upstream unreachable.', { error: initial.lastError })
-    process.exit(1)
-  }
-  if (initial.status !== 'healthy') {
-    logger.warn('Upstream not fully healthy at boot; continuing.', {
+  if (initial.status === 'healthy') {
+    logger.info('Upstream connectivity validated.')
+  } else {
+    logger.warn('Upstream not healthy at boot; continuing — monitor will retry.', {
       status: initial.status,
       error: initial.lastError
     })
-  } else {
-    logger.info('Upstream connectivity validated.')
   }
 
   // Start background jobs

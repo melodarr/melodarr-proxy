@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.5 - 2026-04-29
+
+- Fixed proxy crash-looping on container start when the boot upstream probe failed (e.g. transient `ECONNRESET`/TLS resets reaching MusicBrainz). Boot now logs the unhealthy probe and continues; the upstream monitor retries on its own interval and `/api/ready` reflects cached state. Operators can reach Settings to reconfigure (e.g. switch `musicbrainzIpFamily` to `6`) instead of being locked out of the UI by a dying process.
+
 ## v0.3.4 - 2026-04-28
 
 - Changed Proxmox installer default `APP_VERSION` from a pinned release tag to `latest`, so fresh installs pull whatever main has most recently published to GHCR. Pinning a specific build is still supported via `APP_VERSION=v0.3.3 ./install-proxmox-lxc.sh`. The `IMAGE` and runtime `APP_VERSION` env both derive from the same variable so they stay aligned with the override.
