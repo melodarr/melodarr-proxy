@@ -52,18 +52,100 @@ if pct status "$CTID" >/dev/null 2>&1; then
   exit 1
 fi
 
-TEMPLATE_PATH="/var/lib/vz/template/cache/$TEMPLATE_FILE"
+TEMPLATE_PATH=""
+
+list_local_templates () {
+  pveam list "$TEMPLATE_STORAGE" 2>/dev/null \
+    | awk 'NR>1 {print $1}' \
+    | sed "s|^${TEMPLATE_STORAGE}:vztmpl/||"
+}
+
+list_available_templates () {
+  pveam available --section system 2>/dev/null | awk 'NR>1 {print $2}'
+}
+
+prompt_select () {
+  local prompt="$1"; shift
+  local options=("$@")
+
+  if [[ ! -t 0 ]]; then
+    echo "stdin is not a TTY; cannot prompt for template selection." >&2
+    echo "Set TEMPLATE_FILE explicitly to run unattended." >&2
+    exit 1
+  fi
+
+  echo "$prompt" >&2
+  local i=1
+  for opt in "${options[@]}"; do
+    printf "  %2d) %s\n" "$i" "$opt" >&2
+    i=$((i + 1))
+  done
+
+  local choice
+  while true; do
+    read -rp "Enter number [1-${#options[@]}]: " choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
+      echo "${options[choice - 1]}"
+      return
+    fi
+    echo "Invalid selection." >&2
+  done
+}
+
+resolve_template () {
+  if [[ -n "${TEMPLATE_FILE:-}" ]]; then
+    local explicit_path="/var/lib/vz/template/cache/$TEMPLATE_FILE"
+    if [[ -f "$explicit_path" ]]; then
+      TEMPLATE_PATH="$explicit_path"
+      return
+    fi
+    echo "Configured TEMPLATE_FILE not found locally: $TEMPLATE_FILE" >&2
+    echo "Falling back to interactive selection..." >&2
+  fi
+
+  mapfile -t local_templates < <(list_local_templates)
+
+  if [[ ${#local_templates[@]} -gt 0 ]]; then
+    local picked
+    if [[ ${#local_templates[@]} -eq 1 ]]; then
+      picked="${local_templates[0]}"
+      echo "Using only available template on '$TEMPLATE_STORAGE': $picked"
+    else
+      picked="$(prompt_select "Templates available on '$TEMPLATE_STORAGE':" "${local_templates[@]}")"
+    fi
+    TEMPLATE_FILE="$picked"
+    TEMPLATE_PATH="/var/lib/vz/template/cache/$picked"
+    return
+  fi
+
+  echo "No templates found on '$TEMPLATE_STORAGE'."
+  echo "Refreshing the template index..."
+  pveam update >/dev/null 2>&1 || true
+
+  mapfile -t available_templates < <(list_available_templates)
+  if [[ ${#available_templates[@]} -eq 0 ]]; then
+    echo "No templates returned by 'pveam available'. Check network/DNS." >&2
+    exit 1
+  fi
+
+  local picked
+  picked="$(prompt_select "Select a template to download to '$TEMPLATE_STORAGE':" "${available_templates[@]}")"
+
+  echo "Downloading $picked..."
+  pveam download "$TEMPLATE_STORAGE" "$picked"
+
+  TEMPLATE_FILE="$picked"
+  TEMPLATE_PATH="/var/lib/vz/template/cache/$picked"
+}
+
+resolve_template
 
 if [[ ! -f "$TEMPLATE_PATH" ]]; then
-  echo "Template not found at:"
-  echo "  $TEMPLATE_PATH"
-  echo
-  echo "Download one first, for example:"
-  echo "  pveam update"
-  echo "  pveam available | grep debian-12"
-  echo "  pveam download $TEMPLATE_STORAGE $TEMPLATE_FILE"
+  echo "Template still not present at $TEMPLATE_PATH after selection." >&2
   exit 1
 fi
+
+echo "Using template: $TEMPLATE_FILE"
 
 NET0="name=eth0,bridge=${BRIDGE},ip=${IPADDR}"
 if [[ -n "$GATEWAY" && "$IPADDR" != "dhcp" ]]; then

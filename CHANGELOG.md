@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.1 - 2026-04-28
+
+- Fixed Proxmox LXC installer to list templates already on the chosen storage and let the operator pick one, falling back to `pveam available` when none are present locally. `TEMPLATE_FILE` env override is preserved for unattended runs; non-TTY runs without an override now exit with a clear error.
+
 ## v0.3.0 - 2026-04-29
 
 - Added Scalar API documentation at `/docs` backed by `/openapi.json`.
