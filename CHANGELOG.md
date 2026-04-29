@@ -2,6 +2,11 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.14 - 2026-04-29
+
+- Removed bundled global npm/npx from final runtime images after dependency installation to avoid scanning unused npm internals.
+- Started Melodash directly through Next's Node entrypoint instead of requiring npm at runtime.
+
 ## v0.3.13 - 2026-04-29
 
 - Removed build-time lockfiles from the final proxy and Melodash runtime images so vulnerability scans only evaluate runtime dependencies.

@@ -24,7 +24,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN node -e "const fs=require('fs'); const p=require('./package.json'); delete p.devDependencies; if (p.scripts) delete p.scripts.prepare; fs.writeFileSync('package.json', JSON.stringify(p, null, 2))" \
   && npm install --omit=dev --ignore-scripts \
-  && rm -f yarn.lock .yarnrc.yml
+  && rm -f yarn.lock .yarnrc.yml \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY src ./src
 COPY public ./public
 RUN groupadd --system melodarr \
