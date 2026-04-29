@@ -103,12 +103,12 @@ while true; do
     1)
       echo "Starting proxy, Redis, and Melodash..."
       ensure_network
-      compose_cmd up -d proxy redis melodash
+      compose_cmd up -d --remove-orphans proxy redis melodash
       pause
       ;;
     2)
       echo "Stopping services..."
-      compose_cmd down
+      compose_cmd down --remove-orphans
       pause
       ;;
     3)
@@ -119,7 +119,7 @@ while true; do
     4)
       echo "Rebuilding proxy, Redis, and Melodash..."
       ensure_network
-      compose_cmd up -d --build proxy redis melodash
+      compose_cmd up -d --build --remove-orphans proxy redis melodash
       pause
       ;;
     5)
