@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim@sha256:59bdcc083652886c9d74dfa98cc1b297cce30b05b8a69e38d49a37cce14ed4fa AS base
+FROM node:20-bookworm-slim AS base
 WORKDIR /app
 RUN corepack enable
 COPY package.json yarn.lock .yarnrc.yml ./

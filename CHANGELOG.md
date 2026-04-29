@@ -2,6 +2,16 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.9 - 2026-04-29
+
+- Fixed the production Docker image build by removing an invalid Node base-image digest that prevented Buildx from resolving `node:20-bookworm-slim` for both `linux/amd64` and `linux/arm64`.
+- Updated runtime version fallbacks and Lidarr setup examples to match the release version.
+- Added README commands for pointing plugin-capable Lidarr installs at Melodarr Proxy lookups.
+
+## v0.3.8 - 2026-04-29
+
+- Resolved dashboard routing and enhanced the CI release pipeline with published artifacts.
+
 ## v0.3.7 - 2026-04-29
 
 - Reverted v0.3.6. The proxy is API-only — `/api/*`, `/debug/*`, `/docs` (Scalar), `/openapi.json`. The operator dashboard is a separate web app and is not bundled into this image. `GET /` returns API metadata JSON, no static UI is served, and `public/` is no longer mounted.

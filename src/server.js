@@ -53,7 +53,7 @@ app.use(metricsMiddleware)
 app.get('/api/version', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.0',
+    version: process.env.APP_VERSION || '0.3.9',
     revision: process.env.APP_REVISION || 'unknown',
     created: process.env.APP_CREATED || 'unknown',
     environment: process.env.NODE_ENV || 'development'
@@ -71,7 +71,7 @@ app.get('/docs', (req, res) => {
 app.get('/api/info', (req, res) => {
   res.json({
     app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.0',
+    version: process.env.APP_VERSION || '0.3.9',
     role: 'api',
     docs: '/docs',
     openapi: '/openapi.json',
