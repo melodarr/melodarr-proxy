@@ -17,15 +17,18 @@ export default function ServiceDetail({ params }: { params: Promise<{ name: stri
   const service = services.find(s => s.name === name);
   if (!service) return notFound();
 
-  const { data: health, error: healthError } = useSWR(`${service.baseUrl}/api/health`, fetcher, { refreshInterval: 5000 });
-  const { data: stats } = useSWR(`${service.baseUrl}/api/stats`, fetcher, { refreshInterval: 10000 });
-  const { data: overview } = useSWR(`${service.baseUrl}/debug/overview`, fetcher, { refreshInterval: 5000 });
-  const { data: version } = useSWR(`${service.baseUrl}/api/version`, fetcher);
+  const { data: health, error: healthError } = useSWR("/api/health", fetcher, { refreshInterval: 5000 });
+  const { data: stats } = useSWR("/api/stats", fetcher, { refreshInterval: 10000 });
+  const { data: overview } = useSWR("/debug/overview", fetcher, { refreshInterval: 5000 });
+  const { data: version } = useSWR("/api/version", fetcher);
 
-  const isDown = healthError || (health && health.proxy && health.proxy !== "running");
-  const isDegraded = !isDown && health && (health.cache === "degraded" || health.memory?.status === "warning");
+  const isUnreachable = Boolean(healthError);
+  const isDown = !isUnreachable && health && health.proxy && health.proxy !== "running";
+  const isDegraded = !isDown && !isUnreachable && health && (health.cache === "degraded" || health.memory?.status === "warning");
   const isLoading = !health && !healthError;
-  const status = isLoading ? "loading" : isDown ? "down" : isDegraded ? "degraded" : "healthy";
+  const status = isUnreachable ? "down" : isLoading ? "loading" : isDown ? "down" : isDegraded ? "degraded" : "healthy";
+  const healthErrorMessage = healthError instanceof Error ? healthError.message : null;
+  const versionLabel = version?.version ?? health?.version;
   const providerStats = stats?.providers && typeof stats.providers === "object" ? stats.providers : {};
   const telemetry = mergeTelemetry(telemetryFromStats(stats), telemetryFromOverview(overview));
   const chartData = chartSamplesFromOverview(overview);
@@ -43,9 +46,18 @@ export default function ServiceDetail({ params }: { params: Promise<{ name: stri
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">{service.name}</h1>
           <div className="flex items-center gap-4 text-sm text-gray-400">
-            <span className="flex items-center gap-1.5"><Server className="w-4 h-4" /> {service.baseUrl}</span>
-            {version?.version && <span className="flex items-center gap-1.5">v{version.version}</span>}
+            <span className="flex items-center gap-1.5"><Server className="w-4 h-4" /> {service.name}</span>
+            {versionLabel && <span className="flex items-center gap-1.5">v{versionLabel}</span>}
+            {health?.instanceId && <span className="text-xs text-gray-500">· {health.instanceId}</span>}
           </div>
+          {isUnreachable && (
+            <div className="mt-3 inline-flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-300">
+              <span className="font-medium">Proxy unreachable.</span>
+              {healthErrorMessage && (
+                <span className="text-red-300/80">{healthErrorMessage}</span>
+              )}
+            </div>
+          )}
         </div>
         <StatusBadge status={status} />
       </div>
@@ -113,7 +125,7 @@ export default function ServiceDetail({ params }: { params: Promise<{ name: stri
             </div>
           )}
 
-          <ControlPanel baseUrl={service.baseUrl} />
+          <ControlPanel />
         </div>
 
         {/* Right Column: Charts */}

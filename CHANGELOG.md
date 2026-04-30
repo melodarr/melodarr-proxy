@@ -2,6 +2,13 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.25 - 2026-04-30
+
+- Made Melodash deployment-agnostic. Added `lib/proxy.ts` with `resolveProxyBaseUrl()` (env override → same-origin in browser → server fallback) and `fetchWithFallback()` that retries against `NEXT_PUBLIC_PROXY_FALLBACK` if the primary base fails. `lib/fetcher.ts` now routes any relative path through the resolver, so existing SWR keys like `/api/health` and `/debug/overview` automatically hit the right base.
+- Removed the empty `baseUrl: ""` from `lib/services.ts`. `ServiceCard` and the `service/[name]` page no longer template a base into SWR keys; they just use paths.
+- `ServiceCard` now renders a "Proxy unreachable" panel (with the underlying error message and a hint to set `NEXT_PUBLIC_PROXY_BASE_URL` or wire a reverse proxy) instead of staying stuck on "Checking" forever. The card and detail page also surface `version` and `instanceId` from `/api/health`.
+- `ControlPanel` no longer takes a `baseUrl` prop; it routes through `fetchWithFallback`.
+
 ## v0.3.24 - 2026-04-30
 
 - Added `service` and `version` fields to `/api/health` and `/api/ready` payloads so Melodash and other clients can identify the proxy without reading separate metadata. `service` reads from `APP_NAME` (default `melodarr-proxy`), `version` from `APP_VERSION`.

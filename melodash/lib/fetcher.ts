@@ -1,5 +1,14 @@
+import { fetchWithFallback } from "./proxy";
+
+function isRelativePath(url: string): boolean {
+  return url.startsWith("/") && !url.startsWith("//");
+}
+
 export async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = isRelativePath(url)
+    ? await fetchWithFallback(url, init)
+    : await fetch(url, init);
+
   const contentType = res.headers.get("content-type") || "";
   const body = await res.text();
   const isJson = contentType.includes("application/json");

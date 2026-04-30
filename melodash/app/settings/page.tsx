@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { fetchJson, fetcher } from "@/lib/fetcher";
+import { fetchWithFallback } from "@/lib/proxy";
 
 type RuntimeValue = string | number | boolean;
 
@@ -458,7 +459,7 @@ export default function SettingsPage() {
     setTestingProvider(providerId);
     setMessage(null);
     try {
-      const response = await fetch("/api/settings/providers/test", {
+      const response = await fetchWithFallback("/api/settings/providers/test", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -515,7 +516,7 @@ export default function SettingsPage() {
     setTestingCustomProvider(true);
     setMessage(null);
     try {
-      const response = await fetch("/debug/test-provider", {
+      const response = await fetchWithFallback("/debug/test-provider", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },

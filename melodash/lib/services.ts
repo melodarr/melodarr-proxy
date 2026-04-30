@@ -1,6 +1,5 @@
 export const services = [
   {
-    name: "melodarr-proxy",
-    baseUrl: ""
+    name: "melodarr-proxy"
   }
 ];
