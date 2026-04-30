@@ -1,0 +1,261 @@
+✔ generateKey returns 400 when name is missing (1.365583ms)
+✔ generateKey returns 400 when body is empty (0.14ms)
+✔ generateKey returns the new key and id on success (0.123375ms)
+✔ generateKey uses default quota of 60 when not provided (0.115791ms)
+✔ getAllKeys returns the list of keys (0.566667ms)
+✔ getAllKeys returns empty list when no keys exist (0.291792ms)
+✔ revokeKey returns 400 when key param is missing (0.123875ms)
+✔ revokeKey returns 404 when key is not found (1.258417ms)
+✔ revokeKey returns success message when key is deleted (0.205875ms)
+[Control] Sync triggered
+[Control] Sync triggered
+✔ startProxy returns isRunning=true and a message (2.051417ms)
+✔ startProxy sets metrics.state.isRunning to true (0.169666ms)
+✔ stopProxy returns isRunning=false and a message (0.141166ms)
+✔ stopProxy sets metrics.state.isRunning to false (0.107625ms)
+✔ clearCache returns success message (0.127542ms)
+✔ triggerSync returns a message and timestamp (5.934541ms)
+✔ triggerSync emits sync_triggered event on metrics (1.121125ms)
+✔ artist lookup requires a term (59.118042ms)
+✔ artist lookup normalizes provider data and caches the response (3.511042ms)
+✔ artist lookup returns cached response without debug data by default (0.306ms)
+✔ artist lookup returns partial error response when all providers fail (0.974333ms)
+✔ isAuthenticated returns false when no cookie is present (54.323166ms)
+✔ isAuthenticated returns false when cookie is missing (0.23225ms)
+✔ isAuthenticated returns false when token is expired (0.408792ms)
+✔ isAuthenticated returns false when no admin password is configured (0.164958ms)
+✔ isAuthenticated returns false when session secret is empty (0.119709ms)
+✔ isAuthenticated returns true for a valid unexpired token (0.136625ms)
+✔ getSettingsStatus returns enabled, setupRequired, authenticated fields (0.153375ms)
+✔ getSettingsStatus reflects hasAdminPassword correctly (0.105916ms)
+✔ setupSettings returns 409 when admin password is already configured (0.646875ms)
+✔ setupSettings returns 400 when password is shorter than 8 characters (0.130875ms)
+✔ setupSettings calls bootstrapAdminPassword and sets auth cookie on success (0.303834ms)
+✔ loginSettings returns 503 when no admin password is configured (0.172667ms)
+✔ loginSettings returns 401 when password is incorrect (0.111625ms)
+✔ loginSettings sets auth cookie and returns ok on correct password (0.116625ms)
+✔ logoutSettings clears the settings cookie and returns ok (0.109583ms)
+✔ requireSettingsAuth calls next when session is authenticated (0.167458ms)
+✔ requireSettingsAuth returns 401 when not authenticated (0.093334ms)
+✔ requireSettingsAuth returns 401 with setup message when no password configured (0.085458ms)
+✔ updateSettings returns 400 when no updates provided (0.090041ms)
+✔ updateSettings returns 400 when body is null (0.079042ms)
+✔ updateSettings calls updateRuntimeConfig and returns applied/skipped (1.138208ms)
+✔ generateName returns a new name (0.166ms)
+✔ getNameHistory returns previously generated names (0.11825ms)
+✔ compareVersions handles release tag prefixes and semver parts (9.453792ms)
+✔ buildUpdateStatus returns status when update is available (1.425833ms)
+✔ buildUpdateStatus handles GitHub API error (0.458416ms)
+✔ getUpdateStatus sends JSON response (0.365459ms)
+✔ applyUpdate returns 409 if runner is not enabled (0.367375ms)
+✔ applyUpdate returns success when already up to date (0.268792ms)
+✔ applyUpdate executes steps when update is available (1.165167ms)
+✔ applyUpdate handles exec error (0.3635ms)
+✔ enrichResult returns the original result unchanged when artistName is absent (73.661375ms)
+✔ enrichResult returns the original result unchanged when artistName is empty (0.3235ms)
+✔ enrichResult uses cached enrichment data when available (0.745125ms)
+✔ enrichResult fetches and caches enrichment on cache miss (0.322291ms)
+✔ enrichResult normalises cache key (lowercases) (0.213791ms)
+✔ enrichResult includes _enrichmentDebug when isDebug is true (0.186708ms)
+✔ enrichResult does not include _enrichmentDebug by default (0.168708ms)
+✔ enrichResult _enrichmentDebug marks cached=true on cache hit (0.16725ms)
+✔ enrichResult records latencyMs in metrics (0.182ms)
+✔ enrichArtistData calls Last.fm and Discogs and handles success (0.536708ms)
+✔ enrichArtistData handles Last.fm single tag and Discogs empty results (0.226125ms)
+✔ enrichArtistData handles Last.fm and Discogs errors gracefully (0.3ms)
+✔ enrichResult handles general errors correctly (e.g. cache failing or mockAxios throwing outside Promise.all) (1.106417ms)
+✔ recordRequest increments total request count (1.656375ms)
+✔ recordRequest maintains the sliding RPM window (1.961875ms)
+✔ recordCache increments hits on cache hit (0.4995ms)
+✔ recordCache increments misses on cache miss (0.555416ms)
+✔ getLatencyStats returns zeros when no samples exist (0.25275ms)
+✔ getLatencyStats computes average correctly (0.505167ms)
+✔ getLatencyStats caps sample buffer at maxLatencySamples (0.225834ms)
+✔ recordRanking increments totalRankings (0.173125ms)
+✔ recordRanking classifies scores into distribution buckets (0.138959ms)
+✔ recordRanking accumulates totalRankingTimeMs (0.138792ms)
+✔ recordEnrichment increments total and successful counts (0.142791ms)
+✔ recordEnrichment tracks cached enrichments separately (0.137375ms)
+✔ recordApiRequest initialises key stats on first call (0.127125ms)
+✔ recordApiRequest increments errors on failure (0.115708ms)
+✔ recordApiKeyError increments both requests and errors (0.111916ms)
+✔ getTopQueries returns queries sorted by count descending (1.492417ms)
+✔ getTopQueries respects the limit parameter (0.601125ms)
+✔ recordArtistLookup increments partial count (0.556125ms)
+✔ recordArtistLookup increments errors when statusCode >= 400 (0.420667ms)
+✔ getStats returns a structured snapshot (1.05475ms)
+✔ getStats cache hitRate is null when no requests (0.194417ms)
+✔ getStats computes error rate correctly (0.308291ms)
+✔ startProxy sets isRunning to true (0.19425ms)
+✔ stopProxy sets isRunning to false (0.122125ms)
+✔ takeSnapshot adds an entry to history (0.639458ms)
+✔ getHistory keeps at most 10 snapshots (1.045459ms)
+✔ recordProviderCall tracks provider call stats (0.237834ms)
+{"timestamp":"2026-04-29T20:04:36.469Z","level":"WARN","message":"Invalid API key attempted: mp_inval***"}
+{"timestamp":"2026-04-29T20:04:36.470Z","level":"WARN","message":"API key quota exceeded for key: mp_quota***"}
+✔ api key middleware rejects missing keys (3.222041ms)
+✔ api key middleware rejects invalid keys (1.465042ms)
+✔ api key middleware rejects keys over quota (0.219166ms)
+✔ api key middleware accepts valid keys and records completion metrics (0.174417ms)
+✔ proxyStateMiddleware calls next when proxy is running (1.339208ms)
+✔ proxyStateMiddleware returns 503 when proxy is stopped (0.178084ms)
+✔ proxyAuth calls next directly when session is authenticated (1.3045ms)
+✔ proxyAuth delegates to apiKey middleware when not authenticated (0.202417ms)
+✔ proxyAuth calls next when apiKey middleware accepts the request (0.125083ms)
+{"timestamp":"2026-04-29T20:04:36.483Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.2","path":"/api/test"}
+{"timestamp":"2026-04-29T20:04:36.486Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.3","path":"/api/test"}
+{"timestamp":"2026-04-29T20:04:36.486Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.4","path":"/api/test"}
+{"timestamp":"2026-04-29T20:04:36.486Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.5","path":"/api/test"}
+{"timestamp":"2026-04-29T20:04:36.487Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.6","path":"/api/test"}
+✔ rateLimit allows requests under the limit (1.085625ms)
+✔ rateLimit blocks with 429 once limit is reached (2.96775ms)
+✔ rateLimit response includes retryAfter field (0.273083ms)
+✔ rateLimit response includes custom message (0.210625ms)
+✔ rateLimit defaults to 60 requests per minute (0.330708ms)
+{"timestamp":"2026-04-29T20:04:36.549Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.7","path":"/api/test"}
+{"timestamp":"2026-04-29T20:04:36.549Z","level":"WARN","message":"Rate limit exceeded","ip":"10.0.1.8","path":"/api/test"}
+✔ rateLimit allows new requests after the window expires (61.864667ms)
+✔ rateLimit tracks each IP independently (0.198958ms)
+✔ rateLimit falls back to req.connection.remoteAddress when req.ip is absent (0.057459ms)
+▶ Artist Discovery Provider
+  ✔ discoverArtists - artist (11.979708ms)
+  ✔ discoverArtists - song (0.468167ms)
+  ✔ discoverArtists - song fallback to itunes (0.443833ms)
+  ✔ discoverArtists - album (0.340209ms)
+  ✔ discoverArtists - album fallback to itunes (0.284625ms)
+  ✔ discoverArtists - empty query throws (0.422584ms)
+  ✔ findSongAlbums - combined results (0.5275ms)
+  ✔ findSongAlbums - fails if both fail (0.285292ms)
+  ✔ findSongAlbums - requires artist and song (0.24725ms)
+✔ Artist Discovery Provider (16.348791ms)
+▶ Discogs Provider
+  ✔ searchArtist - returns exact match artist and albums (16.333791ms)
+  ✔ searchArtist - returns empty if no artists found (1.482208ms)
+  ✔ searchArtist - handles 404 on releases (1.1415ms)
+  ✔ searchArtist - throws on non-404 error (0.566042ms)
+  ✔ searchArtist - throws if no token configured (0.309709ms)
+✔ Discogs Provider (20.8405ms)
+▶ Providers Index
+  ✔ aggregateArtist - throws if no active providers (50.012125ms)
+  ✔ aggregateArtist - handles successful providers and merges data (0.338916ms)
+  ✔ aggregateArtist - handles partial failures (0.327417ms)
+  ✔ aggregateArtist - throws if all providers fail (0.2045ms)
+  ✔ testProvider - returns info for a valid provider (0.192208ms)
+  ✔ testProvider - throws for unknown provider (0.137583ms)
+✔ Providers Index (51.975334ms)
+▶ iTunes Provider
+  ✔ searchArtist - returns albums with upgraded artwork (13.102292ms)
+  ✔ searchArtist - returns empty if no results (0.418791ms)
+✔ iTunes Provider (14.238958ms)
+▶ LastFM Provider
+  ✔ searchArtist - returns mapped albums (12.040791ms)
+  ✔ searchArtist - returns empty if no topalbums (0.367625ms)
+  ✔ searchArtist - handles 404 (0.312166ms)
+  ✔ searchArtist - throws on non-404 error (0.50975ms)
+  ✔ searchArtist - throws if no API key configured (0.301417ms)
+✔ LastFM Provider (14.366625ms)
+▶ MusicBrainz Provider
+  ✔ searchArtist - returns exact artist match and albums (1.274041ms)
+  ✔ searchArtist - returns empty if no artist found (0.211792ms)
+✔ MusicBrainz Provider (2.210625ms)
+✔ getProviderScore calculates correct score for perfect provider (0.82225ms)
+✔ getProviderScore applies penalty for high latency (0.069ms)
+✔ getProviderScore applies penalty for errors (0.058917ms)
+✔ getProviderScore applies penalty for incomplete data (0.06625ms)
+✔ getProviderScore applies priority boost (0.059792ms)
+✔ getProviderScore handles missing metrics gracefully (0.05ms)
+▶ TheAudioDb Provider
+  ✔ searchArtist - returns mapped albums (10.259334ms)
+  ✔ searchArtist - throws if no API key configured (0.606667ms)
+  ✔ searchArtist - returns empty if no results (0.2605ms)
+✔ TheAudioDb Provider (11.774209ms)
+✔ rankResults throws when input is null (1.007417ms)
+✔ rankResults throws when input has no results property (0.063417ms)
+✔ rankResults throws when results is not an array (0.063ms)
+✔ rankResults returns empty results array when results is empty (0.690459ms)
+✔ exact case-sensitive match yields highest text score (0.143167ms)
+✔ case-insensitive match scores lower than exact (0.122792ms)
+✔ partial substring match gives textMatch 0.6 (0.077333ms)
+✔ shared-word match gives textMatch 0.3 (0.122084ms)
+✔ no matching words yields textMatch 0.0 (0.062708ms)
+✔ empty query or empty artistName yields textMatch 0.0 (0.0475ms)
+✔ results are sorted by score descending (0.050792ms)
+✔ higher confidence yields higher score (0.070625ms)
+✔ more albums yield higher popularity score (0.085667ms)
+✔ album score is capped at 1.0 for 20+ albums (0.0845ms)
+✔ more provider sources yield higher popularity (0.10775ms)
+✔ albums with firstReleaseDate count toward completeness (0.071208ms)
+✔ albums with year field also count toward completeness (0.061ms)
+✔ debug data includes scores and rankingFactors for each result (0.051959ms)
+✔ ranked results include score field (0.035917ms)
+✔ non-numeric confidence defaults to 0 (0.035625ms)
+✔ missing providerSources defaults providerCount to 1 (0.040333ms)
+▶ Upstream Service
+  ✔ probe - returns healthy on 200 (9.555458ms)
+  ✔ probe - returns rate_limited on 429 (0.385083ms)
+  ✔ probe - returns degraded on 500 (0.32925ms)
+  ✔ probe - returns timeout on ECONNABORTED (0.281917ms)
+  ✔ checkHealth - returns reachable or unreachable (0.26075ms)
+  ✔ search - enqueues request and returns data (0.582875ms)
+  ✔ musicBrainzGet - retries on 5xx errors and succeeds (1102.316666ms)
+  ✔ musicBrainzGet - throws after 3 retries (2204.225709ms)
+  ✔ musicBrainzGet - throws immediately on 4xx (1.190833ms)
+✔ Upstream Service (3320.655583ms)
+▶ Store Module
+  ✔ generateRandomName returns a string with two words and a number (1.017541ms)
+  ✔ getRuntimeConfig and getConfigValue (0.154417ms)
+  ✔ getSessionSecret (0.067542ms)
+  ✔ updateRuntimeConfig (1.242875ms)
+  ✔ API Keys management (72.499041ms)
+  ✔ Admin Password (72.321625ms)
+✔ Store Module (148.763792ms)
+ℹ tests 191
+ℹ suites 0
+ℹ pass 191
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3523.275375
+ℹ start of coverage report
+ℹ ------------------------------------------------------------------------------------------------------------------------------------
+ℹ file                      | line % | branch % | funcs % | uncovered lines
+ℹ ------------------------------------------------------------------------------------------------------------------------------------
+ℹ src                       |        |          |         | 
+ℹ  controllers              |        |          |         | 
+ℹ   admin.controller.js     | 100.00 |   100.00 |  100.00 | 
+ℹ   control.controller.js   | 100.00 |   100.00 |  100.00 | 
+ℹ   proxy.controller.js     |  46.59 |    60.00 |   57.89 | 21-123 125-140 200-236 240-244 304-310 334-335 373-411 413-438
+ℹ   settings.controller.js  |  73.79 |    86.96 |   80.00 | 44-45 52-53 59-60 86-101 161-163 175-176 196-208 210-234
+ℹ   update.controller.js    |  97.47 |    85.45 |   94.12 | 54-55 60 85-86
+ℹ  enrichment               |        |          |         | 
+ℹ   pipeline.js             |  98.57 |    89.74 |   88.89 | 12-13
+ℹ  metrics                  |        |          |         | 
+ℹ   index.js                |  93.10 |    82.26 |   89.29 | 72-73 79-84 119-120 225-231 235-241
+ℹ  middleware               |        |          |         | 
+ℹ   apiKey.middleware.js    | 100.00 |   100.00 |  100.00 | 
+ℹ   proxy.middleware.js     | 100.00 |   100.00 |  100.00 | 
+ℹ   proxyAuth.middleware.js | 100.00 |   100.00 |  100.00 | 
+ℹ   rateLimit.middleware.js | 100.00 |   100.00 |  100.00 | 
+ℹ  providers                |        |          |         | 
+ℹ   artist-discovery.js     | 100.00 |    56.48 |  100.00 | 
+ℹ   discogs.provider.js     |  97.67 |    77.78 |   87.50 | 9-10
+ℹ   http.js                 | 100.00 |    80.00 |  100.00 | 
+ℹ   index.js                |  95.98 |    70.00 |  100.00 | 124-126 128-132
+ℹ   itunes.provider.js      | 100.00 |    55.00 |  100.00 | 
+ℹ   lastfm.provider.js      |  96.92 |    90.00 |   80.00 | 10-11
+ℹ   musicbrainz.provider.js | 100.00 |    53.57 |  100.00 | 
+ℹ   scoring.js              | 100.00 |    88.89 |  100.00 | 
+ℹ   theaudiodb.provider.js  | 100.00 |    94.44 |  100.00 | 
+ℹ  ranking                  |        |          |         | 
+ℹ   engine.js               | 100.00 |    96.77 |  100.00 | 
+ℹ  services                 |        |          |         | 
+ℹ   upstream.service.js     |  95.81 |    74.42 |   86.67 | 36 92-95 104-105
+ℹ  settings                 |        |          |         | 
+ℹ   store.js                |  92.39 |    72.73 |  100.00 | 46-47 78-81 98-99 117-123 201-203 206-207 287-288 290-291 304-305 315-316
+ℹ  utils                    |        |          |         | 
+ℹ   logger.js               |  61.22 |    66.67 |   50.00 | 3-9 11-18 43-46
+ℹ ------------------------------------------------------------------------------------------------------------------------------------
+ℹ all files                 |  87.17 |    75.97 |   89.09 | 
+ℹ ------------------------------------------------------------------------------------------------------------------------------------
+ℹ end of coverage report

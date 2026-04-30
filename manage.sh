@@ -118,6 +118,7 @@ while true; do
       ;;
     4)
       echo "Rebuilding proxy, Redis, and Melodash..."
+      compose_cmd down --remove-orphans
       ensure_network
       compose_cmd up -d --build --remove-orphans proxy redis melodash
       pause

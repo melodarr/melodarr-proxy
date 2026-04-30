@@ -3,6 +3,21 @@ const metrics = require('../metrics')
 const logger = require('../utils/logger')
 
 function apiKeyMiddleware (req, res, next) {
+  if (process.env.REQUIRE_API_KEY === 'false') {
+    req.apiClient = 'Local Client (Unauthenticated)'
+    req.apiKeyId = 'unauth'
+    req.apiKeyMasked = 'unauth'
+    req.requestStartTime = Date.now()
+
+    res.on('finish', () => {
+      const latency = Date.now() - req.requestStartTime
+      const isError = res.statusCode >= 400
+      metrics.recordApiRequest(req.apiKeyMasked, !isError, latency)
+    })
+
+    return next()
+  }
+
   const key = req.headers['x-api-key'] || req.query.api_key || req.query.apikey
 
   if (!key) {

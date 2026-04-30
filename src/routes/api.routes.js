@@ -51,10 +51,26 @@ router.delete('/admin/keys/:key', requireSettingsAuth, revokeKey)
 const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 })
 const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
 
+// Standard routes (Header or Query string API key)
 router.get('/search', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
 router.get('/v1/artist/discover', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
 router.get('/v1/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/v1/song/albums', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
+
+// Path-based API key routes for Lidarr compatibility
+// Lidarr's C# URI builder strips query parameters from base URLs, so we must allow the key in the path
+const pathAuthMiddleware = (req, res, next) => {
+  if (req.params.apiKey && req.params.apiKey.startsWith('mp_')) {
+    req.query.api_key = req.params.apiKey
+    return next()
+  }
+  return next('route')
+}
+
+router.get('/:apiKey/search', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
+router.get('/:apiKey/v1/artist/discover', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
+router.get('/:apiKey/v1/artist/lookup', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
+router.get('/:apiKey/v1/song/albums', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
 
 // Control routes
 router.post('/proxy/start', startProxy)

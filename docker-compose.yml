@@ -13,6 +13,7 @@ services:
       PORT: 3000
       REDIS_URL: redis://redis:6379
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      REQUIRE_API_KEY: ${REQUIRE_API_KEY:-true}
       SETTINGS_SESSION_SECRET: ${SETTINGS_SESSION_SECRET:-}
       DATA_DIR: /data
       MUSICBRAINZ_BASE_URL: ${MUSICBRAINZ_BASE_URL:-https://musicbrainz.org/ws/2}
