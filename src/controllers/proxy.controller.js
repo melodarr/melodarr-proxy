@@ -19,9 +19,9 @@ const withTimeout = (promise, ms) => {
 }
 
 async function handleSearch (req, res) {
-  const { q } = req.query
+  const q = req.query.q || req.query.query || req.query.term
   if (!q) {
-    return res.status(400).json({ error: 'Missing query parameter "q"' })
+    return res.status(400).json({ error: 'Missing query parameter "q" or "query"' })
   }
 
   const normalizedQ = String(q).trim().toLowerCase().replace(/\s+/g, ' ')
@@ -78,24 +78,23 @@ async function handleSearch (req, res) {
   }
 
   try {
-    const startUpstream = Date.now()
-    const data = await withTimeout(upstreamService.search(q), 15000)
-    tracer.addStep(trace, 'upstreamSearch', Date.now() - startUpstream, 'success')
+    const startAgg = Date.now()
+    const type = req.query.type || 'artist'
+    const data = await withTimeout(discoverArtists({ query: q, type }), 15000)
+    tracer.addStep(trace, 'discoverArtists', Date.now() - startAgg, 'success')
 
-    // Handle stateless query count for adaptive TTL via Redis/Cache (optional simplified)
     const ttl = 86400 // 24h default
 
     const startCacheSet = Date.now()
     await cache.set(cacheKey, data, ttl)
     tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
 
-    const providersUsed = Array.from(new Set(data.albums?.map(a => a.provider) || []))
+    const providersUsed = ['musicbrainz']
     await tracer.finalizeTrace(trace, { providersUsed, cacheHit: false })
     await saveSnapshot(`search:${normalizedQ}`, data)
 
-    const responseData = { ...data, _generatedAt: new Date().toISOString() }
-    res.set('X-Cache-Generated-At', responseData._generatedAt)
-    return res.json(responseData)
+    res.set('X-Cache-Generated-At', new Date().toISOString())
+    return res.json(data)
   } catch (err) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Upstream error in handleSearch', {

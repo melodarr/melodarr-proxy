@@ -59,6 +59,11 @@ if pct exec "$CTID" -- grep -q "devdash\\|melodarr-proxy-devdash\\|DEVDASH" "$CO
     "$COMPOSE_FILE"
 fi
 
+if ! pct exec "$CTID" -- grep -q "REQUIRE_API_KEY" "$COMPOSE_FILE"; then
+  echo "Disabling API Key requirement for Lidarr compatibility..."
+  pct exec "$CTID" -- sed -i '/PORT: 3000/a \      REQUIRE_API_KEY: "false"' "$COMPOSE_FILE"
+fi
+
 HAS_MELODASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)
 
 if [[ "$HAS_MELODASH" -eq 0 ]]; then

@@ -232,6 +232,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: 3000
+      REQUIRE_API_KEY: "false"
       REDIS_URL: redis://redis:6379
       DATA_DIR: /data
       APP_NAME: melodarr-proxy
@@ -335,6 +336,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: 3000
+      REQUIRE_API_KEY: "false"
       REDIS_URL: redis://redis:6379
       DATA_DIR: /data
       APP_NAME: melodarr-proxy
@@ -470,6 +472,11 @@ if pct exec "$CTID" -- grep -q "devdash\|melodarr-proxy-devdash\|DEVDASH" "$COMP
     -e 's#src/devdash#melodash#g' \
     -e 's#\./devdash#\./melodash#g' \
     "$COMPOSE_FILE"
+fi
+
+if ! pct exec "$CTID" -- grep -q "REQUIRE_API_KEY" "$COMPOSE_FILE"; then
+  echo "Disabling API Key requirement for Lidarr compatibility..."
+  pct exec "$CTID" -- sed -i '/PORT: 3000/a \      REQUIRE_API_KEY: "false"' "$COMPOSE_FILE"
 fi
 
 HAS_MELODASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)

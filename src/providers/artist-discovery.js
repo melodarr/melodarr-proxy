@@ -51,6 +51,7 @@ async function discoverByArtist (query) {
 
   return (result?.artists || []).map((artist) => ({
     artistName: artist.name || artist['sort-name'] || '',
+    foreignArtistId: artist.id || '',
     type: 'artist',
     source: 'musicbrainz',
     match: artist.name || '',
