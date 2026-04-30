@@ -1,6 +1,6 @@
 {
   "name": "melodarr-proxy",
-  "version": "0.3.25",
+  "version": "0.3.27",
   "description": "Lightweight multi-provider music metadata proxy for Melodarr.",
   "main": "src/server.js",
   "type": "commonjs",
@@ -11,8 +11,9 @@
     "reset-password": "node src/server.js --reset-password",
     "lint": "XDG_CACHE_HOME=.cache standard",
     "test": "node --test src/**/*.test.js",
+    "test:e2e": "node --test src/e2e/**/*.e2e.test.js",
     "docker:lint": "docker compose run --rm --entrypoint \"yarn lint\" proxy",
-    "docker:test": "docker compose run --rm --entrypoint \"yarn test\" proxy",
+    "docker:test": "docker compose run --rm --entrypoint \"yarn test && yarn test:e2e\" proxy",
     "prepare": "husky"
   },
   "dependencies": {
@@ -22,10 +23,18 @@
   },
   "devDependencies": {
     "husky": "^9.1.7",
-    "standard": "^17.1.0"
+    "standard": "^17.1.0",
+    "supertest": "^7.0.0"
   },
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "standard": {
+    "ignore": [
+      "test-mock*.js",
+      "tmp/",
+      "*.scratch.js"
+    ]
+  }
 }

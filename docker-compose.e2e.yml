@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run test:e2e
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - E2E_REAL_HTTP=true
+    depends_on:
+      - redis

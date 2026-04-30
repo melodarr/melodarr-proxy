@@ -89,10 +89,11 @@ Active Endpoints:
 9) Run proxy tests in container
 10) Run Melodash typecheck in container
 11) Run all checks in containers
+12) Run proxy diagnostics
 0) Exit
 =====================================================
 MENU
-  printf "Select an option [0-11]: "
+  printf "Select an option [0-12]: "
 }
 
 while true; do
@@ -166,6 +167,10 @@ while true; do
     11)
       ensure_network
       run_all_checks
+      pause
+      ;;
+    12)
+      "$ROOT_DIR/scripts/proxy-diag.sh" all || true
       pause
       ;;
     0|"")

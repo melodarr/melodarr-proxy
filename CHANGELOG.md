@@ -2,6 +2,16 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.27 - 2026-04-30
+
+- Added `scripts/recover-compose.sh`: regenerates a clean `/opt/melodarr-proxy/compose.yml` on a deployed LXC and force-recreates the stack. Backs up the existing compose, validates YAML before applying, then polls `/api/ready` for up to 60s. Use it when manual sed edits or terminal-paste indentation drift have corrupted the deployed compose.
+- Added `scripts/test-install.sh`: repeatable end-to-end install validation. Targets a Proxmox LXC via `CTID=...` or any `BASE_URL`. Runs colored PASS/FAIL checks for `/api/health`, `/api/ready`, `/api/version`, redis connectivity, Melodash HTML, LXC IPv6→MusicBrainz, Docker IPv6 enablement, in-container IPv6→MusicBrainz, upstream healthy, and end-to-end `/api/search`. On failure, prints actionable hints (e.g. the `daemon.json` snippet to enable Docker IPv6 when the LXC has IPv6 but the container does not).
+
+## v0.3.26 - 2026-04-30
+
+- Added `scripts/proxy-diag.sh`: command-line diagnostics for a deployed proxy. Subcommands `health`, `ready`, `version`, `mb [4|6|auto]`, `search`, `login`, `stats`, `settings`, `logs`, `set-ip-family`, `compose-cat`, `compose-validate`, `all`. Auto-targets the local LXC, a remote `pct exec $CTID`, or any `BASE_URL`. `set-ip-family` rewrites `MUSICBRAINZ_IP_FAMILY` in the deployed `compose.yml` via a base64-encoded Python helper instead of fragile multi-line sed (sidesteps the YAML corruption seen when running quoted sed through `pct exec bash -c`).
+- Added the diagnostics runner as menu option 12 in `manage.sh`.
+
 ## v0.3.25 - 2026-04-30
 
 - Made Melodash deployment-agnostic. Added `lib/proxy.ts` with `resolveProxyBaseUrl()` (env override → same-origin in browser → server fallback) and `fetchWithFallback()` that retries against `NEXT_PUBLIC_PROXY_FALLBACK` if the primary base fails. `lib/fetcher.ts` now routes any relative path through the resolver, so existing SWR keys like `/api/health` and `/debug/overview` automatically hit the right base.
