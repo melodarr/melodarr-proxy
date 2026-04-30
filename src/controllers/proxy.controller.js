@@ -1,7 +1,6 @@
 const metrics = require('../metrics')
 const tracer = require('../tracer')
 const cache = require('../cache')
-const upstreamService = require('../services/upstream.service')
 const { aggregateArtist } = require('../providers')
 const { discoverArtists, findSongAlbums } = require('../providers/artist-discovery')
 const { rankResults } = require('../ranking/engine')

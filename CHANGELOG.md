@@ -2,6 +2,11 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.23 - 2026-04-30
+
+- Added `service` and `version` fields to `/api/health` and `/api/ready` payloads so Melodash and other clients can identify the proxy without reading separate metadata. `service` reads from `APP_NAME` (default `melodarr-proxy`), `version` from `APP_VERSION`.
+- Fixed `handleSearch` controller tests that broke after the Lidarr-compatibility rewrite (`ec19ef4`) swapped `upstreamService.search` for `discoverArtists` and updated the missing-query error message. Tests now mock `discoverArtists` and assert the new error wording.
+
 ## v0.3.21 - 2026-04-29
 
 - Achieved 94%+ test coverage for proxy.controller by adding comprehensive unit tests with module mocking.

@@ -12,6 +12,8 @@ function buildLivenessPayload () {
 
   return {
     status: memoryStatus === 'critical' ? 'down' : 'ok',
+    service: process.env.APP_NAME || 'melodarr-proxy',
+    version: process.env.APP_VERSION || 'unknown',
     instanceId: process.env.INSTANCE_ID,
     proxy: metrics.state.isRunning ? 'running' : 'stopped',
     memory: { status: memoryStatus, usageMb: memoryMb },
@@ -47,6 +49,8 @@ function buildHealthPayload () {
 
   return {
     status,
+    service: process.env.APP_NAME || 'melodarr-proxy',
+    version: process.env.APP_VERSION || 'unknown',
     instanceId: process.env.INSTANCE_ID,
     proxy: proxyStatus,
     upstream: upstream.status,

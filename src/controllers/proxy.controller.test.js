@@ -295,7 +295,7 @@ test('handleSearch requires a query parameter', async () => {
   const res = makeResponse()
   await controller.handleSearch({ query: {} }, res)
   assert.equal(res.statusCode, 400)
-  assert.equal(res.body.error, 'Missing query parameter "q"')
+  assert.equal(res.body.error, 'Missing query parameter "q" or "query"')
 })
 
 test('handleSearch returns cached response', async () => {
@@ -313,24 +313,24 @@ test('handleSearch returns cached response', async () => {
 })
 
 test('handleSearch fetches upstream, caches, and returns', async () => {
-  let searchCalled = false
+  let discoverCalled = false
   const { controller, cacheStore } = loadController({
-    search: async (q) => {
-      searchCalled = true
+    discoverArtists: async () => {
+      discoverCalled = true
       return { albums: [{ provider: 'test', name: 'Hit' }] }
     }
   })
   const res = makeResponse()
   await controller.handleSearch({ query: { q: 'Test Song' } }, res)
   assert.equal(res.statusCode, 200)
-  assert.ok(searchCalled)
+  assert.ok(discoverCalled)
   assert.equal(res.body.albums[0].name, 'Hit')
   assert.ok(cacheStore.has('search:test song'))
 })
 
 test('handleSearch handles upstream error', async () => {
   const { controller } = loadController({
-    search: async () => { throw new Error('Upstream failed') }
+    discoverArtists: async () => { throw new Error('Upstream failed') }
   })
   const res = makeResponse()
   await controller.handleSearch({ query: { q: 'fail' }, headers: {} }, res)
