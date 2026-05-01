@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const cache = require('./cache')
+const requestContext = require('./utils/request-context')
 
 const MAX_TRACES = 100 // for memory fallback
 const TRACE_TTL = 30 * 86400 // 30 days retention configurable via TTL
@@ -8,8 +9,12 @@ let traceBuffer = []
 const BATCH_SIZE = 50
 
 function createTrace (query) {
+  // Unify trace id with the inbound requestId when set so logs, ring buffer,
+  // tracer, and HTTP response header all share the same identifier. Outside
+  // an inbound scope (debug-driven trace creation), fall back to a UUID.
+  const requestId = requestContext.getRequestId()
   return {
-    id: crypto.randomUUID(),
+    id: requestId || crypto.randomUUID(),
     query,
     steps: [],
     startTime: Date.now(),

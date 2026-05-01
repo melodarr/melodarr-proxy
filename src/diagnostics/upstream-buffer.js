@@ -15,11 +15,14 @@ function record (entry) {
   while (state.entries.length > state.maxSize) state.entries.shift()
 }
 
-function query ({ provider, limit } = {}) {
+function query ({ provider, requestId, limit } = {}) {
   let filtered = state.entries
   if (provider) {
     const target = String(provider).toLowerCase()
     filtered = filtered.filter((e) => e.provider === target)
+  }
+  if (requestId) {
+    filtered = filtered.filter((e) => e.requestId === requestId)
   }
   const filteredCount = filtered.length
   const reversed = filtered.slice().reverse()

@@ -345,6 +345,13 @@ const openApiDocument = {
             description: 'Filter to a single provider (e.g. musicbrainz). Case-insensitive.'
           },
           {
+            name: 'requestId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter to a single request id. Use this to pull every attempt across every provider for one inbound request.'
+          },
+          {
             name: 'limit',
             in: 'query',
             required: false,

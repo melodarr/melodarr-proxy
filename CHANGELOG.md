@@ -2,6 +2,16 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.34 - 2026-05-01
+
+- Added per-request correlation IDs via `AsyncLocalStorage`. The same id flows through providers, retries, logs, the tracer, and the `/debug/upstream` ring buffer. Operators can now answer "what happened during *this* request?" with a single id.
+- New middleware mounted as the first handler: honors a client-supplied `X-Request-Id` header (validated against `^[A-Za-z0-9_-]{1,64}$` — hex / UUID / base64url alphabets, max 64 chars). Invalid or missing values are replaced with a fresh 8-byte hex id; valid values are passed through unchanged. The id is reflected on every response as `X-Request-Id`.
+- Logger auto-injects `requestId` into every log line emitted within an HTTP request scope. No call-site changes — wrapped once in `formatMessage`. Logs emitted outside any request (boot, scheduled jobs, monitor) omit the field.
+- The tracer's `createTrace` now consumes the inbound id when set (fallback to UUID), so `requestId == tracerId == ringBufferId == logId == response X-Request-Id` — single source of truth.
+- `musicBrainzGet` reads the inbound id first, falling back to its own per-call generated id for direct callers (boot probe, monitor, diagnose endpoint). Across multiple providers + retries within one inbound request, all attempts share the same id.
+- `/debug/upstream` accepts a new `?requestId=<id>` filter to pull every attempt across every provider for one request.
+- No behavioral change to retries, caching, or rate limiting.
+
 ## v0.3.33 - 2026-05-01
 
 - Honor `Retry-After` headers on 429 and 503 responses. Both delta-seconds (`Retry-After: 30`) and HTTP-date (`Retry-After: Wed, 01 May 2026 08:00:00 GMT`) formats are accepted; past dates and malformed values fall back to jittered exponential backoff. The honored value is clamped to `UPSTREAM_RETRY_MAX_MS` (default 30s) to prevent worker threads parking indefinitely. Required by Cloudflare and other CDNs that emit 503 with Retry-After.

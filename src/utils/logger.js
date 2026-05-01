@@ -1,3 +1,5 @@
+const requestContext = require('./request-context')
+
 const formatMessage = (level, message, meta = {}) => {
   if (meta instanceof Error) {
     meta = {
@@ -17,9 +19,15 @@ const formatMessage = (level, message, meta = {}) => {
     }
   }
 
+  // Auto-inject the inbound requestId from ALS so every log line emitted
+  // within an HTTP request scope is greppable by request. Outside an ALS
+  // scope (boot, monitor, scheduled jobs) the field is omitted.
+  const requestId = requestContext.getRequestId()
+
   const logObj = {
     timestamp: new Date().toISOString(),
     level: level.toUpperCase(),
+    ...(requestId ? { requestId } : {}),
     message,
     ...meta
   }

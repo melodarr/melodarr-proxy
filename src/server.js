@@ -25,12 +25,17 @@ if (process.argv.includes('--reset-password')) {
 }
 
 const metricsMiddleware = require('./middleware/metrics.middleware')
+const requestIdMiddleware = require('./middleware/requestId.middleware')
 const apiRoutes = require('./routes/api.routes')
 const debugRoutes = require('./routes/debug.routes')
 const openApiDocument = require('./openapi')
 
 function createApp () {
   const app = express()
+
+  // RequestId / ALS scope must be first so every downstream middleware,
+  // controller, and async hop sees the correlation id.
+  app.use(requestIdMiddleware)
 
   // Middleware
   // Custom CORS middleware

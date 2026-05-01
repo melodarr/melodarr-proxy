@@ -83,6 +83,28 @@ test('upstream-buffer.record + query', async (t) => {
     assert.ok(result.entries.every((e) => e.provider === 'musicbrainz'))
     assert.strictEqual(result.filteredCount, 5)
   })
+
+  await t.test('filters by requestId across providers', () => {
+    buffer.record(makeEntry({ provider: 'musicbrainz', requestId: 'req-A', attempt: 1 }))
+    buffer.record(makeEntry({ provider: 'musicbrainz', requestId: 'req-A', attempt: 2 }))
+    buffer.record(makeEntry({ provider: 'discogs', requestId: 'req-A', attempt: 1 }))
+    buffer.record(makeEntry({ provider: 'musicbrainz', requestId: 'req-B', attempt: 1 }))
+    const result = buffer.query({ requestId: 'req-A' })
+    assert.strictEqual(result.entries.length, 3)
+    assert.ok(result.entries.every((e) => e.requestId === 'req-A'))
+    // Should pull across providers (mb + discogs both included for req-A).
+    const providers = new Set(result.entries.map((e) => e.provider))
+    assert.ok(providers.has('musicbrainz'))
+    assert.ok(providers.has('discogs'))
+  })
+
+  await t.test('requestId + provider intersect', () => {
+    buffer.record(makeEntry({ provider: 'musicbrainz', requestId: 'req-X', attempt: 1 }))
+    buffer.record(makeEntry({ provider: 'discogs', requestId: 'req-X', attempt: 1 }))
+    const result = buffer.query({ provider: 'musicbrainz', requestId: 'req-X' })
+    assert.strictEqual(result.entries.length, 1)
+    assert.strictEqual(result.entries[0].provider, 'musicbrainz')
+  })
 })
 
 test('upstream-buffer.classifyFailedStep', async (t) => {

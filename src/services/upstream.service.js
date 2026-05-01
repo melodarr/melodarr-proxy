@@ -7,6 +7,7 @@ const { URL } = require('url')
 const { getConfigValue } = require('../settings/store')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { nextRetryDelay, parseRetryAfter } = require('./retry-policy')
+const requestContext = require('../utils/request-context')
 
 const musicBrainzAgents = new Map()
 
@@ -159,9 +160,11 @@ class UpstreamService {
     let hostname = null
     try { hostname = new URL(baseUrl).hostname } catch (_e) {}
 
-    // One requestId per musicBrainzGet call — shared across all retry
-    // attempts so operators can group attempts in /debug/upstream by request.
-    const requestId = crypto.randomBytes(8).toString('hex')
+    // Use the inbound requestId from ALS when this call is driven by an
+    // HTTP request, so all providers + retries within one inbound request
+    // share the same id. Direct callers (boot probe, monitor, diagnose) are
+    // outside the ALS scope and get a fresh id locally.
+    const requestId = requestContext.getRequestId() || crypto.randomBytes(8).toString('hex')
 
     const logger = require('../utils/logger')
     let lastError

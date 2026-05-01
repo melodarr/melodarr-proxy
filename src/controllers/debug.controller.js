@@ -516,6 +516,7 @@ async function testProviderConfig (req, res) {
 
 function getUpstreamHistory (req, res) {
   const provider = req.query.provider ? String(req.query.provider).trim().toLowerCase() : undefined
+  const requestId = req.query.requestId ? String(req.query.requestId).trim() : undefined
 
   let limit
   if (req.query.limit !== undefined) {
@@ -523,7 +524,7 @@ function getUpstreamHistory (req, res) {
     if (Number.isFinite(n) && n > 0) limit = Math.floor(n)
   }
 
-  const result = upstreamBuffer.query({ provider, limit })
+  const result = upstreamBuffer.query({ provider, requestId, limit })
   res.json(result)
 }
 
