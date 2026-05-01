@@ -4,10 +4,9 @@ All notable changes to Melodarr Proxy will be documented here.
 
 ## v0.3.41 - 2026-05-01
 
-- **`scripts/site-tests.sh` — ephemeral admin-generated API key path.** When `API_KEY` is unset and the operator opts in to a new wizard prompt ("Generate ephemeral key with admin password?"), the harness now: (1) prompts for the admin password, (2) `POST /api/settings/login` to obtain an auth cookie inside the LXC, (3) `POST /api/admin/keys/create` with name `site-tests-<timestamp>` and a generous 600 req/min quota, (4) captures the plaintext key from the response (proxy returns it once; `settings.json` only stores an scrypt hash), (5) uses it for the run, and (6) re-logs in and `DELETE /api/admin/keys/:id` on `EXIT` trap so nothing persists. The cookie jar lives only inside the LXC's `/tmp` and is `trap`-deleted in the same `pct exec` block.
-- Backward compatible: every existing usage path (env var, wizard with manual key, wizard blank for unauthed, `INTERACTIVE=0`) is unchanged. The new code path only fires when `API_KEY` is empty AND the operator answers `y` to the new explicit prompt. CI runs (`INTERACTIVE=0`) skip the prompt and proceed unauthed as before.
-- Honest design note: the spec for this work originally proposed reading the API key from `settings.json`, which is structurally impossible — the proxy stores `apiKeys: [{ id, name, salt, hash, ... }]` with `hash = scryptSync(plaintext, salt, 64)` and discards the plaintext. Auto-discovery from disk would require reversing scrypt. The ephemeral generate-and-revoke approach honors the security model.
-- No application code changes. Only `scripts/site-tests.sh` and the `package.json` / `CHANGELOG.md` release plumbing.
+- **`scripts/site-tests.sh` — simplified API key handling.** When `API_KEY` is not set via env, the wizard now prompts once for it. If it remains empty after the prompt, the script aborts with a clear `ERROR: API key is required` message instead of silently running unauthed and failing every auth-gated test with 401. CI (`INTERACTIVE=0`) still relies on the env var.
+- Removed the in-progress ephemeral admin-generated key path that briefly landed on `main` — the proxy uses single-factor `x-api-key` header auth, so the simpler "set-or-prompt" handling is sufficient. No session cookie, no admin login, no cleanup trap, no calls to `/api/settings/login` or `/api/admin/keys/create` from the harness.
+- No application code changes. Only `scripts/site-tests.sh` + release plumbing.
 
 ## v0.3.40 - 2026-05-01
 
