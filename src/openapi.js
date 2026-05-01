@@ -378,6 +378,50 @@ const openApiDocument = {
         }
       }
     },
+    '/api/settings/runtime/{key}': {
+      delete: {
+        tags: ['Settings'],
+        summary: 'Clear a saved runtime override',
+        description: 'Removes a saved runtime override so the value falls back to the env var (if set) or the built-in default. Use when an env var is being shadowed by a previously-saved Settings UI value. The PATCH /api/settings endpoint also accepts `{ "key": null }` to clear an override in batch.',
+        operationId: 'clearRuntimeSetting',
+        parameters: [
+          {
+            name: 'key',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Editable runtime key (e.g. metadataProviders, providerPriority).'
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Override cleared (or no override existed)',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    ok: { type: 'boolean' },
+                    key: { type: 'string' },
+                    cleared: { type: 'boolean', description: 'true if a saved value was removed; false if no override existed.' },
+                    newValue: {},
+                    newSource: { type: 'string', enum: ['env', 'default'] }
+                  }
+                }
+              }
+            }
+          },
+          404: {
+            description: 'Unknown runtime key',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' }
+              }
+            }
+          }
+        }
+      }
+    },
     '/api/update/status': {
       get: {
         tags: ['Updates'],

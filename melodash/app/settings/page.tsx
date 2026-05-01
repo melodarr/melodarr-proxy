@@ -409,6 +409,27 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleResetProvidersToEnv() {
+    setMessage(null);
+    setSaving(true);
+    try {
+      // PATCH with null clears the saved override; the proxy then falls back
+      // to the env var (or built-in default) for these keys.
+      await fetchJson("/api/settings", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ metadataProviders: null, providerPriority: null }),
+      });
+      setMessage({ type: "success", text: "Provider settings reset to env defaults." });
+      await mutateSettings();
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Reset failed." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleGenerateName() {
     setGeneratingName(true);
     setMessage(null);
@@ -758,6 +779,22 @@ export default function SettingsPage() {
                 </Section>
 
                 <Section title="Providers" icon={<Database className="h-5 w-5" />}>
+                  {(config.metadataProviders?.source === "saved" || config.providerPriority?.source === "saved") && (
+                    <div className="mb-4 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm md:flex-row md:items-center md:justify-between">
+                      <div className="text-amber-200">
+                        Provider settings are saved overrides. Env vars (<code>METADATA_PROVIDERS</code>, <code>PROVIDER_PRIORITY</code>) are being shadowed.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetProvidersToEnv}
+                        disabled={saving}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-100 transition-colors hover:bg-amber-500/20 disabled:opacity-60"
+                      >
+                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        Reset to env defaults
+                      </button>
+                    </div>
+                  )}
                   <div className="mb-5 flex flex-col gap-3 rounded-lg border border-border/60 bg-background/40 p-4 md:flex-row md:items-end md:justify-between">
                     <label className="block md:min-w-80">
                       <span className="mb-2 block text-sm font-medium text-gray-300">Provider test artist</span>

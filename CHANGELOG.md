@@ -2,6 +2,15 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.31 - 2026-05-01
+
+- Added runtime override reset (Option C from the env-shadowing investigation). The proxy keeps its `saved > env > fallback` precedence — Settings UI edits still win — but operators now have an escape hatch when a previously-saved value is shadowing an env var they've changed.
+- New endpoint: `DELETE /api/settings/runtime/{key}` (auth-gated). Removes a saved override so `getConfigValue(key)` falls back to env (or built-in default). Returns `{ ok, key, cleared, newValue, newSource }`.
+- `PATCH /api/settings` now accepts `null` as a clear-saved-override sentinel (e.g. `{ "metadataProviders": null }`), and the response includes a `cleared` map alongside `applied` and `skipped`.
+- Boot-time warning: at startup, the server logs a structured WARN per saved runtime value that differs from its env var. The log line includes `key`, `envName`, `savedValue`, `envValue`, and a `hint` pointing at the DELETE endpoint and the null-PATCH form.
+- Melodash settings page: when `metadataProviders` or `providerPriority` has `source: 'saved'`, the Providers section now shows an amber callout with a "Reset to env defaults" button that PATCHes both keys to `null`. No more manual `data/settings.json` edits to recover from a UI override.
+- No breaking changes. Existing PATCH callers that didn't use `null` continue to work; the response just gains an empty `cleared: {}`.
+
 ## v0.3.30 - 2026-05-01
 
 - Added `GET /debug/diagnose?provider=musicbrainz`: a one-shot diagnostic that runs DNS resolution → TCP connect → TLS handshake → HTTP GET → JSON parse against the configured MusicBrainz base URL and returns a structured payload showing exactly where the pipeline failed (`failedStep`: `dns | tcp | tls | http | parse`). Surfaces resolved A/AAAA records, the address Node actually selected, the configured `musicbrainzIpFamily`, per-phase timings (`dns/tcp/tls/http/total`), HTTP status, response headers, and any rate-limit headers (`Retry-After`, `X-RateLimit-*`). Uses a fresh `agent: false` connection so handshake times are always measured, and works even when MusicBrainz is disabled in `METADATA_PROVIDERS`. Read-only; does not touch the upstream monitor or rate-limit queue.

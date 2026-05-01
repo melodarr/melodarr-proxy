@@ -57,6 +57,70 @@ test('Store Module', async (t) => {
     assert.strictEqual(store.getConfigValue('appVersion'), '0.4.0')
   })
 
+  await t.test('updateRuntimeConfig with null clears the saved override', () => {
+    // First save a value.
+    store.updateRuntimeConfig({ metadataProviders: 'musicbrainz,itunes,theaudiodb' })
+    assert.strictEqual(store.getConfigValue('metadataProviders'), 'musicbrainz,itunes,theaudiodb')
+
+    // Then clear it via null sentinel.
+    const result = store.updateRuntimeConfig({ metadataProviders: null })
+    assert.deepStrictEqual(result.cleared, { metadataProviders: true })
+    assert.deepStrictEqual(result.applied, {})
+
+    // After clearing, getConfigValue falls back to env or built-in fallback.
+    delete process.env.METADATA_PROVIDERS
+    assert.strictEqual(store.getConfigValue('metadataProviders'), 'musicbrainz,itunes')
+  })
+
+  await t.test('clearRuntimeOverride removes a saved value and reports new source', () => {
+    store.updateRuntimeConfig({ metadataProviders: 'discogs,itunes' })
+    assert.strictEqual(store.getConfigValue('metadataProviders'), 'discogs,itunes')
+
+    process.env.METADATA_PROVIDERS = 'itunes,theaudiodb'
+    const result = store.clearRuntimeOverride('metadataProviders')
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(result.cleared, true)
+    assert.strictEqual(result.newValue, 'itunes,theaudiodb')
+    assert.strictEqual(result.newSource, 'env')
+    assert.strictEqual(store.getConfigValue('metadataProviders'), 'itunes,theaudiodb')
+    delete process.env.METADATA_PROVIDERS
+  })
+
+  await t.test('clearRuntimeOverride is a no-op when no override exists', () => {
+    // Already cleared by the previous test.
+    const result = store.clearRuntimeOverride('metadataProviders')
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(result.cleared, false)
+  })
+
+  await t.test('clearRuntimeOverride rejects unknown keys', () => {
+    const result = store.clearRuntimeOverride('totallyMadeUpKey')
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.reason, 'unknown_key')
+  })
+
+  await t.test('getEnvShadowedKeys reports only when saved differs from env', () => {
+    // Saved differs from env → reported.
+    store.updateRuntimeConfig({ metadataProviders: 'musicbrainz,theaudiodb,itunes,discogs' })
+    process.env.METADATA_PROVIDERS = 'itunes,theaudiodb,discogs'
+    const shadowed = store.getEnvShadowedKeys()
+    const entry = shadowed.find((s) => s.key === 'metadataProviders')
+    assert.ok(entry, 'expected metadataProviders to be reported as shadowed')
+    assert.strictEqual(entry.envName, 'METADATA_PROVIDERS')
+    assert.strictEqual(entry.savedValue, 'musicbrainz,theaudiodb,itunes,discogs')
+    assert.strictEqual(entry.envValue, 'itunes,theaudiodb,discogs')
+
+    // Saved matches env → not reported.
+    store.updateRuntimeConfig({ metadataProviders: 'itunes,theaudiodb,discogs' })
+    const shadowed2 = store.getEnvShadowedKeys()
+    assert.strictEqual(shadowed2.find((s) => s.key === 'metadataProviders'), undefined)
+
+    // Env unset → not reported (saved is just the default).
+    delete process.env.METADATA_PROVIDERS
+    const shadowed3 = store.getEnvShadowedKeys()
+    assert.strictEqual(shadowed3.find((s) => s.key === 'metadataProviders'), undefined)
+  })
+
   await t.test('API Keys management', () => {
     const created = store.createApiKey({ name: 'Test Key', quotaPerMinute: 100 })
     assert.ok(created.id)

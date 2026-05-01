@@ -8,6 +8,7 @@ const { startProxy, stopProxy, clearCache, triggerSync } = require('../controlle
 const { applyUpdate, getUpdateStatus } = require('../controllers/update.controller')
 const { generateKey, getAllKeys, revokeKey } = require('../controllers/admin.controller')
 const {
+  clearRuntimeSetting,
   generateName,
   getNameHistory,
   getSettings,
@@ -37,6 +38,7 @@ router.get('/stats', requireSettingsAuth, getStats)
 router.get('/stats/history', requireSettingsAuth, getHistory)
 router.get('/settings', requireSettingsAuth, getSettings)
 router.patch('/settings', requireSettingsAuth, updateSettings)
+router.delete('/settings/runtime/:key', requireSettingsAuth, clearRuntimeSetting)
 router.post('/settings/generate-name', requireSettingsAuth, generateName)
 router.post('/settings/providers/test', requireSettingsAuth, testSettingsProvider)
 router.get('/settings/name-history', requireSettingsAuth, getNameHistory)

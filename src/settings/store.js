@@ -320,6 +320,7 @@ function getConfigValue (key) {
 
 function updateRuntimeConfig (updates) {
   const applied = {}
+  const cleared = {}
   const skipped = {}
 
   for (const [key, value] of Object.entries(updates)) {
@@ -327,6 +328,13 @@ function updateRuntimeConfig (updates) {
 
     if (!spec) {
       skipped[key] = 'Unknown setting'
+      continue
+    }
+
+    // null is the explicit clear-saved-override sentinel. The saved value is
+    // removed and getConfigValue falls back to env (or built-in fallback).
+    if (value === null) {
+      cleared[key] = true
       continue
     }
 
@@ -340,24 +348,87 @@ function updateRuntimeConfig (updates) {
     applied[key] = coerced
   }
 
-  if (Object.keys(applied).length > 0) {
-    saveSettings({
-      ...settings,
-      runtime: { ...settings.runtime, ...applied }
-    })
+  const hasApplied = Object.keys(applied).length > 0
+  const hasCleared = Object.keys(cleared).length > 0
+
+  if (hasApplied || hasCleared) {
+    const nextRuntime = { ...settings.runtime, ...applied }
+    for (const key of Object.keys(cleared)) {
+      delete nextRuntime[key]
+    }
+    saveSettings({ ...settings, runtime: nextRuntime })
   }
 
-  return { applied, skipped }
+  return { applied, cleared, skipped }
+}
+
+function clearRuntimeOverride (key) {
+  const spec = EDITABLE_KEYS[key]
+
+  if (!spec) {
+    return { ok: false, reason: 'unknown_key' }
+  }
+
+  reloadSettings()
+
+  const hadOverride = settings.runtime?.[key] !== undefined
+  if (!hadOverride) {
+    return {
+      ok: true,
+      cleared: false,
+      key,
+      newValue: getConfigValue(key),
+      newSource: process.env[spec.env] !== undefined && process.env[spec.env] !== '' ? 'env' : 'default'
+    }
+  }
+
+  const nextRuntime = { ...settings.runtime }
+  delete nextRuntime[key]
+  saveSettings({ ...settings, runtime: nextRuntime })
+
+  return {
+    ok: true,
+    cleared: true,
+    key,
+    newValue: getConfigValue(key),
+    newSource: process.env[spec.env] !== undefined && process.env[spec.env] !== '' ? 'env' : 'default'
+  }
+}
+
+// Returns the list of editable keys whose saved runtime override differs from
+// the current env value. Used at boot to log a warning so operators see at a
+// glance which settings their env vars are NOT controlling.
+function getEnvShadowedKeys () {
+  reloadSettings()
+  const out = []
+
+  for (const [key, spec] of Object.entries(EDITABLE_KEYS)) {
+    const saved = settings.runtime?.[key]
+    if (saved === undefined) continue
+
+    const envRaw = process.env[spec.env]
+    const envValue = envRaw === undefined || envRaw === '' ? undefined : (spec.type === 'number' ? Number(envRaw) : envRaw)
+
+    // Only report when env is set AND differs from saved. If env is unset,
+    // saved is just acting as a default — nothing surprising to warn about.
+    if (envValue !== undefined && envValue !== saved) {
+      out.push({ key, savedValue: saved, envValue, envName: spec.env })
+    }
+  }
+
+  return out
 }
 
 module.exports = {
   bootstrapAdminPassword,
   canBootstrapAdmin,
   checkApiKey,
+  clearRuntimeOverride,
   createApiKey,
   deleteApiKey,
   generateRandomName,
   getConfigValue,
+  getEnvShadowedKeys,
   getRuntimeConfig,
   getSessionSecret,
   hasAdminPassword,

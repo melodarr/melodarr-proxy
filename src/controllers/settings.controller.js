@@ -2,6 +2,7 @@ const crypto = require('crypto')
 const {
   bootstrapAdminPassword,
   canBootstrapAdmin,
+  clearRuntimeOverride,
   generateRandomName,
   getRuntimeConfig,
   getSessionSecret,
@@ -189,7 +190,33 @@ function updateSettings (req, res) {
   return res.json({
     ok: true,
     applied: result.applied,
+    cleared: result.cleared || {},
     skipped: result.skipped
+  })
+}
+
+function clearRuntimeSetting (req, res) {
+  const key = String(req.params?.key || '').trim()
+
+  if (!key) {
+    return res.status(400).json({ error: 'Setting key is required' })
+  }
+
+  const result = clearRuntimeOverride(key)
+
+  if (!result.ok) {
+    if (result.reason === 'unknown_key') {
+      return res.status(404).json({ error: `Unknown setting: ${key}` })
+    }
+    return res.status(400).json({ error: 'Could not clear setting' })
+  }
+
+  return res.json({
+    ok: true,
+    key: result.key,
+    cleared: result.cleared,
+    newValue: result.newValue,
+    newSource: result.newSource
   })
 }
 
@@ -234,6 +261,7 @@ async function testSettingsProvider (req, res) {
 }
 
 module.exports = {
+  clearRuntimeSetting,
   generateName,
   getNameHistory,
   getSettings,

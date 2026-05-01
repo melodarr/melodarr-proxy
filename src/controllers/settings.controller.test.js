@@ -46,7 +46,8 @@ function loadController ({
   verifyPassword = () => false,
   bootstrapAdminPassword = () => {},
   getRuntimeConfig = () => ({}),
-  updateRuntimeConfig = () => ({ applied: {}, skipped: {} }),
+  updateRuntimeConfig = () => ({ applied: {}, cleared: {}, skipped: {} }),
+  clearRuntimeOverride = () => ({ ok: true, cleared: true, key: 'unspecified', newValue: null, newSource: 'default' }),
   generateRandomName = () => 'Test Name 42'
 } = {}) {
   const controllerPath = require.resolve('./settings.controller')
@@ -67,6 +68,7 @@ function loadController ({
       bootstrapAdminPassword,
       getRuntimeConfig,
       updateRuntimeConfig,
+      clearRuntimeOverride,
       generateRandomName
     }
   }
@@ -258,4 +260,66 @@ test('getNameHistory returns previously generated names', () => {
   c.getNameHistory({}, res)
   assert.ok(Array.isArray(res.body))
   assert.ok(res.body.includes('Silver Echo 7'))
+})
+
+// ── clearRuntimeSetting ───────────────────────────────────────────
+
+test('clearRuntimeSetting returns 400 when key is missing', () => {
+  const c = loadController()
+  const res = makeRes()
+  c.clearRuntimeSetting({ params: {} }, res)
+  assert.equal(res.statusCode, 400)
+})
+
+test('clearRuntimeSetting returns 404 for unknown key', () => {
+  const c = loadController({
+    clearRuntimeOverride: () => ({ ok: false, reason: 'unknown_key' })
+  })
+  const res = makeRes()
+  c.clearRuntimeSetting({ params: { key: 'bogus' } }, res)
+  assert.equal(res.statusCode, 404)
+})
+
+test('clearRuntimeSetting returns ok true with cleared=true and new value/source', () => {
+  let receivedKey
+  const c = loadController({
+    clearRuntimeOverride: (key) => {
+      receivedKey = key
+      return { ok: true, cleared: true, key, newValue: 'itunes,theaudiodb,discogs', newSource: 'env' }
+    }
+  })
+  const res = makeRes()
+  c.clearRuntimeSetting({ params: { key: 'metadataProviders' } }, res)
+  assert.equal(receivedKey, 'metadataProviders')
+  assert.equal(res.body.ok, true)
+  assert.equal(res.body.cleared, true)
+  assert.equal(res.body.newValue, 'itunes,theaudiodb,discogs')
+  assert.equal(res.body.newSource, 'env')
+})
+
+test('clearRuntimeSetting returns cleared=false when no override existed', () => {
+  const c = loadController({
+    clearRuntimeOverride: (key) => ({ ok: true, cleared: false, key, newValue: 'fallback', newSource: 'default' })
+  })
+  const res = makeRes()
+  c.clearRuntimeSetting({ params: { key: 'cacheTtlSeconds' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.cleared, false)
+})
+
+// ── updateSettings null-clear ─────────────────────────────────────
+
+test('updateSettings exposes cleared map alongside applied', () => {
+  const c = loadController({
+    updateRuntimeConfig: () => ({
+      applied: { appName: 'New Name' },
+      cleared: { metadataProviders: true },
+      skipped: {}
+    })
+  })
+  const res = makeRes()
+  c.updateSettings({ body: { appName: 'New Name', metadataProviders: null } }, res)
+  assert.equal(res.body.ok, true)
+  assert.deepEqual(res.body.applied, { appName: 'New Name' })
+  assert.deepEqual(res.body.cleared, { metadataProviders: true })
 })

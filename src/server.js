@@ -116,6 +116,24 @@ const PORT = process.env.PORT || 3000
 async function boot (appInstance) {
   logger.info('Starting boot sequence...')
 
+  // Surface saved runtime overrides that are shadowing different env values.
+  // Saved-wins precedence is intentional, but operators who change an env var
+  // and don't see the new value need to know a saved override is in the way.
+  try {
+    const { getEnvShadowedKeys } = require('./settings/store')
+    for (const entry of getEnvShadowedKeys()) {
+      logger.warn('Saved runtime override is shadowing env variable', {
+        key: entry.key,
+        envName: entry.envName,
+        savedValue: entry.savedValue,
+        envValue: entry.envValue,
+        hint: `DELETE /api/settings/runtime/${entry.key} (or PATCH /api/settings with { "${entry.key}": null }) to clear the saved override and pick up the env value.`
+      })
+    }
+  } catch (err) {
+    logger.warn('Failed to check for shadowed env settings', { error: err.message })
+  }
+
   // 1. Validate Cache Connection
   try {
     const isCacheConnected = await cacheLayer.isReady()
