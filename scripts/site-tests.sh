@@ -365,12 +365,18 @@ remote_get '/api/v1/artist/discover?q=junkyards' \
 # wrapped as {"artist":{...}} or {"album":{...}}. A flat candidate object
 # slips past the 200-status check above but breaks Lidarr with "Invalid
 # response received from LidarrAPI" — verified by the fact that this exact
-# error blocked artist-add for an entire release cycle. Use a query that
-# returns candidates even when MB is unreachable (Radiohead is on iTunes /
-# Discogs / TheAudioDB) so the wrap is exercised regardless of MB health.
+# error blocked artist-add for an entire release cycle.
+#
+# v0.3.38: query rotates daily via testArtists.getNextArtist() so the
+# harness exercises a different artist's data path each day, surfacing
+# provider-specific failures that a single-artist test would miss.
 echo
 echo "## SkyHook search-shape conformance"
-SHAPE_BODY=$(remote_get '/api/search?type=all&query=Radiohead')
+SHAPE_QUERY=$(node -e "console.log(require('./src/utils/testArtists').getNextArtist())" 2>/dev/null || echo "Radiohead")
+echo "Testing artist: $SHAPE_QUERY"
+# URL-encode spaces in the artist name (some pool entries are multi-word).
+SHAPE_QUERY_ENC=$(echo "$SHAPE_QUERY" | sed 's/ /%20/g')
+SHAPE_BODY=$(remote_get "/api/search?type=all&query=$SHAPE_QUERY_ENC")
 SHAPE_REPORT=$(echo "$SHAPE_BODY" | jq '
   if type == "array" then
     {
@@ -390,9 +396,9 @@ SHAPE_INVALID=$(echo "$SHAPE_REPORT" | jq -r '.invalid')
 # Three independent checks so failure mode is unambiguous in the summary:
 # (a) candidates exist at all, (b) every item is wrapped, (c) no flat leak.
 if [ "$SHAPE_TOTAL" -gt 0 ] 2>/dev/null; then
-  record_pass "/api/search returned $SHAPE_TOTAL candidates for Radiohead"
+  record_pass "/api/search returned $SHAPE_TOTAL candidates for $SHAPE_QUERY"
 else
-  record_fail "/api/search returned 0 candidates for Radiohead — cannot validate wrap"
+  record_fail "/api/search returned 0 candidates for $SHAPE_QUERY — cannot validate wrap"
 fi
 
 if [ "$SHAPE_TOTAL" -gt 0 ] 2>/dev/null && [ "$SHAPE_WRAPPED" = "$SHAPE_TOTAL" ]; then

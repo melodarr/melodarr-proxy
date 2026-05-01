@@ -5,6 +5,7 @@ const { getConfigValue } = require('../settings/store')
 const logger = require('../utils/logger')
 const theaudiodbProvider = require('./theaudiodb.provider')
 const discogsProvider = require('./discogs.provider')
+const { safeProviderCall } = require('./safeProviderCall')
 
 const FALLBACK_ORDER = ['musicbrainz', 'itunes', 'theaudiodb', 'discogs']
 
@@ -62,6 +63,11 @@ function getEnabledProviders () {
 // the next provider is attempted; if all enabled providers fail the caller
 // gets `[]` rather than a thrown error — the controller decides how to surface
 // the partial state to the client.
+//
+// v0.3.38: every call goes through safeProviderCall, so circuit-breaker
+// state and provider metrics are kept up to date here too. The fallback
+// ORDER is preserved (per finalized rule 6 — operator-configured priority,
+// not adaptive score), but disabled providers are skipped automatically.
 async function tryProvidersInOrder (kind, query, attempts) {
   const enabled = getEnabledProviders()
   const errors = []
@@ -71,7 +77,9 @@ async function tryProvidersInOrder (kind, query, attempts) {
     const fn = attempts[name]
     if (!fn) continue
     try {
-      const result = await fn()
+      const result = await safeProviderCall(name, fn, query)
+      // null = circuit breaker open → skip silently and try next provider.
+      if (result === null) continue
       if (Array.isArray(result) && result.length > 0) {
         return result
       }

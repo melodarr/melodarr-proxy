@@ -29,7 +29,10 @@ BASE_URL="${BASE_URL:-}"
 API_KEY="${API_KEY:-}"
 LOG_FILE="${LOG_FILE:-/var/log/melodarr-mb-recovery.log}"
 TIMEOUT="${TIMEOUT:-10}"
-LOOKUP_TERM="${LOOKUP_TERM:-radiohead}"
+# v0.3.38: rotating artist pool. If the source tree is reachable from
+# CWD, pick today's artist; otherwise fall back to "radiohead" so the
+# script still runs in environments without the proxy source mounted.
+LOOKUP_TERM="${LOOKUP_TERM:-$(node -e "console.log(require('./src/utils/testArtists').getNextArtist())" 2>/dev/null || echo radiohead)}"
 
 TS_HUMAN="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 TS_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

@@ -2,6 +2,8 @@ const { getConfigValue } = require('../settings/store')
 const metrics = require('../metrics')
 const logger = require('../utils/logger')
 const { getProviderScore } = require('./scoring')
+const { safeProviderCall } = require('./safeProviderCall')
+const providerMetrics = require('../health/providerMetrics')
 
 const providers = {
   musicbrainz: require('./musicbrainz.provider'),
@@ -30,14 +32,31 @@ async function aggregateArtist (term) {
     throw new Error('No active metadata providers configured')
   }
 
+  // v0.3.38: order the parallel fan-out by adaptive score so faster +
+  // more-reliable providers get scheduled first. Order doesn't change
+  // the parallel execution, but it documents intent and matches how the
+  // merge step downstream walks validOutcomes.
+  const orderedProviders = providerMetrics.sortByScore(activeProviders)
+
   const results = await Promise.allSettled(
-    activeProviders.map(async provider => {
+    orderedProviders.map(async provider => {
       const pStartTime = Date.now()
       try {
-        const result = await provider.searchArtist(term)
+        // v0.3.38: safeProviderCall layers circuit-breaker skip + shape
+        // validation + provider-health/metrics recording around the raw
+        // provider call. Returns null when the breaker is open; we
+        // surface that as a sentinel error so existing partial-failure
+        // detection (Promise.allSettled rejection counting) still works.
+        const result = await safeProviderCall(provider.name, (q) => provider.searchArtist(q), term)
+        if (result === null) {
+          const skipErr = new Error(`Provider ${provider.name} skipped (circuit breaker open)`)
+          skipErr.code = 'PROVIDER_DISABLED'
+          throw skipErr
+        }
         const duration = Date.now() - pStartTime
 
-        // Record specific provider metrics
+        // Existing dashboard metrics — kept alongside the new providerMetrics
+        // (different consumer: stats endpoint vs. adaptive sorting).
         if (metrics.recordProviderCall) {
           metrics.recordProviderCall(provider.name, true, duration)
         }
