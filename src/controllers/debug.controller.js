@@ -590,4 +590,40 @@ function getProvidersDebug (req, res) {
   res.json({ providers })
 }
 
-module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug }
+// v0.3.40: side-by-side raw vs decayed metrics view, with the computed
+// score so an operator can see what the scoring formula is actually
+// using. The point of this endpoint is debuggability of the decay
+// behavior (which currently preserves successRate by design — the
+// /metrics view makes the decay magnitude visible even though it
+// doesn't change the score). Read-only.
+function getProvidersMetricsDebug (req, res) {
+  const names = providerMetrics._getAllNames()
+  const providers = []
+  for (const name of names) {
+    const m = providerMetrics.get(name)
+    // Decayed view: clone the metric and apply elapsed-time decay so
+    // the response shows what computeScore would see internally.
+    const decayedClone = { ...m }
+    providerMetrics.applyDecay(decayedClone)
+    providers.push({
+      name,
+      raw: {
+        success: m.success,
+        failure: m.failure,
+        avgLatency: m.avgLatency,
+        lastSuccess: m.lastSuccess,
+        lastUpdated: m.lastUpdated,
+        lastDecayAt: m.lastDecayAt
+      },
+      decayed: {
+        success: decayedClone.success,
+        failure: decayedClone.failure,
+        avgLatency: decayedClone.avgLatency
+      },
+      score: providerMetrics.computeScore(m)
+    })
+  }
+  res.json({ providers })
+}
+
+module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug, getProvidersMetricsDebug }

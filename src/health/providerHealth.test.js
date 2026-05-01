@@ -13,6 +13,17 @@ require.cache[require.resolve('../utils/logger')] = {
   }
 }
 
+// v0.3.40: capture sendAlert invocations to assert spam-prevention
+// behavior. Stubbed BEFORE providerHealth is required so the require
+// inside the health module binds to this mock.
+const alertCalls = []
+require.cache[require.resolve('../alerts/alertService')] = {
+  exports: {
+    sendAlert: (msg) => alertCalls.push(msg),
+    sendSlack: async () => {}
+  }
+}
+
 const health = require('./providerHealth')
 
 function resetLoggerCalls () {
@@ -324,4 +335,43 @@ test('providerHealth — invalid PROVIDER_COOLDOWN_MS (negative) throws on load'
   ], { env: { ...process.env, PROVIDER_COOLDOWN_MS: '-100' }, encoding: 'utf8' })
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /Invalid PROVIDER_COOLDOWN_MS/)
+})
+
+// ── v0.3.40: alert hook (transition to disabled only) ─────────────
+
+test('providerHealth — sendAlert fires exactly once on transition to disabled', () => {
+  health.reset()
+  alertCalls.length = 0
+
+  health.recordFailure('mb', 'a')
+  health.recordFailure('mb', 'b')
+  assert.equal(alertCalls.length, 0, 'no alert below threshold')
+
+  health.recordFailure('mb', 'c')
+  assert.equal(alertCalls.length, 1, 'one alert on transition')
+  assert.match(alertCalls[0], /Provider mb disabled/)
+})
+
+test('providerHealth — sendAlert does NOT repeat while already disabled', () => {
+  health.reset()
+  alertCalls.length = 0
+
+  health.recordFailure('mb', 'a')
+  health.recordFailure('mb', 'b')
+  health.recordFailure('mb', 'c')
+  health.recordFailure('mb', 'd')
+  health.recordFailure('mb', 'e')
+  health.recordFailure('mb', 'f')
+  assert.equal(alertCalls.length, 1, 'sustained outage must not spam alerts')
+})
+
+test('providerHealth — alert message includes provider name, failure count, last error', () => {
+  health.reset()
+  alertCalls.length = 0
+  health.recordFailure('discogs', 'rate limited')
+  health.recordFailure('discogs', 'timeout')
+  health.recordFailure('discogs', 'TLS reset')
+  assert.match(alertCalls[0], /discogs/)
+  assert.match(alertCalls[0], /3 consecutive failures/)
+  assert.match(alertCalls[0], /TLS reset/)
 })

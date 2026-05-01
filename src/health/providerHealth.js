@@ -12,6 +12,7 @@
 // should re-probe rather than carry stale circuit state forward.
 
 const logger = require('../utils/logger')
+const { sendAlert } = require('../alerts/alertService')
 
 // v0.3.39: thresholds are env-configurable. Defaults preserve v0.3.38
 // behavior (3 failures, 10-minute cooldown) so existing deployments are
@@ -104,6 +105,10 @@ function recordFailure (name, errorMessage) {
         failures: p.failures,
         lastError: p.lastErrorMessage
       })
+      // v0.3.40: Slack alert on the same transition. Fire-and-forget;
+      // failing webhook never blocks the hot path. Same wasNotDisabled
+      // guard prevents alert spam during sustained outages.
+      sendAlert(`Provider ${name} disabled after ${p.failures} consecutive failures (lastError: ${p.lastErrorMessage || 'unknown'})`)
     }
   } else {
     p.status = 'degraded'
