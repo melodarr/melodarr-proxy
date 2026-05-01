@@ -19,10 +19,12 @@ type Health = {
 };
 
 export function ServiceCard({ service }: { service: { name: string } }) {
-  const { data: health, error: healthError } = useSWR<Health>("/api/health", fetcher, { refreshInterval: 5000 });
+  const { data: liveness, error: healthError } = useSWR<Health>("/api/health", fetcher, { refreshInterval: 5000 });
+  const { data: readiness } = useSWR<Health>("/api/ready", fetcher, { refreshInterval: 5000 });
   const { data: stats } = useSWR("/api/stats", fetcher, { refreshInterval: 10000 });
   const { data: overview } = useSWR("/debug/overview", fetcher, { refreshInterval: 5000 });
   const [updatedAt, setUpdatedAt] = useState<string>("--");
+  const health = readiness ?? liveness;
 
   useEffect(() => {
     const update = () => setUpdatedAt(new Date().toLocaleTimeString());

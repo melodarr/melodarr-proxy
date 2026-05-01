@@ -17,10 +17,12 @@ export default function ServiceDetail({ params }: { params: Promise<{ name: stri
   const service = services.find(s => s.name === name);
   if (!service) return notFound();
 
-  const { data: health, error: healthError } = useSWR("/api/health", fetcher, { refreshInterval: 5000 });
+  const { data: liveness, error: healthError } = useSWR("/api/health", fetcher, { refreshInterval: 5000 });
+  const { data: readiness } = useSWR("/api/ready", fetcher, { refreshInterval: 5000 });
   const { data: stats } = useSWR("/api/stats", fetcher, { refreshInterval: 10000 });
   const { data: overview } = useSWR("/debug/overview", fetcher, { refreshInterval: 5000 });
   const { data: version } = useSWR("/api/version", fetcher);
+  const health = readiness ?? liveness;
 
   const isUnreachable = Boolean(healthError);
   const isDown = !isUnreachable && health && health.proxy && health.proxy !== "running";
