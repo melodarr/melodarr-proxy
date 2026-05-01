@@ -2,6 +2,12 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.29 - 2026-05-01
+
+- Made `/api/ready` provider-aware. The upstream monitor now reads `METADATA_PROVIDERS` and only probes MusicBrainz when it is in the active set. When MB is disabled (e.g. `METADATA_PROVIDERS=itunes,theaudiodb,discogs`), the monitor reports `upstream: "not_applicable"` instead of `unreachable`, and readiness no longer downgrades to `degraded` over an upstream the operator has intentionally turned off.
+- Added `probedProvider` and `activeProviders` fields to `/api/ready`'s `upstreamDetail` so consumers can see what was probed and what's enabled.
+- MusicBrainz remains fully supported — when it's in `METADATA_PROVIDERS`, the existing probe and structured-error reporting are unchanged.
+
 ## v0.3.28 - 2026-05-01
 
 - Fixed Proxmox installer's compose template so fresh installs route MusicBrainz over IPv6 by default. Removed `NODE_OPTIONS: --dns-result-order=ipv4first` (which forced Node to prefer IPv4 globally and caused TLS resets to MusicBrainz on networks where IPv4 fails) and added `MUSICBRAINZ_IP_FAMILY: "6"` so the proxy's https.Agent pins MusicBrainz to IPv6.

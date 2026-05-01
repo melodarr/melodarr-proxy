@@ -1,6 +1,6 @@
 {
   "name": "melodarr-proxy",
-  "version": "0.3.28",
+  "version": "0.3.29",
   "description": "Lightweight multi-provider music metadata proxy for Melodarr.",
   "main": "src/server.js",
   "type": "commonjs",

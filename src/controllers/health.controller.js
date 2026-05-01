@@ -33,12 +33,14 @@ function buildHealthPayload () {
   const upstreamDegraded = DEGRADED_UPSTREAM.has(upstream.status)
   const upstreamUnreachable = upstream.status === 'unreachable'
   const upstreamUnknown = upstream.status === 'unknown'
+  const upstreamNotApplicable = upstream.status === 'not_applicable'
+  const upstreamCountsAgainstReadiness = !upstreamNotApplicable
 
   let status = 'ok'
-  if (upstreamDegraded || upstreamUnreachable || upstreamUnknown || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning') {
+  if ((upstreamCountsAgainstReadiness && (upstreamDegraded || upstreamUnreachable || upstreamUnknown)) || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning') {
     status = 'degraded'
   }
-  if ((upstreamUnreachable && proxyStatus === 'stopped') || memoryStatus === 'critical') {
+  if ((upstreamUnreachable && upstreamCountsAgainstReadiness && proxyStatus === 'stopped') || memoryStatus === 'critical') {
     status = 'down'
   }
 
@@ -56,6 +58,8 @@ function buildHealthPayload () {
     upstream: upstream.status,
     upstreamDetail: {
       status: upstream.status,
+      probedProvider: upstream.probedProvider,
+      activeProviders: upstream.activeProviders,
       lastCheckedAt: upstream.lastCheckedAt,
       lastError: upstream.lastError,
       consecutiveFailures: upstream.consecutiveFailures
