@@ -159,46 +159,83 @@ fi
 # Lidarr's data model is keyed on MB UUIDs.  When MB has been excluded
 # from metadataProviders (e.g. during a TLS outage), Lidarr searches
 # return empty foreignArtistIds and Lidarr rejects the response.
-# Setting REENABLE_MB=1 clears the saved override on the LXC and
-# restarts the proxy so MB is back in the active set.
+# Setting REENABLE_MB=1 clears the saved runtime overrides under
+# .runtime in /data/settings.json (bind-mounted into the proxy
+# container at the same path) and restarts the proxy.
 #
-# Direct file edit (not the API) so we don't need a settings session
-# cookie — the script already has root inside the LXC via pct exec.
-# Backs up settings.json before editing.
+# We verify BEHAVIOR not just config — the action is only considered
+# successful when MB is in active providers AND the settings file no
+# longer shadows them AND a real lookup populates foreignArtistId AND
+# /debug/upstream shows MB activity.
 if [ "$REENABLE_MB" = "1" ]; then
   echo
   echo "## Re-enable MusicBrainz (REENABLE_MB=1)"
-  CURRENT_ACTIVE=$(remote_get /api/ready | jq -r '.upstreamDetail.activeProviders // [] | join(",")')
-  echo "  Current active providers: $CURRENT_ACTIVE"
-  if echo ",$CURRENT_ACTIVE," | grep -q ',musicbrainz,'; then
-    echo "  MB is already in the active set — nothing to do."
-    record_pass "MB re-enable: MB already active"
-  else
-    REENABLE_TS=$(date +%s)
-    if pct exec "$CTID" -- bash -lc "
+  REENABLE_TS=$(date +%s)
+
+  # Action: backup, clear runtime overrides, restart proxy.
+  if pct exec "$CTID" -- bash -lc "
 set -e
-SETTINGS=/opt/melodarr-proxy/data/settings.json
-if [ ! -f \"\$SETTINGS\" ]; then
-  echo 'ERROR: \$SETTINGS not found — cannot re-enable MB via file edit' >&2
-  exit 1
-fi
-cp \"\$SETTINGS\" \"\${SETTINGS}.bak.${REENABLE_TS}\"
-jq 'del(.metadataProviders, .providerPriority)' \"\$SETTINGS\" > /tmp/settings.new
-mv /tmp/settings.new \"\$SETTINGS\"
+[ -f /data/settings.json ] || { echo 'ERROR: /data/settings.json not found on LXC' >&2; exit 1; }
+cp /data/settings.json /data/settings.json.bak.${REENABLE_TS}
+jq 'del(.runtime.metadataProviders, .runtime.providerPriority)' /data/settings.json > /tmp/settings.new
+mv /tmp/settings.new /data/settings.json
 cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
 "; then
-      echo "  Backup: settings.json.bak.${REENABLE_TS}"
-      echo "  Proxy restarting; waiting 8s for it to come back up..."
-      sleep 8
-      NEW_ACTIVE=$(remote_get /api/ready | jq -r '.upstreamDetail.activeProviders // [] | join(",")')
-      if echo ",$NEW_ACTIVE," | grep -q ',musicbrainz,'; then
-        record_pass "MB re-enabled — activeProviders now: $NEW_ACTIVE"
-      else
-        record_fail "MB re-enable did not take effect — activeProviders: $NEW_ACTIVE"
-      fi
-    else
-      record_fail "MB re-enable: settings.json edit or proxy restart failed (see ERROR above)"
-    fi
+    echo "  Backup: /data/settings.json.bak.${REENABLE_TS}"
+    echo "  Proxy restarting; waiting 10s for it to come back up..."
+    sleep 10
+    remote_post /api/cache/clear > /dev/null 2>&1 || true
+    echo "  Cache cleared, running PASS gates..."
+  else
+    record_fail "MB re-enable: settings.json edit or proxy restart failed (see ERROR above)"
+  fi
+
+  # ── PASS gate 1: /api/ready shows musicbrainz in active providers ──
+  READY_AFTER=$(remote_get /api/ready)
+  ACTIVE_AFTER=$(echo "$READY_AFTER" | jq -r '.upstreamDetail.activeProviders // [] | join(",")')
+  echo "  Active providers now: $ACTIVE_AFTER"
+  if echo ",$ACTIVE_AFTER," | grep -q ',musicbrainz,'; then
+    record_pass "MB re-enable: /api/ready shows musicbrainz in active providers"
+  else
+    record_fail "MB re-enable: /api/ready does NOT show musicbrainz (got: $ACTIVE_AFTER)"
+  fi
+
+  # ── PASS gates 2 & 3: settings.json no longer shadows providers ──
+  # Read via `docker exec ... cat` so we see what the container sees.
+  SETTINGS_RUNTIME=$(pct exec "$CTID" -- docker exec melodarr-proxy-proxy-1 cat /data/settings.json 2>/dev/null \
+    | jq '.runtime // {} | {metadataProviders: (.metadataProviders // null), providerPriority: (.providerPriority // null)}')
+  if echo "$SETTINGS_RUNTIME" | jq -e '.metadataProviders == null' > /dev/null 2>&1; then
+    record_pass "MB re-enable: settings.json runtime.metadataProviders override cleared"
+  else
+    OFFENDER=$(echo "$SETTINGS_RUNTIME" | jq -r '.metadataProviders')
+    record_fail "MB re-enable: settings.json runtime.metadataProviders still set to '$OFFENDER'"
+  fi
+  if echo "$SETTINGS_RUNTIME" | jq -e '.providerPriority == null' > /dev/null 2>&1; then
+    record_pass "MB re-enable: settings.json runtime.providerPriority override cleared"
+  else
+    OFFENDER=$(echo "$SETTINGS_RUNTIME" | jq -r '.providerPriority')
+    record_fail "MB re-enable: settings.json runtime.providerPriority still set to '$OFFENDER'"
+  fi
+
+  # ── PASS gate 4: lookup returns a non-empty foreignArtistId (MBID) ──
+  # This both verifies the merge sees MB AND populates /debug/upstream
+  # for the next gate.
+  LOOKUP_AFTER=$(remote_get '/api/v0.4/artist/lookup?term=radiohead')
+  MBID_AFTER=$(echo "$LOOKUP_AFTER" | jq -r '.[0].foreignArtistId // ""')
+  if [ -n "$MBID_AFTER" ] && [ "$MBID_AFTER" != "null" ]; then
+    record_pass "MB re-enable: foreignArtistId populated ($MBID_AFTER)"
+  else
+    record_fail "MB re-enable: foreignArtistId still empty after re-enable"
+  fi
+
+  # ── PASS gate 5: /debug/upstream shows MB activity from the lookup ──
+  UPSTREAM_AFTER=$(remote_get '/debug/upstream?provider=musicbrainz&limit=20')
+  UPSTREAM_COUNT=$(echo "$UPSTREAM_AFTER" | jq -r '.filteredCount // 0' 2>/dev/null)
+  [ -z "$UPSTREAM_COUNT" ] && UPSTREAM_COUNT=0
+  if [ "$UPSTREAM_COUNT" -gt 0 ] 2>/dev/null; then
+    record_pass "MB re-enable: /debug/upstream shows musicbrainz activity (filteredCount=$UPSTREAM_COUNT)"
+  else
+    record_fail "MB re-enable: /debug/upstream shows no musicbrainz activity (filteredCount=$UPSTREAM_COUNT)"
   fi
 fi
 
