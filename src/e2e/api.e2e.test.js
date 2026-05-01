@@ -56,7 +56,6 @@ describe('API E2E Tests', () => {
     post: (url, options = {}) => makeRequest(app, 'POST', url, options.headers || {})
   }
 
-
   before(async () => {
     // Override settings
     process.env.REQUIRE_API_KEY = 'false'
@@ -113,7 +112,7 @@ describe('API E2E Tests', () => {
 
     it('GET /api/search?q=test → valid array response', async () => {
       const res = await client.get('/api/search?q=test')
-      
+
       if (process.env.E2E_REAL_HTTP === 'true' && res.status !== 200) {
         // Accept failure if we are doing real HTTP and don't have internet
         assert.ok([500, 502, 503].includes(res.status))
@@ -167,7 +166,7 @@ describe('API E2E Tests', () => {
             // Ignore connection errors and retry
           }
           retries--
-          if (retries > 0) await new Promise(r => setTimeout(r, 1000))
+          if (retries > 0) await new Promise(resolve => setTimeout(resolve, 1000))
         }
 
         if (res && res.status === 200) {
@@ -226,8 +225,8 @@ describe('API E2E Tests', () => {
 
       if (axiosModule.get && axiosModule.get.mock) axiosModule.get.mock.restore()
       if (axiosModule.post && axiosModule.post.mock) axiosModule.post.mock.restore()
-      
-      // If we are NOT in real HTTP mode, we should restore the global mock so other tests running after don't fail, 
+
+      // If we are NOT in real HTTP mode, we should restore the global mock so other tests running after don't fail,
       // though this is the last test anyway.
     })
   })

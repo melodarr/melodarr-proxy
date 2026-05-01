@@ -2,6 +2,10 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.30 - 2026-05-01
+
+- Added `GET /debug/diagnose?provider=musicbrainz`: a one-shot diagnostic that runs DNS resolution → TCP connect → TLS handshake → HTTP GET → JSON parse against the configured MusicBrainz base URL and returns a structured payload showing exactly where the pipeline failed (`failedStep`: `dns | tcp | tls | http | parse`). Surfaces resolved A/AAAA records, the address Node actually selected, the configured `musicbrainzIpFamily`, per-phase timings (`dns/tcp/tls/http/total`), HTTP status, response headers, and any rate-limit headers (`Retry-After`, `X-RateLimit-*`). Uses a fresh `agent: false` connection so handshake times are always measured, and works even when MusicBrainz is disabled in `METADATA_PROVIDERS`. Read-only; does not touch the upstream monitor or rate-limit queue.
+
 ## v0.3.29 - 2026-05-01
 
 - Made `/api/ready` provider-aware. The upstream monitor now reads `METADATA_PROVIDERS` and only probes MusicBrainz when it is in the active set. When MB is disabled (e.g. `METADATA_PROVIDERS=itunes,theaudiodb,discogs`), the monitor reports `upstream: "not_applicable"` instead of `unreachable`, and readiness no longer downgrades to `degraded` over an upstream the operator has intentionally turned off.
