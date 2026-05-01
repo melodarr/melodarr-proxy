@@ -177,7 +177,8 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     loaded: true,
     exports: {
       discoverArtists: arguments[0]?.discoverArtists || (async () => []),
-      findSongAlbums: arguments[0]?.findSongAlbums || (async () => ({}))
+      findSongAlbums: arguments[0]?.findSongAlbums || (async () => ({})),
+      getEnabledProviders: arguments[0]?.getEnabledProviders || (() => new Set(['musicbrainz', 'itunes', 'theaudiodb', 'discogs']))
     }
   }
 
@@ -339,6 +340,68 @@ test('handleSearch handles upstream error', async () => {
   assert.equal(res.body.details.message, 'Upstream failed')
 })
 
+test('handleSearch error body MUST NOT leak axios err.config (URL, headers, params, User-Agent)', async () => {
+  // v0.3.35 regression: prior versions echoed the full axios err.config back
+  // to the client, including the User-Agent header which carries the
+  // operator's contact email. The client-facing body must contain only
+  // { message, code } in details.
+  const { controller } = loadController({
+    discoverArtists: async () => {
+      const err = new Error('Client network socket disconnected before secure TLS connection was established')
+      err.code = 'ECONNRESET'
+      err.config = {
+        url: 'https://musicbrainz.org/ws/2/artist',
+        method: 'get',
+        headers: {
+          'User-Agent': 'Lunar Bridge 233/latest (operator@example.com)',
+          Accept: 'application/json'
+        },
+        params: { fmt: 'json', query: 'artist:"junkyards"', limit: 10 }
+      }
+      throw err
+    }
+  })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: 'junkyards' }, headers: { 'user-agent': 'lidarr/2.3' } }, res)
+
+  assert.equal(res.statusCode, 502)
+  const serialized = JSON.stringify(res.body)
+  assert.ok(!serialized.includes('musicbrainz.org'), 'must not leak upstream URL')
+  assert.ok(!serialized.includes('operator@example.com'), 'must not leak operator email from User-Agent')
+  assert.ok(!serialized.includes('Lunar Bridge'), 'must not leak User-Agent header')
+  assert.ok(!serialized.includes('junkyards"'), 'must not leak upstream query params')
+  assert.ok(!serialized.includes('"fmt"'), 'must not leak upstream params')
+  assert.equal(res.body.details.message, 'Client network socket disconnected before secure TLS connection was established')
+  assert.equal(res.body.details.code, 'ECONNRESET')
+  assert.equal(res.body.details.config, undefined)
+  assert.equal(res.body.details.headers, undefined)
+  assert.equal(res.body.details.url, undefined)
+})
+
+test('handleArtistDiscover error body MUST NOT leak axios err.config', async () => {
+  const { controller } = loadController({
+    discoverArtists: async () => {
+      const err = new Error('TLS reset')
+      err.code = 'ECONNRESET'
+      err.config = {
+        url: 'https://musicbrainz.org/ws/2/artist',
+        headers: { 'User-Agent': 'Lunar Bridge 233/latest (operator@example.com)' },
+        params: { query: 'foo' }
+      }
+      err.response = { status: 502, headers: { 'x-leak': 'should-not-appear' } }
+      throw err
+    }
+  })
+  const res = makeResponse()
+  await controller.handleArtistDiscover({ query: { q: 'foo' } }, res)
+
+  const serialized = JSON.stringify(res.body)
+  assert.ok(!serialized.includes('musicbrainz.org'), 'must not leak upstream URL')
+  assert.ok(!serialized.includes('operator@example.com'), 'must not leak operator email')
+  assert.ok(!serialized.includes('Lunar Bridge'), 'must not leak User-Agent')
+  assert.ok(!serialized.includes('x-leak'), 'must not leak upstream response headers')
+})
+
 test('handleSearch handles lock timeout', async () => {
   const cacheStore = new Map([['_lock_fail', true]])
   const { controller } = loadController({ cacheStore })
@@ -453,9 +516,8 @@ test('handleArtistDiscover returns candidates', async () => {
 test('handleArtistDiscover handles errors', async () => {
   const { controller } = loadController({
     discoverArtists: async () => {
-      const err = new Error('Discovery failed')
+      const err = new Error('Discovery timeout')
       err.code = 'ERR'
-      err.response = { status: 404 }
       throw err
     }
   })
@@ -463,7 +525,25 @@ test('handleArtistDiscover handles errors', async () => {
   await controller.handleArtistDiscover({ query: { q: 'test' } }, res)
   assert.equal(res.statusCode, 502)
   assert.equal(res.body.error, 'Discovery failed')
-  assert.equal(res.body.details.status, 404)
+  assert.equal(res.body.details.message, 'Discovery timeout')
+  assert.equal(res.body.details.code, 'ERR')
+  assert.equal(res.body.partial, true)
+  // Provider list is surfaced even on failure so callers know what was tried.
+  assert.ok(Array.isArray(res.body.providers))
+})
+
+test('handleArtistDiscover degrades to 200 with empty candidates when discovery returns []', async () => {
+  // v0.3.35: artist-discovery returns [] on all-providers-failed (no throw),
+  // so the route must not 502 — it returns valid partial-shaped JSON.
+  const { controller } = loadController({
+    discoverArtists: async () => []
+  })
+  const res = makeResponse()
+  await controller.handleArtistDiscover({ query: { q: 'nobody' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.candidates, [])
+  assert.equal(res.body.partial, true)
+  assert.ok(res.body.warning)
 })
 
 // handleSongAlbums tests

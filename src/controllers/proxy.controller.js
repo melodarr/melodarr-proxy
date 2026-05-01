@@ -2,7 +2,7 @@ const metrics = require('../metrics')
 const tracer = require('../tracer')
 const cache = require('../cache')
 const { aggregateArtist } = require('../providers')
-const { discoverArtists, findSongAlbums } = require('../providers/artist-discovery')
+const { discoverArtists, findSongAlbums, getEnabledProviders } = require('../providers/artist-discovery')
 const { rankResults } = require('../ranking/engine')
 const { enrichResult } = require('../enrichment/pipeline')
 const { getConfigValue } = require('../settings/store')
@@ -99,22 +99,18 @@ async function handleSearch (req, res) {
     logger.error('Upstream error in handleSearch', {
       context: 'Proxy',
       error: err.message,
+      code: err.code,
       userAgent: req.headers?.['user-agent']
     })
-    const diagnostic = {
-      message: err.message,
-      code: err.code,
-      config: err.config
-        ? {
-            url: err.config.url,
-            method: err.config.method,
-            headers: err.config.headers,
-            params: err.config.params
-          }
-        : undefined
-    }
+    // Client-facing body MUST NOT include err.config (URL, headers, params,
+    // User-Agent — the User-Agent contains the operator's contact email).
+    // Diagnostics for operators live in the structured log line above and in
+    // the /debug/upstream ring buffer, never in the response.
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json({ error: 'Failed to fetch from upstream API', details: diagnostic })
+    return res.status(502).json({
+      error: 'Failed to fetch from upstream API',
+      details: { message: err.message, code: err.code || null }
+    })
   } finally {
     await cache.releaseLock(lockKey)
   }
@@ -404,33 +400,39 @@ async function handleArtistDiscover (req, res) {
     return res.status(400).json({ error: 'Missing query parameter "q"' })
   }
 
+  const providersTried = Array.from(getEnabledProviders())
+
   try {
     const startedAt = Date.now()
     const candidates = await withTimeout(discoverArtists({ query, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startedAt, 'success')
     await tracer.finalizeTrace(trace, {
       cacheHit: false,
-      providersUsed: ['musicbrainz']
+      providersUsed: providersTried
     })
 
     return res.json({
       query,
       type,
-      candidates
+      candidates,
+      providers: providersTried,
+      partial: candidates.length === 0,
+      warning: candidates.length === 0 ? 'No candidates returned from any configured provider' : null
     })
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
-    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: providersTried })
+    // Defensive 502 — discoverArtists now returns [] for provider failures, so
+    // reaching here means an unexpected exception (e.g. timeout). Body is
+    // intentionally minimal: no err.config, no headers, no upstream URL.
     return res.status(502).json({
       query,
       type,
       candidates: [],
-      error: error.message,
-      details: {
-        message: error.message,
-        code: error.code,
-        status: error.response?.status || null
-      }
+      providers: providersTried,
+      partial: true,
+      error: 'Discovery failed',
+      details: { message: error.message, code: error.code || null }
     })
   }
 }

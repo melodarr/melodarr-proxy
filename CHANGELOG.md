@@ -2,6 +2,13 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.35 - 2026-05-01 (hotfix)
+
+- **Stop 502s when MusicBrainz is unreachable.** `/api/search` and `/api/v1/artist/discover` no longer hard-depend on MusicBrainz. `discoverArtists` now reads `metadataProviders` and walks the configured set in fallback order (`musicbrainz → itunes → theaudiodb → discogs`); the first non-empty success wins. When MB is not in the active set, MB is never called. When all enabled providers fail, discovery returns `[]` and the route returns `200` with `partial: true` and a `warning` field — never `502`. Required after the ongoing MB TLS resets started failing every retry.
+- **PII / upstream-config sanitization in error bodies.** `handleSearch`'s `502` body previously echoed the entire axios `err.config` to the client — including the upstream URL, query params, and the `User-Agent` header that carries the operator's contact email (`User-Agent: ... (operator@example.com)`). Client-facing `details` is now restricted to `{ message, code }`. `handleArtistDiscover` is similarly tightened (no `err.config`, no `error.response.headers`, no upstream URL). Diagnostics for operators continue to flow into structured WARN logs and the `/debug/upstream` ring buffer; nothing actionable for operators is lost.
+- New regression tests: `metadataProviders=itunes,theaudiodb,discogs` config never invokes MusicBrainz; ordered fallback correctly walks MB → iTunes → TheAudioDB → Discogs; all-providers-fail returns `[]` not a thrown error; `502` bodies for `handleSearch` and `handleArtistDiscover` cannot contain `User-Agent`, operator email, upstream URL, headers, or query params (asserted via JSON-stringify substring scan).
+- No changes to `/api/v1/artist` (full lookup), `/api/health`, retry policy, rate limiting, caching, or request-correlation ids.
+
 ## v0.3.34 - 2026-05-01
 
 - Added per-request correlation IDs via `AsyncLocalStorage`. The same id flows through providers, retries, logs, the tracer, and the `/debug/upstream` ring buffer. Operators can now answer "what happened during *this* request?" with a single id.
