@@ -53,27 +53,6 @@ else
   exit 1
 fi
 
-# Ensure Docker IPv6 is enabled for MusicBrainz connectivity
-if ! docker network inspect bridge 2>/dev/null | grep -q '"EnableIPv6": true'; then
-  echo "Enabling IPv6 in Docker daemon to fix MusicBrainz connectivity..."
-  mkdir -p /etc/docker
-  cat > /etc/docker/daemon.json << 'JSON'
-{
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00:dead:beef::/64",
-  "ip6tables": true,
-  "experimental": true
-}
-JSON
-  systemctl restart docker
-  sleep 5
-  
-  if [[ -d "/opt/melodarr-proxy" ]] && [[ -f "/opt/melodarr-proxy/compose.yml" ]]; then
-    echo "Recreating existing Docker compose networks to apply IPv6..."
-    cd /opt/melodarr-proxy && $DOCKER_COMPOSE down && $DOCKER_COMPOSE up -d
-  fi
-fi
-
 command -v jq >/dev/null || { echo "jq is required"; exit 1; }
 
 COMPOSE_FILE="/opt/melodarr-proxy/compose.yml"
@@ -114,23 +93,36 @@ if ! grep -q "REQUIRE_API_KEY" "$COMPOSE_FILE"; then
   { print }' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
 fi
 
-# Remove the IPv4-first Node flag if present — it causes ECONNRESET to MusicBrainz
-# when Docker IPv6 is the working path.
+# Remove legacy DNS ordering. The upgrade now chooses an explicit working
+# MusicBrainz IP family after probing from the Docker network.
 if grep -q "NODE_OPTIONS:.*ipv4first" "$COMPOSE_FILE"; then
-  echo "Removing NODE_OPTIONS=--dns-result-order=ipv4first (forces IPv4 to MusicBrainz)..."
+  echo "Removing legacy NODE_OPTIONS=--dns-result-order=ipv4first..."
   sed -i "/NODE_OPTIONS:.*ipv4first/d" "$COMPOSE_FILE"
 fi
 
-# Ensure MUSICBRAINZ_IP_FAMILY is set so the proxy pins MusicBrainz over IPv6.
-if ! grep -q "MUSICBRAINZ_IP_FAMILY" "$COMPOSE_FILE"; then
-  echo "Adding MUSICBRAINZ_IP_FAMILY=6 to compose.yml..."
-  awk '/MUSICBRAINZ_BASE_URL:/ && !inserted {
+set_compose_env_value () {
+  local key="$1"
+  local value="$2"
+
+  if grep -q "^[[:space:]]*${key}:" "$COMPOSE_FILE"; then
+    sed -i "s|^[[:space:]]*${key}:.*|      ${key}: \"${value}\"|" "$COMPOSE_FILE"
+    return
+  fi
+
+  awk -v key="$key" -v value="$value" '/MUSICBRAINZ_BASE_URL:/ && !inserted {
     print $0
-    print "      MUSICBRAINZ_IP_FAMILY: \"6\""
+    print "      " key ": \"" value "\""
     inserted = 1
     next
   }
   { print }' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
+}
+
+# Ensure the setting exists; the exact value is selected from a live network
+# probe after the new image has been pulled.
+if ! grep -q "MUSICBRAINZ_IP_FAMILY" "$COMPOSE_FILE"; then
+  echo "Adding MUSICBRAINZ_IP_FAMILY=4 to compose.yml..."
+  set_compose_env_value MUSICBRAINZ_IP_FAMILY 4
 fi
 
 # Clean up broken YAML formatting if a previous run messed it up with backslashes
@@ -212,9 +204,49 @@ else
   CANARY_IMAGE="ghcr.io/melodarr/melodarr-proxy:latest"
 fi
 
+probe_musicbrainz_family () {
+  local family="$1"
+  docker run --rm --network "$NETWORK" -e FAMILY="$family" "$CANARY_IMAGE" node -e '
+    const https = require("https")
+    const family = Number(process.env.FAMILY)
+    const req = https.get("https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1", {
+      family,
+      timeout: 5000,
+      headers: { "User-Agent": "melodarr-proxy-upgrade/1.0 (admin@example.com)" }
+    }, (res) => {
+      res.resume()
+      process.exit(res.statusCode >= 200 && res.statusCode < 500 ? 0 : 1)
+    })
+    req.on("timeout", () => req.destroy(new Error("timeout")))
+    req.on("error", (error) => {
+      console.error(error.code || error.message)
+      process.exit(1)
+    })
+  ' >/tmp/musicbrainz-family-${family}.log 2>&1
+}
+
+echo "Probing MusicBrainz connectivity from Docker network $NETWORK..."
+MUSICBRAINZ_FAMILY=""
+if probe_musicbrainz_family 4; then
+  MUSICBRAINZ_FAMILY="4"
+elif probe_musicbrainz_family 6; then
+  MUSICBRAINZ_FAMILY="6"
+else
+  echo "❌ Cannot reach MusicBrainz from Docker network $NETWORK over IPv4 or IPv6."
+  echo "--- IPv4 probe ---"
+  cat /tmp/musicbrainz-family-4.log 2>/dev/null || true
+  echo "--- IPv6 probe ---"
+  cat /tmp/musicbrainz-family-6.log 2>/dev/null || true
+  echo "Aborting deployment. Main container remains untouched."
+  exit 1
+fi
+
+echo "Using MUSICBRAINZ_IP_FAMILY=${MUSICBRAINZ_FAMILY} for canary and main proxy."
+set_compose_env_value MUSICBRAINZ_IP_FAMILY "$MUSICBRAINZ_FAMILY"
+
 echo "Running canary container on network $NETWORK..."
 docker rm -f melodarr-proxy-canary >/dev/null 2>&1 || true
-CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e MUSICBRAINZ_IP_FAMILY=6 -e APP_NAME=melodarr-proxy-canary -e APP_VERSION=canary -e APP_CONTACT=admin@example.com "$CANARY_IMAGE")
+CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e MUSICBRAINZ_IP_FAMILY="$MUSICBRAINZ_FAMILY" -e APP_NAME=melodarr-proxy-canary -e APP_VERSION=canary -e APP_CONTACT=admin@example.com "$CANARY_IMAGE")
 
 echo "Waiting 5s for canary to initialize..."
 sleep 5
@@ -309,4 +341,3 @@ echo "  pct exec $CTID -- docker ps"
 echo "  pct exec $CTID -- curl -s http://127.0.0.1:3055/api/health"
 echo "  open http://<lxc-ip>:55026/dashboard"
 echo "=========================================================="
-

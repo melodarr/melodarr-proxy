@@ -241,7 +241,7 @@ services:
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "6"
+      MUSICBRAINZ_IP_FAMILY: "4"
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
@@ -345,7 +345,7 @@ services:
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "6"
+      MUSICBRAINZ_IP_FAMILY: "4"
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
