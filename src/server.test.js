@@ -79,7 +79,8 @@ function loadServer () {
 
   const originalNoListen = process.env.NO_LISTEN
   process.env.NO_LISTEN = '1'
-  const app = require('./server')
+  const serverModule = require('./server')
+  const app = typeof serverModule === 'function' ? serverModule : serverModule.createApp()
   process.env.NO_LISTEN = originalNoListen
   app.response.sendFile = function sendFileForTest (filePath) {
     this.type('html')
