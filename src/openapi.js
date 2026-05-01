@@ -382,7 +382,9 @@ const openApiDocument = {
                             }
                           },
                           httpStatus: { type: 'integer', nullable: true },
-                          durationMs: { type: 'integer' }
+                          durationMs: { type: 'integer' },
+                          retryAfterMs: { type: 'integer', nullable: true, description: 'Parsed from the Retry-After response header on 429/503; null otherwise.' },
+                          nextWaitMs: { type: 'integer', nullable: true, description: 'Sleep duration before the next attempt. null on the final attempt or successful entries.' }
                         }
                       }
                     },

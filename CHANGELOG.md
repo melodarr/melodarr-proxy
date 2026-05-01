@@ -2,6 +2,15 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.33 - 2026-05-01
+
+- Honor `Retry-After` headers on 429 and 503 responses. Both delta-seconds (`Retry-After: 30`) and HTTP-date (`Retry-After: Wed, 01 May 2026 08:00:00 GMT`) formats are accepted; past dates and malformed values fall back to jittered exponential backoff. The honored value is clamped to `UPSTREAM_RETRY_MAX_MS` (default 30s) to prevent worker threads parking indefinitely. Required by Cloudflare and other CDNs that emit 503 with Retry-After.
+- Replaced the previous 500ms/1000ms jitterless retry with **full-jitter exponential backoff** (`wait = random(0, base * 2^(attempt-1))`, capped at the max). Best burst-collapse property of the standard jitter strategies; avoids retry storms when many requests fail simultaneously.
+- Three new runtime config keys: `UPSTREAM_MAX_ATTEMPTS` (default 3), `UPSTREAM_RETRY_BASE_MS` (default 500), `UPSTREAM_RETRY_MAX_MS` (default 30000). Exposed via `PATCH /api/settings` and `DELETE /api/settings/runtime/{key}` like all other editable settings.
+- `/debug/upstream` ring buffer entries gain two fields: `retryAfterMs` (parsed Retry-After header value, raw — preserved even when clamped) and `nextWaitMs` (the actual sleep duration before the next attempt; null on the final attempt and on success entries). Operators can now see at a glance whether MB is asking us to back off and whether we honored that ask.
+- Single-line structured WARN log per retry decision: `provider, path, requestId, attempt, nextAttempt, reason, nextWaitMs, retryAfterMs`. Grep-friendly.
+- No change to retry eligibility rules: 5xx + 429 + network errors still retry; 4xx (non-429) still throws immediately. No change to default attempt count.
+
 ## v0.3.32 - 2026-05-01
 
 - Added per-attempt upstream observability. Every MusicBrainz HTTP attempt (success or failure) now records a structured entry in an in-memory ring buffer (capped at 100, FIFO eviction). Each entry captures `ts`, `requestId` (shared across the 3 retries of a single call), `provider`, `path`, `attempt#`, `selectedAddress`, `selectedFamily`, `failedStep` (`dns | tcp | tls | http | parse | null`), `error.code`, `httpStatus`, and `durationMs`. ECONNRESET → `tls`, ENOTFOUND/EAI_AGAIN → `dns`, ECONNREFUSED/EHOSTUNREACH → `tcp`, axios timeouts → `http` (phase ambiguous from axios alone — raw `error.code` is preserved for operators).

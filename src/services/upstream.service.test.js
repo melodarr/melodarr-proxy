@@ -13,6 +13,11 @@ function setupMocks () {
         if (key === 'upstreamTimeoutMs') return 1000
         if (key === 'musicbrainzIpFamily') return 'auto'
         if (key === 'minRequestIntervalMs') return 0
+        // Tiny retry base keeps jittered exponential ~0ms in tests so retries
+        // run fast and deterministically.
+        if (key === 'upstreamRetryBaseMs') return 1
+        if (key === 'upstreamRetryMaxMs') return 1000
+        if (key === 'upstreamMaxAttempts') return 3
         return 'dummy'
       }
     }
@@ -57,7 +62,7 @@ function setupMocks () {
 
   // mock logger to prevent console noise
   require.cache[require.resolve('../utils/logger')] = {
-    exports: { error: () => {}, info: () => {} }
+    exports: { error: () => {}, info: () => {}, warn: () => {}, debug: () => {} }
   }
 
   const upstreamService = require('./upstream.service')
@@ -214,5 +219,89 @@ test('Upstream Service', async (t) => {
     assert.strictEqual(entries.length, 1)
     assert.strictEqual(entries[0].httpStatus, 401)
     assert.strictEqual(entries[0].failedStep, 'http')
+    assert.strictEqual(entries[0].retryAfterMs, null)
+    assert.strictEqual(entries[0].nextWaitMs, null)
+  })
+
+  await t.test('musicBrainzGet - 429 with Retry-After header populates retryAfterMs', async () => {
+    const { upstreamService, axiosMock, upstreamBuffer } = setupMocks()
+    let calls = 0
+    axiosMock.get = async () => {
+      calls += 1
+      if (calls < 3) {
+        const e = new Error('rate limited')
+        e.response = { status: 429, headers: { 'retry-after': '1' } }
+        throw e
+      }
+      return { status: 200, data: { ok: true } }
+    }
+    const result = await upstreamService.musicBrainzGet('/429-then-ok')
+    assert.deepStrictEqual(result, { ok: true })
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    // Newest first: success entry, then two 429 entries
+    assert.strictEqual(entries.length, 3)
+    assert.strictEqual(entries[2].httpStatus, 429)
+    assert.strictEqual(entries[2].retryAfterMs, 1000)
+    // delayMs is clamped to upstreamRetryMaxMs=1000 — Retry-After of 1s fits.
+    assert.strictEqual(entries[2].nextWaitMs, 1000)
+    assert.strictEqual(entries[1].httpStatus, 429)
+    assert.strictEqual(entries[0].httpStatus, 200)
+    assert.strictEqual(entries[0].nextWaitMs, null)
+  })
+
+  await t.test('musicBrainzGet - 503 with Retry-After header (CDN behavior)', async () => {
+    const { upstreamService, axiosMock, upstreamBuffer } = setupMocks()
+    let calls = 0
+    axiosMock.get = async () => {
+      calls += 1
+      if (calls < 2) {
+        const e = new Error('cdn unavailable')
+        e.response = { status: 503, headers: { 'retry-after': '0' } }
+        throw e
+      }
+      return { status: 200, data: { ok: true } }
+    }
+    await upstreamService.musicBrainzGet('/503-then-ok')
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.strictEqual(entries.length, 2)
+    assert.strictEqual(entries[1].httpStatus, 503)
+    assert.strictEqual(entries[1].retryAfterMs, 0)
+    assert.strictEqual(entries[1].nextWaitMs, 0)
+  })
+
+  await t.test('musicBrainzGet - Retry-After clamped to upstreamRetryMaxMs', async () => {
+    const { upstreamService, axiosMock, upstreamBuffer } = setupMocks()
+    let calls = 0
+    axiosMock.get = async () => {
+      calls += 1
+      if (calls < 2) {
+        const e = new Error('rate limited')
+        // 60 seconds — exceeds the test mock's upstreamRetryMaxMs=1000.
+        e.response = { status: 429, headers: { 'retry-after': '60' } }
+        throw e
+      }
+      return { status: 200, data: { ok: true } }
+    }
+    await upstreamService.musicBrainzGet('/clamped')
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.strictEqual(entries[1].retryAfterMs, 60000) // raw parsed value preserved
+    assert.strictEqual(entries[1].nextWaitMs, 1000) // clamped to maxMs
+  })
+
+  await t.test('musicBrainzGet - final attempt entry has nextWaitMs null', async () => {
+    const { upstreamService, upstreamBuffer } = setupMocks()
+    await assert.rejects(
+      async () => upstreamService.musicBrainzGet('/retry-fail'),
+      /permanent error/
+    )
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.strictEqual(entries.length, 3)
+    // Newest first: attempt 3 (final, no retry), 2, 1
+    assert.strictEqual(entries[0].attempt, 3)
+    assert.strictEqual(entries[0].nextWaitMs, null)
+    // Earlier attempts had nextWaitMs set (jitter may be 0 with baseMs=1, but
+    // the field should be a number, not null).
+    assert.strictEqual(typeof entries[1].nextWaitMs, 'number')
+    assert.strictEqual(typeof entries[2].nextWaitMs, 'number')
   })
 })

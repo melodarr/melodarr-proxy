@@ -6,6 +6,7 @@ const net = require('net')
 const { URL } = require('url')
 const { getConfigValue } = require('../settings/store')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
+const { nextRetryDelay, parseRetryAfter } = require('./retry-policy')
 
 const musicBrainzAgents = new Map()
 
@@ -151,17 +152,21 @@ class UpstreamService {
     const timeout = getConfigValue('upstreamTimeoutMs')
     const ipFamilyConfig = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
     const family = ipFamilyConfig === '4' ? 4 : ipFamilyConfig === '6' ? 6 : undefined
+    const maxAttempts = Math.max(1, Number(getConfigValue('upstreamMaxAttempts')) || 3)
+    const retryBaseMs = Math.max(1, Number(getConfigValue('upstreamRetryBaseMs')) || 500)
+    const retryMaxMs = Math.max(retryBaseMs, Number(getConfigValue('upstreamRetryMaxMs')) || 30000)
 
     let hostname = null
     try { hostname = new URL(baseUrl).hostname } catch (_e) {}
 
-    // One requestId per musicBrainzGet call — shared across all 3 retry
+    // One requestId per musicBrainzGet call — shared across all retry
     // attempts so operators can group attempts in /debug/upstream by request.
     const requestId = crypto.randomBytes(8).toString('hex')
 
+    const logger = require('../utils/logger')
     let lastError
 
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const startedAt = Date.now()
       // Pre-lookup so we can record what IP/family the agent would resolve.
       // Keep-alive may reuse a socket and skip resolution; this is a best-
@@ -169,8 +174,10 @@ class UpstreamService {
       // catch so a DNS failure here never blocks the actual request.
       const ipInfo = await lookupForRecord(hostname, family)
 
+      let response = null
+      let error = null
       try {
-        const result = await enqueueRequest(async () => {
+        response = await enqueueRequest(async () => {
           return await axios.get(`${baseUrl}${path}`, {
             headers: this.getMusicBrainzHeaders(),
             httpsAgent: getMusicBrainzHttpsAgent(),
@@ -178,51 +185,84 @@ class UpstreamService {
             timeout
           })
         })
-
-        upstreamBuffer.record({
-          ts: new Date().toISOString(),
-          requestId,
-          provider: 'musicbrainz',
-          path,
-          attempt,
-          selectedAddress: ipInfo?.address || null,
-          selectedFamily: ipInfo?.family || null,
-          failedStep: null,
-          error: null,
-          httpStatus: result?.status ?? 200,
-          durationMs: Date.now() - startedAt
-        })
-
-        return result.data
-      } catch (error) {
-        lastError = error
-
-        upstreamBuffer.record({
-          ts: new Date().toISOString(),
-          requestId,
-          provider: 'musicbrainz',
-          path,
-          attempt,
-          selectedAddress: ipInfo?.address || null,
-          selectedFamily: ipInfo?.family || null,
-          failedStep: upstreamBuffer.classifyFailedStep({ error, status: error.response?.status }),
-          error: { code: error.code || null, message: error.message || null },
-          httpStatus: error.response?.status || null,
-          durationMs: Date.now() - startedAt
-        })
-
-        if (error.response?.status && error.response.status < 500 && error.response.status !== 429) {
-          throw error
-        }
-
-        if (attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, attempt * 500))
-        }
+      } catch (err) {
+        error = err
       }
+
+      const status = error ? (error.response?.status || null) : (response?.status ?? 200)
+      const retryAfterHeader = error ? error.response?.headers?.['retry-after'] : null
+
+      // Decide retry policy *before* recording the entry so nextWaitMs and
+      // retryAfterMs can be captured in the ring buffer for this attempt.
+      const isRetryEligible = !!error && (
+        !status ||
+        status >= 500 ||
+        status === 429
+      )
+
+      let decision = { willRetry: false, delayMs: 0, retryAfterMs: null }
+      if (isRetryEligible) {
+        decision = nextRetryDelay({
+          attempt,
+          maxAttempts,
+          baseMs: retryBaseMs,
+          maxMs: retryMaxMs,
+          status,
+          retryAfterHeader
+        })
+      } else if ((status === 429 || status === 503) && retryAfterHeader) {
+        // Capture Retry-After even when we won't retry (e.g. final attempt),
+        // so operators see what the server told us.
+        decision.retryAfterMs = parseRetryAfter(retryAfterHeader)
+      }
+
+      upstreamBuffer.record({
+        ts: new Date().toISOString(),
+        requestId,
+        provider: 'musicbrainz',
+        path,
+        attempt,
+        selectedAddress: ipInfo?.address || null,
+        selectedFamily: ipInfo?.family || null,
+        failedStep: error ? upstreamBuffer.classifyFailedStep({ error, status }) : null,
+        error: error ? { code: error.code || null, message: error.message || null } : null,
+        httpStatus: status,
+        durationMs: Date.now() - startedAt,
+        retryAfterMs: decision.retryAfterMs,
+        nextWaitMs: decision.willRetry ? decision.delayMs : null
+      })
+
+      if (!error) {
+        return response.data
+      }
+
+      // 4xx (non-429): throw immediately. Preserves prior behavior.
+      if (!isRetryEligible) {
+        throw error
+      }
+
+      lastError = error
+
+      if (!decision.willRetry) {
+        // Out of attempts.
+        break
+      }
+
+      logger.warn('Upstream retry', {
+        provider: 'musicbrainz',
+        path,
+        requestId,
+        attempt,
+        nextAttempt: attempt + 1,
+        reason: error.code || (status ? `HTTP_${status}` : 'UNKNOWN'),
+        nextWaitMs: decision.delayMs,
+        retryAfterMs: decision.retryAfterMs
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, decision.delayMs))
     }
 
-    const logger = require('../utils/logger')
-    logger.error(`Upstream request failed after 3 attempts: ${baseUrl}${path}`, { error: lastError })
+    logger.error(`Upstream request failed after ${maxAttempts} attempts: ${baseUrl}${path}`, { error: lastError })
     throw lastError
   }
 }
