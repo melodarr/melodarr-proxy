@@ -360,6 +360,62 @@ echo "## Artist discover response summary"
 remote_get '/api/v1/artist/discover?q=junkyards' \
   | jq '{providers, partial, warning, candidate_count: (.candidates // [] | length)}'
 
+# ── 5b. SkyHook search-shape conformance (v0.3.37) ───────────────
+# Lidarr's SkyHook deserializer requires every search-result item to be
+# wrapped as {"artist":{...}} or {"album":{...}}. A flat candidate object
+# slips past the 200-status check above but breaks Lidarr with "Invalid
+# response received from LidarrAPI" — verified by the fact that this exact
+# error blocked artist-add for an entire release cycle. Use a query that
+# returns candidates even when MB is unreachable (Radiohead is on iTunes /
+# Discogs / TheAudioDB) so the wrap is exercised regardless of MB health.
+echo
+echo "## SkyHook search-shape conformance"
+SHAPE_BODY=$(remote_get '/api/search?type=all&query=Radiohead')
+SHAPE_REPORT=$(echo "$SHAPE_BODY" | jq '
+  if type == "array" then
+    {
+      total:   length,
+      wrapped: ([.[] | select(.artist or .album)] | length),
+      invalid: ([.[] | select((.artist|not) and (.album|not))] | length)
+    }
+  else
+    { total: 0, wrapped: 0, invalid: -1, error: "response is not a JSON array" }
+  end')
+echo "$SHAPE_REPORT"
+
+SHAPE_TOTAL=$(echo "$SHAPE_REPORT"   | jq -r '.total')
+SHAPE_WRAPPED=$(echo "$SHAPE_REPORT" | jq -r '.wrapped')
+SHAPE_INVALID=$(echo "$SHAPE_REPORT" | jq -r '.invalid')
+
+# Three independent checks so failure mode is unambiguous in the summary:
+# (a) candidates exist at all, (b) every item is wrapped, (c) no flat leak.
+if [ "$SHAPE_TOTAL" -gt 0 ] 2>/dev/null; then
+  record_pass "/api/search returned $SHAPE_TOTAL candidates for Radiohead"
+else
+  record_fail "/api/search returned 0 candidates for Radiohead — cannot validate wrap"
+fi
+
+if [ "$SHAPE_TOTAL" -gt 0 ] 2>/dev/null && [ "$SHAPE_WRAPPED" = "$SHAPE_TOTAL" ]; then
+  record_pass "/api/search every item is SkyHook-wrapped (wrapped=$SHAPE_WRAPPED of $SHAPE_TOTAL)"
+elif [ "$SHAPE_TOTAL" -gt 0 ] 2>/dev/null; then
+  record_fail "/api/search wrap incomplete — wrapped=$SHAPE_WRAPPED of $SHAPE_TOTAL (some items dropped)"
+fi
+
+if [ "$SHAPE_INVALID" = "0" ]; then
+  record_pass "/api/search no flat objects leaked through (invalid=0)"
+else
+  record_fail "/api/search has $SHAPE_INVALID flat objects without artist/album wrapper — Lidarr will reject"
+fi
+
+# Defensive per-item probe — guards against the aggregate looking right
+# while the first element is malformed (e.g. wrapper key present but null).
+FIRST_HAS_WRAPPER=$(echo "$SHAPE_BODY" | jq -r '.[0] | (has("artist") or has("album")) // false' 2>/dev/null)
+if [ "$FIRST_HAS_WRAPPER" = "true" ]; then
+  record_pass "/api/search first item has .artist or .album key"
+else
+  record_fail "/api/search first item missing wrapper key (got: $FIRST_HAS_WRAPPER)"
+fi
+
 # ── 6. Negative path ─────────────────────────────────────────────
 echo
 echo "## Negative search (garbage query → 200, never 5xx)"

@@ -9,6 +9,7 @@ const { getConfigValue } = require('../settings/store')
 const logger = require('../utils/logger')
 const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
+const { toSkyhookSearchShape } = require('../utils/skyhook')
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -36,9 +37,7 @@ async function handleSearch (req, res) {
     metrics.recordCache(true)
     await tracer.finalizeTrace(trace, { cacheHit: true })
     res.set('X-Cache-Generated-At', cached.generatedAt)
-    const responseData = cached.data
-    if (responseData && typeof responseData === 'object') responseData._generatedAt = cached.generatedAt
-    return res.json(responseData)
+    return res.json(toSkyhookSearchShape(cached.data))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -66,8 +65,7 @@ async function handleSearch (req, res) {
     if (cachedData) {
       await tracer.finalizeTrace(trace, { cacheHit: true })
       res.set('X-Cache-Generated-At', cachedData.generatedAt)
-      const responseData = { ...cachedData.data, _generatedAt: cachedData.generatedAt }
-      return res.json(responseData)
+      return res.json(toSkyhookSearchShape(cachedData.data))
     }
   }
 
@@ -94,7 +92,7 @@ async function handleSearch (req, res) {
     await saveSnapshot(`search:${normalizedQ}`, data)
 
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json(data)
+    return res.json(toSkyhookSearchShape(data))
   } catch (err) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Upstream error in handleSearch', {
@@ -415,7 +413,7 @@ async function handleArtistDiscover (req, res) {
     return res.json({
       query,
       type,
-      candidates,
+      candidates: toSkyhookSearchShape(candidates),
       providers: providersTried,
       partial: candidates.length === 0,
       warning: candidates.length === 0 ? 'No candidates returned from any configured provider' : null
