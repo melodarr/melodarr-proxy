@@ -49,10 +49,14 @@ class MusicBrainzProvider {
         return ['album', 'ep'].includes(primaryType) && secondaryTypes.length === 0
       })
       .map(group => {
-        const yearMatch = (group['first-release-date'] || '').match(/^(\d{4})/)
+        const rawDate = group['first-release-date'] || ''
+        const yearMatch = rawDate.match(/^(\d{4})/)
         return {
           name: group.title || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
+          // MB returns YYYY, YYYY-MM, or YYYY-MM-DD. Preserve as-is; downstream
+          // consumers can pad to full ISO for Lidarr compatibility.
+          releaseDate: rawDate || null,
           imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
           ids: {
             musicbrainzReleaseGroupId: group.id || ''

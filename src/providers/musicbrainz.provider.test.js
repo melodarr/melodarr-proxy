@@ -43,9 +43,12 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums.length, 2)
     assert.strictEqual(result.albums[0].name, 'Album 1')
     assert.strictEqual(result.albums[0].year, 2020)
+    // v0.3.36: full date preserved alongside year.
+    assert.strictEqual(result.albums[0].releaseDate, '2020-01-01')
     assert.ok(result.albums[0].imageUrl.includes('rg1'))
     assert.strictEqual(result.albums[1].name, 'Album 2')
     assert.strictEqual(result.albums[1].year, null)
+    assert.strictEqual(result.albums[1].releaseDate, null)
   })
 
   await t.test('searchArtist - returns empty if no artist found', async () => {

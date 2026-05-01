@@ -236,10 +236,41 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.body[0].foreignArtistId, '')
   assert.equal(res.body[0].albums[0].title, 'First Album')
   assert.equal(res.body[0].albums[0].id, 'rg-1')
-  assert.equal(res.body[0].albums[0].firstReleaseDate, '2001')
+  // v0.3.36: year-only is now padded to ISO 8601 (Skyhook-compatible).
+  assert.equal(res.body[0].albums[0].firstReleaseDate, '2001-01-01T00:00:00Z')
   assert.equal(res.body[0].albums[0].coverUrl, 'https://example.test/cover.jpg')
   assert.equal(res.body[0].partial, false)
   assert.ok(cacheStore.has('artist:test artist'))
+})
+
+test('artist lookup preserves ISO 8601 firstReleaseDate from provider (v0.3.36)', async () => {
+  // Regression: pre-v0.3.36 we truncated provider dates to year-only by going
+  // through `String(album.year)`. Lidarr's date parser rejects "1997". This
+  // test asserts iTunes-style full ISO timestamps flow through unchanged.
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      albums: [{
+        name: 'OK Computer',
+        year: 1997,
+        releaseDate: '1997-05-21T07:00:00Z',
+        provider: 'itunes',
+        ids: { itunesCollectionId: '1097861387' }
+      }],
+      providers: [{ name: 'itunes', score: 1, albumCount: 1 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 1
+    })
+  })
+  const res = makeResponse()
+  await controller.handleArtistLookup({ query: { term: 'Radiohead' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  const date = res.body[0].albums[0].firstReleaseDate
+  assert.equal(date, '1997-05-21T07:00:00Z', 'iTunes ISO date must pass through unchanged')
 })
 
 test('artist lookup returns cached response without debug data by default', async () => {

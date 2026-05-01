@@ -38,10 +38,15 @@ class ITunesProvider {
           normalizeName(album.artistName) === normalizedTerm
       })
       .map((album) => {
-        const yearMatch = String(album.releaseDate || '').match(/^(\d{4})/)
+        const rawDate = String(album.releaseDate || '')
+        const yearMatch = rawDate.match(/^(\d{4})/)
         return {
           name: album.collectionName || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
+          // Apple returns ISO 8601 (e.g. "1997-05-21T07:00:00Z"). Preserve it
+          // verbatim so downstream consumers (Lidarr) can use full precision
+          // instead of a stripped year.
+          releaseDate: rawDate || null,
           imageUrl: upgradeArtworkUrl(album.artworkUrl100),
           ids: {
             itunesCollectionId: album.collectionId ? String(album.collectionId) : ''

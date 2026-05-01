@@ -58,6 +58,8 @@ test('TheAudioDb Provider', async (t) => {
     const album = result.albums[0]
     assert.strictEqual(album.name, 'Album 1')
     assert.strictEqual(album.year, 2020)
+    // v0.3.36: TheAudioDB only exposes year — emit as year string.
+    assert.strictEqual(album.releaseDate, '2020')
     assert.strictEqual(album.imageUrl, 'http://example.com/thumb.jpg')
     assert.strictEqual(album.ids.theAudioDbAlbumId, '12345')
   })

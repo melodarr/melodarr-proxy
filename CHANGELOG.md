@@ -2,6 +2,15 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.36 - 2026-05-01
+
+- **Stop truncating provider release dates to year-only.** Previously every album's `firstReleaseDate` was built via `String(album.year)`, throwing away full ISO 8601 timestamps from iTunes (`"1997-05-21T07:00:00Z"`) and YYYY-MM-DD precision from MusicBrainz (`"1997-05-21"`). The Lidarr response now emits proper ISO 8601 UTC timestamps, padded when source precision is lower (e.g. TheAudioDB/Discogs year-only `"1997"` → `"1997-01-01T00:00:00Z"`). Surfaced by v0.3.35's verification harness — Lidarr's .NET date parser rejects bare year strings.
+- New album field `releaseDate` on every provider's output (iTunes, MusicBrainz, TheAudioDB, Discogs) carrying the source's most precise date string. The existing integer `year` field is unchanged for backwards compatibility with consumers like Melodash.
+- `aggregateArtist` propagates `releaseDate` through the album merge. Identity (year, provider tag) goes to the higher-scored provider as before; **`releaseDate` precedence is independent of score** and prefers the more precise source string. So if iTunes (lower score) supplies a full ISO and MusicBrainz (higher score) supplies just a year, the merged album keeps MB's year and iTunes' full date.
+- New `src/utils/dates.js` with `toIsoDate(value)`. Centralizes the YYYY → YYYY-MM-DD → ISO timestamp padding logic so the three response builders (`handleArtistLookup`, `verifyCache`, `handleDebugSearch`) stay in sync. Unit-tested for full ISO passthrough, date-only padding, year-month padding, year-only padding, numeric input, and unknown-format passthrough.
+- New regression tests: provider tests assert `releaseDate` is emitted; aggregator test asserts precision-wins-over-score for `releaseDate`; controller test asserts an iTunes ISO date flows through `handleArtistLookup` to the response unchanged.
+- No behavior change to `foreignArtistId` (still empty when MB is excluded from `metadataProviders` — re-enable MB to populate), retry/rate-limit/caching, or any other route.
+
 ## v0.3.35 - 2026-05-01 (hotfix)
 
 - **Stop 502s when MusicBrainz is unreachable.** `/api/search` and `/api/v1/artist/discover` no longer hard-depend on MusicBrainz. `discoverArtists` now reads `metadataProviders` and walks the configured set in fallback order (`musicbrainz → itunes → theaudiodb → discogs`); the first non-empty success wins. When MB is not in the active set, MB is never called. When all enabled providers fail, discovery returns `[]` and the route returns `200` with `partial: true` and a `warning` field — never `502`. Required after the ongoing MB TLS resets started failing every retry.

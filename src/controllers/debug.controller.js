@@ -11,6 +11,7 @@ const { testCustomProvider } = require('../providers/custom.provider')
 const { getConfigValue } = require('../settings/store')
 const { diagnoseMusicBrainz } = require('../services/diagnose.service')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
+const { toIsoDate } = require('../utils/dates')
 
 async function getDiff (req, res) {
   const { q } = req.query
@@ -261,7 +262,7 @@ async function verifyCache (req, res) {
         albums: data.albums.map(album => ({
           title: album.name,
           id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
-          firstReleaseDate: album.year ? String(album.year) : '',
+          firstReleaseDate: toIsoDate(album.releaseDate || album.year),
           coverUrl: album.imageUrl || '',
           provider: album.provider || '',
           ids: album.ids || {}
@@ -378,7 +379,7 @@ async function handleDebugSearch (req, res) {
           albums: data.albums.map(album => ({
             title: album.name,
             id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
-            firstReleaseDate: album.year ? String(album.year) : '',
+            firstReleaseDate: toIsoDate(album.releaseDate || album.year),
             coverUrl: album.imageUrl || '',
             provider: album.provider || '',
             ids: album.ids || {}

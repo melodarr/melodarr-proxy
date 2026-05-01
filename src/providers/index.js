@@ -138,18 +138,27 @@ async function aggregateArtist (term) {
         // If it exists, try to enrich with year if missing
         if (!existing.year && album.year) {
           existing.year = album.year
+          existing.releaseDate = album.releaseDate || existing.releaseDate
           existing.score = score
           existing.provider = provider
         } else if (existing.year && album.year && score > existing.score) {
           // If both have years, let the higher scored provider win
           existing.year = album.year
+          existing.releaseDate = album.releaseDate || existing.releaseDate
           existing.score = score
           existing.provider = provider
+        } else if (album.releaseDate && (!existing.releaseDate || album.releaseDate.length > existing.releaseDate.length)) {
+          // Same year, but the incoming provider has a more precise date
+          // (e.g. iTunes "1997-05-21T07:00:00Z" beats MB "1997"). Take it
+          // even when the score doesn't win — date precision is independent
+          // of overall provider quality and Lidarr cares about full ISO.
+          existing.releaseDate = album.releaseDate
         }
       } else {
         albumMap.set(normName, {
           name: album.name,
           year: album.year,
+          releaseDate: album.releaseDate || null,
           imageUrl: album.imageUrl || '',
           ids: mergeIds(null, album.ids),
           score,
@@ -172,6 +181,7 @@ async function aggregateArtist (term) {
     albums: Array.from(albumMap.values()).map(a => ({
       name: a.name,
       year: a.year,
+      releaseDate: a.releaseDate || null,
       imageUrl: a.imageUrl || '',
       ids: a.ids || {},
       provider: a.provider

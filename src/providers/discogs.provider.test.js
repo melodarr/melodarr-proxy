@@ -71,11 +71,14 @@ test('Discogs Provider', async (t) => {
 
     assert.strictEqual(result.albums[0].name, 'Album 1')
     assert.strictEqual(result.albums[0].year, 2020)
+    // v0.3.36: Discogs only exposes year — emit as year string.
+    assert.strictEqual(result.albums[0].releaseDate, '2020')
     assert.strictEqual(result.albums[0].imageUrl, 'http://example.com/1.jpg')
     assert.strictEqual(result.albums[0].ids.discogsId, '101')
 
     assert.strictEqual(result.albums[1].name, 'Album 2')
     assert.strictEqual(result.albums[1].year, null)
+    assert.strictEqual(result.albums[1].releaseDate, null)
   })
 
   await t.test('searchArtist - returns empty if no artists found', async () => {

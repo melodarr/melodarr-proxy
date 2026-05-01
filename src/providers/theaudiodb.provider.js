@@ -23,14 +23,20 @@ class TheAudioDbProvider {
     const albumsArray = Array.isArray(albumsData) ? albumsData : [albumsData]
 
     const albums = albumsArray
-      .map((album) => ({
-        name: album.strAlbum || '',
-        year: album.intYearReleased ? parseInt(album.intYearReleased, 10) : null,
-        imageUrl: album.strAlbumThumb || '',
-        ids: {
-          theAudioDbAlbumId: album.idAlbum || ''
+      .map((album) => {
+        const year = album.intYearReleased ? parseInt(album.intYearReleased, 10) : null
+        return {
+          name: album.strAlbum || '',
+          year,
+          // TheAudioDB only exposes year — emit as a year string so the
+          // Lidarr-response builder can pad to ISO 8601.
+          releaseDate: year ? String(year) : null,
+          imageUrl: album.strAlbumThumb || '',
+          ids: {
+            theAudioDbAlbumId: album.idAlbum || ''
+          }
         }
-      }))
+      })
       .filter((album) => album.name)
 
     return {

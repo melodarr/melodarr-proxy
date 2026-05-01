@@ -53,6 +53,8 @@ test('iTunes Provider', async (t) => {
     const album = result.albums[0]
     assert.strictEqual(album.name, 'Album 1')
     assert.strictEqual(album.year, 2022)
+    // v0.3.36: full ISO date preserved alongside year for Lidarr compatibility.
+    assert.strictEqual(album.releaseDate, '2022-05-10T07:00:00Z')
     assert.strictEqual(album.imageUrl, 'http://example.com/300x300bb.jpg')
     assert.strictEqual(album.ids.itunesCollectionId, '12345')
   })

@@ -97,6 +97,51 @@ test('Providers Index', async (t) => {
     assert.ok(metricsCalled)
   })
 
+  await t.test('aggregateArtist - merges releaseDate, prefers more precise (v0.3.36)', async () => {
+    // Two providers return the same album with different date precision:
+    // 'itunes' (lower score) carries a full ISO timestamp; 'musicbrainz'
+    // (higher score) carries year-only. The merge must keep both providers'
+    // contributions: high-scored provider wins identity (year, provider tag),
+    // but releaseDate prefers the more precise string regardless of score.
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'X',
+          albums: [{ name: 'Album', year: 1997, releaseDate: '1997', ids: { mb: '1' } }]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'X',
+          albums: [{ name: 'Album', year: 1997, releaseDate: '1997-05-21T07:00:00Z', ids: { it: '2' } }]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('X')
+
+    assert.strictEqual(result.albums.length, 1)
+    assert.strictEqual(result.albums[0].year, 1997)
+    // The more precise releaseDate wins even though iTunes scored lower.
+    assert.strictEqual(result.albums[0].releaseDate, '1997-05-21T07:00:00Z')
+  })
+
   await t.test('aggregateArtist - throws if all providers fail', async () => {
     const { index } = setupMocks('discogs')
     await assert.rejects(

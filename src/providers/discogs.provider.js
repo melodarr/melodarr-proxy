@@ -60,14 +60,19 @@ class DiscogsProvider {
       const releases = releasesRes.data?.releases || []
       const albums = releases
         .filter(r => r.type === 'master' || r.type === 'release')
-        .map(r => ({
-          name: r.title || '',
-          year: r.year ? parseInt(r.year, 10) : null,
-          imageUrl: r.thumb || '',
-          ids: {
-            discogsId: r.id ? String(r.id) : ''
+        .map(r => {
+          const year = r.year ? parseInt(r.year, 10) : null
+          return {
+            name: r.title || '',
+            year,
+            // Discogs only exposes year on the releases endpoint.
+            releaseDate: year ? String(year) : null,
+            imageUrl: r.thumb || '',
+            ids: {
+              discogsId: r.id ? String(r.id) : ''
+            }
           }
-        }))
+        })
         .filter(a => a.name)
 
       return {
