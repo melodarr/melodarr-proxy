@@ -12,6 +12,8 @@ const { getConfigValue } = require('../settings/store')
 const { diagnoseMusicBrainz } = require('../services/diagnose.service')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { toIsoDate } = require('../utils/dates')
+const providerHealth = require('../health/providerHealth')
+const providerMetrics = require('../health/providerMetrics')
 
 async function getDiff (req, res) {
   const { q } = req.query
@@ -554,4 +556,38 @@ async function diagnoseProvider (req, res) {
   }
 }
 
-module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory }
+// Live provider circuit-breaker + scoring snapshot. Mounted as a separate
+// endpoint from the existing /debug/providers (which serves the
+// active-providers config list) — see /debug/providers/health in
+// debug.routes.js. Read-only; never mutates health or metrics state.
+//
+// Returns ONLY providers that have been called since process start
+// (i.e., have an entry in either map). A provider listed in
+// metadataProviders but never invoked simply does not appear here.
+function getProvidersDebug (req, res) {
+  const names = new Set([
+    ...providerHealth._getAllNames(),
+    ...providerMetrics._getAllNames()
+  ])
+
+  const providers = []
+  for (const name of names) {
+    const h = providerHealth.get(name)
+    const m = providerMetrics.get(name)
+    providers.push({
+      name,
+      status: h.status,
+      failures: h.failures,
+      success: m.success,
+      failure: m.failure,
+      avgLatency: m.avgLatency,
+      score: providerMetrics.computeScore(m),
+      lastSuccess: m.lastSuccess,
+      lastFailure: h.lastFailure
+    })
+  }
+
+  res.json({ providers })
+}
+
+module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug }

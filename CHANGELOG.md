@@ -2,6 +2,15 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.39 - 2026-05-01
+
+- **Provider visibility — operator can now see what the circuit breaker is doing.** New endpoint `GET /debug/providers/health` returns per-provider live state (status, failures, success/failure counts, avgLatency, score, lastSuccess/lastFailure). Distinct from the existing `/debug/providers` (which serves the active-providers config list — unchanged). Read-only; never mutates health or metrics state.
+- **Env-configurable circuit breaker thresholds.** `PROVIDER_FAILURE_THRESHOLD` (default `3`) and `PROVIDER_COOLDOWN_MS` (default `600000` = 10 minutes) are now read at module load with strict validation: negative or non-numeric values throw at boot rather than silently misconfiguring. Defaults preserve v0.3.38 behavior exactly.
+- **Auto-reenable via success streak.** A disabled provider is no longer restored by a single canary success — it now requires `PROVIDER_REENABLE_SUCCESS_THRESHOLD` consecutive successes (default `3`) within `PROVIDER_REENABLE_WINDOW_MS` (default `300000` = 5 minutes). Successful canary attempts accumulate in a sliding window; failures reset the streak. On reenable, status transitions to `degraded` (not `healthy`) so subsequent failures put it back to `disabled` quickly. Logs a single INFO line `Provider auto-reenabled after success streak` on the transition. This replaces the v0.3.38 single-canary-restores behavior — sustained recovery is now required before the breaker closes.
+- New `_getAllNames()` internal export on `providerHealth` and `providerMetrics` so the new endpoint can union both maps without exposing the maps themselves to consumers.
+- Test additions: 6 tests for `getProvidersDebug`, 6 tests for ENV config (defaults still apply, custom threshold respected, custom cooldown respected, invalid threshold throws, negative threshold throws, negative cooldown throws), 4 tests for the new auto-reenable behavior (3-success streak triggers reenable to `degraded`; spaced-out successes outside the window do NOT reenable; failures interrupting the streak prevent reenable; failures resuming after reenable return to `disabled`). All ENV / spawn tests use `child_process.spawnSync` for deterministic module-load isolation.
+- **No changes to:** scoring formula, provider behavior, response shapes of any existing endpoint, fallback chain order, retry/rate-limit policy. Pure additive observability + configurability release.
+
 ## v0.3.38 - 2026-05-01
 
 - **Resilient adaptive provider system.** Adds a per-provider circuit breaker, EWMA-based scoring, and shape validation around every aggregation call. No API or response-shape changes — all surfaces (including the v0.3.37 SkyHook wrapping in `handleSearch`/`handleArtistDiscover`) are untouched.

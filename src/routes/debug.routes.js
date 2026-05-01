@@ -1,12 +1,15 @@
 const express = require('express')
 const router = express.Router()
 
-const { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory } = require('../controllers/debug.controller')
+const { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug } = require('../controllers/debug.controller')
 
 router.get('/overview', getOverview)
 router.get('/requests', getRequests)
 router.get('/requests/:id', getRequestById)
 router.get('/providers', getProviders)
+// Live circuit-breaker + scoring snapshot. Distinct from /providers above
+// (which returns the active-providers config list) — see getProvidersDebug.
+router.get('/providers/health', getProvidersDebug)
 router.get('/cache', getCacheState)
 router.get('/discover', handleDebugDiscover)
 router.get('/song-albums', handleDebugSongAlbums)

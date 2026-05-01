@@ -74,4 +74,11 @@ function sortByScore (items) {
     .map((entry) => entry.item)
 }
 
-module.exports = { get, record, computeScore, sortByScore, reset, FRESHNESS_HORIZON_MS }
+// Internal: enumerate every provider name that has been recorded against,
+// for /debug/providers/health. Underscore-prefixed to mark it as not part
+// of the consumer-facing API.
+function _getAllNames () {
+  return Array.from(metrics.keys())
+}
+
+module.exports = { get, record, computeScore, sortByScore, reset, _getAllNames, FRESHNESS_HORIZON_MS }

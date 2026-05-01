@@ -13,8 +13,28 @@
 
 const logger = require('../utils/logger')
 
-const FAILURE_THRESHOLD = 3
-const COOLDOWN_MS = 10 * 60 * 1000
+// v0.3.39: thresholds are env-configurable. Defaults preserve v0.3.38
+// behavior (3 failures, 10-minute cooldown) so existing deployments are
+// unaffected if neither var is set.
+//
+// Read at module load time — change requires a process restart.
+const FAILURE_THRESHOLD = parseInt(process.env.PROVIDER_FAILURE_THRESHOLD || '3', 10)
+const COOLDOWN_MS = parseInt(process.env.PROVIDER_COOLDOWN_MS || String(10 * 60 * 1000), 10)
+const REENABLE_THRESHOLD = parseInt(process.env.PROVIDER_REENABLE_SUCCESS_THRESHOLD || '3', 10)
+const REENABLE_WINDOW_MS = parseInt(process.env.PROVIDER_REENABLE_WINDOW_MS || '300000', 10)
+
+if (!Number.isFinite(FAILURE_THRESHOLD) || FAILURE_THRESHOLD < 1) {
+  throw new Error(`Invalid PROVIDER_FAILURE_THRESHOLD: ${process.env.PROVIDER_FAILURE_THRESHOLD} (must be a positive integer)`)
+}
+if (!Number.isFinite(COOLDOWN_MS) || COOLDOWN_MS < 0) {
+  throw new Error(`Invalid PROVIDER_COOLDOWN_MS: ${process.env.PROVIDER_COOLDOWN_MS} (must be a non-negative integer)`)
+}
+if (!Number.isFinite(REENABLE_THRESHOLD) || REENABLE_THRESHOLD < 1) {
+  throw new Error(`Invalid PROVIDER_REENABLE_SUCCESS_THRESHOLD: ${process.env.PROVIDER_REENABLE_SUCCESS_THRESHOLD} (must be a positive integer)`)
+}
+if (!Number.isFinite(REENABLE_WINDOW_MS) || REENABLE_WINDOW_MS < 0) {
+  throw new Error(`Invalid PROVIDER_REENABLE_WINDOW_MS: ${process.env.PROVIDER_REENABLE_WINDOW_MS} (must be a non-negative integer)`)
+}
 
 const state = new Map()
 
@@ -25,7 +45,9 @@ function get (name) {
       status: 'healthy',
       lastFailure: null,
       lastSuccess: null,
-      lastErrorMessage: null
+      lastErrorMessage: null,
+      successStreak: 0,
+      lastSuccessTimes: []
     })
   }
   return state.get(name)
@@ -33,18 +55,40 @@ function get (name) {
 
 function recordSuccess (name) {
   const p = get(name)
-  const wasDisabled = p.status === 'disabled'
+  p.successStreak = p.successStreak || 0
+  p.lastSuccessTimes = p.lastSuccessTimes || []
+
+  const now = Date.now()
+  p.successStreak += 1
+  p.lastSuccess = now
+  p.lastSuccessTimes.push(now)
+  p.lastSuccessTimes = p.lastSuccessTimes.filter(t => now - t < REENABLE_WINDOW_MS)
+  p.lastErrorMessage = null
+
+  if (p.status === 'disabled') {
+    if (p.lastSuccessTimes.length >= REENABLE_THRESHOLD) {
+      const windowOk = (p.lastSuccessTimes[p.lastSuccessTimes.length - 1] - p.lastSuccessTimes[0]) <= REENABLE_WINDOW_MS
+
+      if (windowOk) {
+        p.status = 'degraded'
+        p.failures = 0
+        logger.info('Provider auto-reenabled after success streak', {
+          provider: name,
+          streak: p.lastSuccessTimes.length
+        })
+      }
+    }
+    return
+  }
+
   p.failures = 0
   p.status = 'healthy'
-  p.lastSuccess = Date.now()
-  p.lastErrorMessage = null
-  if (wasDisabled) {
-    logger.info('Provider restored via canary', { provider: name })
-  }
 }
 
 function recordFailure (name, errorMessage) {
   const p = get(name)
+  p.successStreak = 0
+  p.lastSuccessTimes = []
   p.failures += 1
   p.lastFailure = Date.now()
   if (errorMessage) p.lastErrorMessage = errorMessage
@@ -80,12 +124,22 @@ function reset () {
   state.clear()
 }
 
+// Internal: enumerate every provider name that has been recorded against,
+// for /debug/providers/health to report on. Underscore-prefixed to mark
+// it as not part of the consumer-facing API.
+function _getAllNames () {
+  return Array.from(state.keys())
+}
+
 module.exports = {
   get,
   recordSuccess,
   recordFailure,
   shouldUse,
   reset,
+  _getAllNames,
   FAILURE_THRESHOLD,
-  COOLDOWN_MS
+  COOLDOWN_MS,
+  REENABLE_THRESHOLD,
+  REENABLE_WINDOW_MS
 }
