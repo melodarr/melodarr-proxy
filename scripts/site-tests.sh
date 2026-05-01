@@ -10,6 +10,10 @@
 #   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
 #                  overrides and restart the proxy (re-enables MusicBrainz)
 #                  (default: 0 — verify-only, never mutate)
+#   SETTINGS_PATH — explicit path to settings.json (default: auto-discover
+#                   via /data/settings.json, /opt/melodarr-proxy/data/...,
+#                   /config/settings.json, then container-wide find).
+#                   Only used when REENABLE_MB=1.
 #   EXPECTED_REV — git SHA expected from /api/version (default: v0.3.36 commit)
 #
 # Tracks pass/fail per check and exits non-zero if any test failed.
@@ -21,6 +25,7 @@ BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
 API_KEY="${API_KEY:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
 REENABLE_MB="${REENABLE_MB:-0}"
+SETTINGS_PATH="${SETTINGS_PATH:-}"
 EXPECTED_REV="${EXPECTED_REV:-f63d5fd82dc40f85a2a6172b4b566d006660cbb7}"
 
 # ── Optional interactive wizard ──────────────────────────────────
@@ -52,6 +57,9 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
   ask    API_KEY      "Proxy API key (blank = unauthed)"      "$API_KEY"
   ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
   ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
+  if [ "$REENABLE_MB" = "1" ]; then
+    ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
+  fi
   ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
   echo
 fi
@@ -160,8 +168,15 @@ fi
 # from metadataProviders (e.g. during a TLS outage), Lidarr searches
 # return empty foreignArtistIds and Lidarr rejects the response.
 # Setting REENABLE_MB=1 clears the saved runtime overrides under
-# .runtime in /data/settings.json (bind-mounted into the proxy
-# container at the same path) and restarts the proxy.
+# .runtime in settings.json and restarts the proxy.
+#
+# settings.json discovery: the file may be visible via a host bind-
+# mount at /data/settings.json on the LXC, OR it may live only inside
+# the container (when /data is a docker named volume).  We probe both
+# and use docker cp for the round-trip when we can only see it inside.
+#
+# Optional override: SETTINGS_PATH=/your/path forces a specific file
+# (must exist either on the LXC or inside the proxy container).
 #
 # We verify BEHAVIOR not just config — the action is only considered
 # successful when MB is in active providers AND the settings file no
@@ -172,22 +187,80 @@ if [ "$REENABLE_MB" = "1" ]; then
   echo "## Re-enable MusicBrainz (REENABLE_MB=1)"
   REENABLE_TS=$(date +%s)
 
-  # Action: backup, clear runtime overrides, restart proxy.
-  if pct exec "$CTID" -- bash -lc "
+  # ── Locate settings.json ────────────────────────────────────────
+  SETTINGS_LOCATION=""
+  CONTAINER_NAME="melodarr-proxy-proxy-1"
+  CANDIDATE_PATHS=("${SETTINGS_PATH:-}" "/data/settings.json" "/opt/melodarr-proxy/data/settings.json" "/config/settings.json")
+
+  echo "  Searching for settings.json..."
+  for path in "${CANDIDATE_PATHS[@]}"; do
+    [ -z "$path" ] && continue
+    # Try inside the container first — that's the canonical location.
+    if pct exec "$CTID" -- docker exec "$CONTAINER_NAME" test -f "$path" 2>/dev/null; then
+      SETTINGS_LOCATION="container"
+      SETTINGS_FILE="$path"
+      echo "  ✓ Found at $CONTAINER_NAME:$path (container)"
+      break
+    fi
+    # Fall back to LXC host (bind-mount case).
+    if pct exec "$CTID" -- test -f "$path" 2>/dev/null; then
+      SETTINGS_LOCATION="host"
+      SETTINGS_FILE="$path"
+      echo "  ✓ Found at $path (LXC host bind mount)"
+      break
+    fi
+  done
+
+  # If still not found, do a broader search and print candidates.
+  if [ -z "$SETTINGS_LOCATION" ]; then
+    echo "  Not at any known path — running find inside the container..."
+    CANDIDATES=$(pct exec "$CTID" -- docker exec "$CONTAINER_NAME" find / -name 'settings.json' -not -path '*/node_modules/*' 2>/dev/null | head -10 || true)
+    if [ -z "$CANDIDATES" ]; then
+      echo "  Falling back to find on LXC host..."
+      CANDIDATES=$(pct exec "$CTID" -- bash -lc "find / -name 'settings.json' -not -path '*/node_modules/*' 2>/dev/null | head -10" || true)
+    fi
+    if [ -n "$CANDIDATES" ]; then
+      echo "  Candidates found (set SETTINGS_PATH=<path> and re-run):"
+      echo "$CANDIDATES" | sed 's/^/    /'
+    else
+      echo "  No settings.json found anywhere."
+    fi
+    record_fail "MB re-enable: settings.json not found (set SETTINGS_PATH or check the container)"
+  fi
+
+  # ── Action: backup, clear overrides, restart ────────────────────
+  if [ -n "$SETTINGS_LOCATION" ]; then
+    if [ "$SETTINGS_LOCATION" = "container" ]; then
+      EDIT_OK=0
+      pct exec "$CTID" -- bash -lc "
 set -e
-[ -f /data/settings.json ] || { echo 'ERROR: /data/settings.json not found on LXC' >&2; exit 1; }
-cp /data/settings.json /data/settings.json.bak.${REENABLE_TS}
-jq 'del(.runtime.metadataProviders, .runtime.providerPriority)' /data/settings.json > /tmp/settings.new
-mv /tmp/settings.new /data/settings.json
+docker exec '$CONTAINER_NAME' cp '$SETTINGS_FILE' '${SETTINGS_FILE}.bak.${REENABLE_TS}'
+docker cp '$CONTAINER_NAME:$SETTINGS_FILE' /tmp/settings.${REENABLE_TS}.json
+jq 'del(.runtime.metadataProviders, .runtime.providerPriority)' /tmp/settings.${REENABLE_TS}.json > /tmp/settings.${REENABLE_TS}.new
+docker cp /tmp/settings.${REENABLE_TS}.new '$CONTAINER_NAME:$SETTINGS_FILE'
+rm -f /tmp/settings.${REENABLE_TS}.json /tmp/settings.${REENABLE_TS}.new
 cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
-"; then
-    echo "  Backup: /data/settings.json.bak.${REENABLE_TS}"
-    echo "  Proxy restarting; waiting 10s for it to come back up..."
-    sleep 10
-    remote_post /api/cache/clear > /dev/null 2>&1 || true
-    echo "  Cache cleared, running PASS gates..."
-  else
-    record_fail "MB re-enable: settings.json edit or proxy restart failed (see ERROR above)"
+" && EDIT_OK=1 || true
+    else
+      EDIT_OK=0
+      pct exec "$CTID" -- bash -lc "
+set -e
+cp '$SETTINGS_FILE' '${SETTINGS_FILE}.bak.${REENABLE_TS}'
+jq 'del(.runtime.metadataProviders, .runtime.providerPriority)' '$SETTINGS_FILE' > /tmp/settings.${REENABLE_TS}.new
+mv /tmp/settings.${REENABLE_TS}.new '$SETTINGS_FILE'
+cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
+" && EDIT_OK=1 || true
+    fi
+
+    if [ "$EDIT_OK" = "1" ]; then
+      echo "  Backup: ${SETTINGS_FILE}.bak.${REENABLE_TS} (in $SETTINGS_LOCATION)"
+      echo "  Proxy restarting; waiting 10s for it to come back up..."
+      sleep 10
+      remote_post /api/cache/clear > /dev/null 2>&1 || true
+      echo "  Cache cleared, running PASS gates..."
+    else
+      record_fail "MB re-enable: settings.json edit or proxy restart failed (see ERROR above)"
+    fi
   fi
 
   # ── PASS gate 1: /api/ready shows musicbrainz in active providers ──
@@ -201,9 +274,19 @@ cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
   fi
 
   # ── PASS gates 2 & 3: settings.json no longer shadows providers ──
-  # Read via `docker exec ... cat` so we see what the container sees.
-  SETTINGS_RUNTIME=$(pct exec "$CTID" -- docker exec melodarr-proxy-proxy-1 cat /data/settings.json 2>/dev/null \
-    | jq '.runtime // {} | {metadataProviders: (.metadataProviders // null), providerPriority: (.providerPriority // null)}')
+  # Read from whichever location we discovered the file in.
+  if [ "${SETTINGS_LOCATION:-}" = "container" ]; then
+    SETTINGS_RAW=$(pct exec "$CTID" -- docker exec "$CONTAINER_NAME" cat "$SETTINGS_FILE" 2>/dev/null)
+  elif [ "${SETTINGS_LOCATION:-}" = "host" ]; then
+    SETTINGS_RAW=$(pct exec "$CTID" -- cat "$SETTINGS_FILE" 2>/dev/null)
+  else
+    # Fall back to a best-effort container read so the gates still produce
+    # diagnostic output instead of crashing on an empty pipe.
+    SETTINGS_RAW=$(pct exec "$CTID" -- docker exec melodarr-proxy-proxy-1 cat /data/settings.json 2>/dev/null || echo '{}')
+  fi
+  SETTINGS_RUNTIME=$(echo "$SETTINGS_RAW" \
+    | jq '.runtime // {} | {metadataProviders: (.metadataProviders // null), providerPriority: (.providerPriority // null)}' 2>/dev/null \
+    || echo '{"metadataProviders": "<unreadable>", "providerPriority": "<unreadable>"}')
   if echo "$SETTINGS_RUNTIME" | jq -e '.metadataProviders == null' > /dev/null 2>&1; then
     record_pass "MB re-enable: settings.json runtime.metadataProviders override cleared"
   else
