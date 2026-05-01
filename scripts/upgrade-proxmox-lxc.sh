@@ -53,6 +53,27 @@ else
   exit 1
 fi
 
+# Ensure Docker IPv6 is enabled for MusicBrainz connectivity
+if ! docker network inspect bridge 2>/dev/null | grep -q '"EnableIPv6": true'; then
+  echo "Enabling IPv6 in Docker daemon to fix MusicBrainz connectivity..."
+  mkdir -p /etc/docker
+  cat > /etc/docker/daemon.json << 'JSON'
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "fd00:dead:beef::/64",
+  "ip6tables": true,
+  "experimental": true
+}
+JSON
+  systemctl restart docker
+  sleep 5
+  
+  if [[ -d "/opt/melodarr-proxy" ]] && [[ -f "/opt/melodarr-proxy/compose.yml" ]]; then
+    echo "Recreating existing Docker compose networks to apply IPv6..."
+    cd /opt/melodarr-proxy && $DOCKER_COMPOSE up -d --force-recreate
+  fi
+fi
+
 command -v jq >/dev/null || { echo "jq is required"; exit 1; }
 
 COMPOSE_FILE="/opt/melodarr-proxy/compose.yml"
