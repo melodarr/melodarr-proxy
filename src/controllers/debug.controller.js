@@ -10,6 +10,7 @@ const { buildHealthPayload } = require('./health.controller')
 const { testCustomProvider } = require('../providers/custom.provider')
 const { getConfigValue } = require('../settings/store')
 const { diagnoseMusicBrainz } = require('../services/diagnose.service')
+const upstreamBuffer = require('../diagnostics/upstream-buffer')
 
 async function getDiff (req, res) {
   const { q } = req.query
@@ -513,6 +514,19 @@ async function testProviderConfig (req, res) {
   }
 }
 
+function getUpstreamHistory (req, res) {
+  const provider = req.query.provider ? String(req.query.provider).trim().toLowerCase() : undefined
+
+  let limit
+  if (req.query.limit !== undefined) {
+    const n = Number(req.query.limit)
+    if (Number.isFinite(n) && n > 0) limit = Math.floor(n)
+  }
+
+  const result = upstreamBuffer.query({ provider, limit })
+  res.json(result)
+}
+
 async function diagnoseProvider (req, res) {
   const provider = String(req.query.provider || 'musicbrainz').trim().toLowerCase()
 
@@ -538,4 +552,4 @@ async function diagnoseProvider (req, res) {
   }
 }
 
-module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider }
+module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory }

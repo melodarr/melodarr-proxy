@@ -3,6 +3,8 @@ const assert = require('node:assert')
 
 function setupMocks () {
   delete require.cache[require.resolve('./upstream.service')]
+  // Reset the ring buffer between tests so per-test assertions are isolated.
+  delete require.cache[require.resolve('../diagnostics/upstream-buffer')]
 
   require.cache[require.resolve('../settings/store')] = {
     exports: {
@@ -59,7 +61,8 @@ function setupMocks () {
   }
 
   const upstreamService = require('./upstream.service')
-  return { upstreamService, axiosRequests, axiosMock }
+  const upstreamBuffer = require('../diagnostics/upstream-buffer')
+  return { upstreamService, axiosRequests, axiosMock, upstreamBuffer }
 }
 
 test('Upstream Service', async (t) => {
@@ -142,5 +145,74 @@ test('Upstream Service', async (t) => {
       /auth failed/
     )
     assert.strictEqual(axiosRequests.length, 1)
+  })
+
+  await t.test('musicBrainzGet - records ring entry on success', async () => {
+    const { upstreamService, upstreamBuffer } = setupMocks()
+    await upstreamService.musicBrainzGet('/ok-success')
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.strictEqual(entries.length, 1)
+    assert.strictEqual(entries[0].provider, 'musicbrainz')
+    assert.strictEqual(entries[0].path, '/ok-success')
+    assert.strictEqual(entries[0].attempt, 1)
+    assert.strictEqual(entries[0].failedStep, null)
+    assert.strictEqual(entries[0].httpStatus, 200)
+    assert.ok(typeof entries[0].requestId === 'string' && entries[0].requestId.length > 0)
+    assert.ok(entries[0].durationMs >= 0)
+  })
+
+  await t.test('musicBrainzGet - records one entry per retry attempt with shared requestId', async () => {
+    const { upstreamService, upstreamBuffer } = setupMocks()
+    await assert.rejects(
+      async () => upstreamService.musicBrainzGet('/retry-fail'),
+      /permanent error/
+    )
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.strictEqual(entries.length, 3)
+    // Newest first
+    assert.strictEqual(entries[0].attempt, 3)
+    assert.strictEqual(entries[2].attempt, 1)
+    // requestId is shared across attempts
+    const reqIds = new Set(entries.map((e) => e.requestId))
+    assert.strictEqual(reqIds.size, 1)
+    // failedStep classified from 502 status
+    assert.ok(entries.every((e) => e.failedStep === 'http'))
+    assert.ok(entries.every((e) => e.httpStatus === 502))
+  })
+
+  await t.test('musicBrainzGet - records ECONNRESET as failedStep tls', async () => {
+    const { upstreamService, axiosMock, upstreamBuffer } = setupMocks()
+    axiosMock.get = async () => {
+      const e = new Error('socket hang up')
+      e.code = 'ECONNRESET'
+      throw e
+    }
+    await assert.rejects(
+      async () => upstreamService.musicBrainzGet('/tls-fail'),
+      /socket hang up/
+    )
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.ok(entries.length >= 1)
+    assert.strictEqual(entries[0].failedStep, 'tls')
+    assert.strictEqual(entries[0].error.code, 'ECONNRESET')
+    assert.strictEqual(entries[0].httpStatus, null)
+  })
+
+  await t.test('musicBrainzGet - 4xx records single entry then throws', async () => {
+    const { upstreamService, axiosMock, upstreamBuffer } = setupMocks()
+    axiosMock.get = async () => {
+      const e = new Error('auth failed')
+      e.code = null
+      e.response = { status: 401 }
+      throw e
+    }
+    await assert.rejects(
+      async () => upstreamService.musicBrainzGet('/401'),
+      /auth failed/
+    )
+    const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
+    assert.strictEqual(entries.length, 1)
+    assert.strictEqual(entries[0].httpStatus, 401)
+    assert.strictEqual(entries[0].failedStep, 'http')
   })
 })

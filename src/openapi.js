@@ -330,6 +330,73 @@ const openApiDocument = {
         }
       }
     },
+    '/debug/upstream': {
+      get: {
+        tags: ['Debug'],
+        summary: 'Recent upstream attempt history (ring buffer)',
+        description: 'Returns recent per-attempt upstream entries from the in-memory ring buffer. One entry per HTTP attempt (so 3 retries = 3 entries that share a requestId). Newest first. Use to answer "is this failing every time? same IP? same step? same error?" without grepping logs.',
+        operationId: 'getUpstreamHistory',
+        parameters: [
+          {
+            name: 'provider',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter to a single provider (e.g. musicbrainz). Case-insensitive.'
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', minimum: 1 },
+            description: 'Maximum number of entries to return (newest first). Defaults to maxSize.'
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Ring buffer query result',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    entries: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          ts: { type: 'string', format: 'date-time' },
+                          requestId: { type: 'string', description: 'Stable across retries within a single upstream call.' },
+                          provider: { type: 'string' },
+                          path: { type: 'string' },
+                          attempt: { type: 'integer', minimum: 1 },
+                          selectedAddress: { type: 'string', nullable: true },
+                          selectedFamily: { type: 'integer', nullable: true, enum: [4, 6, null] },
+                          failedStep: { type: 'string', nullable: true, enum: ['dns', 'tcp', 'tls', 'http', 'parse', null] },
+                          error: {
+                            type: 'object',
+                            nullable: true,
+                            properties: {
+                              code: { type: 'string', nullable: true },
+                              message: { type: 'string', nullable: true }
+                            }
+                          },
+                          httpStatus: { type: 'integer', nullable: true },
+                          durationMs: { type: 'integer' }
+                        }
+                      }
+                    },
+                    filteredCount: { type: 'integer' },
+                    totalCount: { type: 'integer' },
+                    maxSize: { type: 'integer' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     '/debug/test-provider': {
       post: {
         tags: ['Debug'],

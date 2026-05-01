@@ -1,6 +1,11 @@
 const axios = require('axios')
+const crypto = require('crypto')
+const dns = require('dns').promises
 const https = require('https')
+const net = require('net')
+const { URL } = require('url')
 const { getConfigValue } = require('../settings/store')
+const upstreamBuffer = require('../diagnostics/upstream-buffer')
 
 const musicBrainzAgents = new Map()
 
@@ -21,6 +26,19 @@ function getMusicBrainzHttpsAgent () {
 
 let lastRequestTime = 0
 let requestQueue = Promise.resolve()
+
+async function lookupForRecord (hostname, family) {
+  if (!hostname) return null
+  const literalFamily = net.isIP(hostname)
+  if (literalFamily) return { address: hostname, family: literalFamily }
+  try {
+    const opts = family ? { family } : {}
+    const result = await dns.lookup(hostname, opts)
+    return { address: result.address, family: result.family }
+  } catch (_e) {
+    return null
+  }
+}
 
 async function enqueueRequest (fn) {
   const minInterval = getConfigValue('minRequestIntervalMs') || 1100
@@ -131,22 +149,67 @@ class UpstreamService {
   async musicBrainzGet (path, params) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
     const timeout = getConfigValue('upstreamTimeoutMs')
+    const ipFamilyConfig = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
+    const family = ipFamilyConfig === '4' ? 4 : ipFamilyConfig === '6' ? 6 : undefined
+
+    let hostname = null
+    try { hostname = new URL(baseUrl).hostname } catch (_e) {}
+
+    // One requestId per musicBrainzGet call — shared across all 3 retry
+    // attempts so operators can group attempts in /debug/upstream by request.
+    const requestId = crypto.randomBytes(8).toString('hex')
 
     let lastError
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const startedAt = Date.now()
+      // Pre-lookup so we can record what IP/family the agent would resolve.
+      // Keep-alive may reuse a socket and skip resolution; this is a best-
+      // effort hint, not authoritative. lookupForRecord is wrapped in try/
+      // catch so a DNS failure here never blocks the actual request.
+      const ipInfo = await lookupForRecord(hostname, family)
+
       try {
-        return await enqueueRequest(async () => {
-          const response = await axios.get(`${baseUrl}${path}`, {
+        const result = await enqueueRequest(async () => {
+          return await axios.get(`${baseUrl}${path}`, {
             headers: this.getMusicBrainzHeaders(),
             httpsAgent: getMusicBrainzHttpsAgent(),
             params: { fmt: 'json', ...params },
             timeout
           })
-          return response.data
         })
+
+        upstreamBuffer.record({
+          ts: new Date().toISOString(),
+          requestId,
+          provider: 'musicbrainz',
+          path,
+          attempt,
+          selectedAddress: ipInfo?.address || null,
+          selectedFamily: ipInfo?.family || null,
+          failedStep: null,
+          error: null,
+          httpStatus: result?.status ?? 200,
+          durationMs: Date.now() - startedAt
+        })
+
+        return result.data
       } catch (error) {
         lastError = error
+
+        upstreamBuffer.record({
+          ts: new Date().toISOString(),
+          requestId,
+          provider: 'musicbrainz',
+          path,
+          attempt,
+          selectedAddress: ipInfo?.address || null,
+          selectedFamily: ipInfo?.family || null,
+          failedStep: upstreamBuffer.classifyFailedStep({ error, status: error.response?.status }),
+          error: { code: error.code || null, message: error.message || null },
+          httpStatus: error.response?.status || null,
+          durationMs: Date.now() - startedAt
+        })
 
         if (error.response?.status && error.response.status < 500 && error.response.status !== 429) {
           throw error

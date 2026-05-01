@@ -1,0 +1,5 @@
+services:
+  proxy:
+    environment:
+      PORT: 3000
+      \REQUIRE_API_KEY: "false"
