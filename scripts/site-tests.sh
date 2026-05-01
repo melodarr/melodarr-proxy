@@ -64,6 +64,80 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
   echo
 fi
 
+# ── Ephemeral admin-generated API key (opt-in) ───────────────────
+# When API_KEY is unset and the user opts in, log in with the admin
+# password and POST /api/admin/keys/create to mint a throwaway key
+# scoped to this run. The plaintext is captured from the response (it
+# is shown by the proxy exactly once — settings.json stores only an
+# scrypt hash, so post-hoc recovery is impossible by design). On EXIT
+# we re-login and DELETE the key by id so nothing persists past the
+# script. All proxy calls go through pct exec because the script
+# itself runs on the Proxmox host, not inside the LXC.
+EPHEMERAL_KEY_ID=""
+EPHEMERAL_PASSWORD=""
+
+cleanup_ephemeral_key () {
+  if [ -n "$EPHEMERAL_KEY_ID" ] && [ -n "$EPHEMERAL_PASSWORD" ]; then
+    echo
+    echo "Cleaning up temporary API key (id=$EPHEMERAL_KEY_ID)..."
+    pct exec "$CTID" -- env BASE_URL="$BASE_URL" ADMIN_PASSWORD="$EPHEMERAL_PASSWORD" KEY_ID="$EPHEMERAL_KEY_ID" bash -lc '
+      JAR=$(mktemp)
+      trap "rm -f $JAR" EXIT
+      curl -s -c "$JAR" -o /dev/null -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"password\":\"$ADMIN_PASSWORD\"}" \
+        "$BASE_URL/api/settings/login" || true
+      curl -s -b "$JAR" -o /dev/null -X DELETE \
+        "$BASE_URL/api/admin/keys/$KEY_ID" || true
+    ' || true
+  fi
+}
+trap cleanup_ephemeral_key EXIT
+
+if [ -z "$API_KEY" ] && [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
+  read -rp "No API key set. Generate ephemeral key with admin password? (y/N): " EPHEMERAL_YN
+  if [[ "$EPHEMERAL_YN" =~ ^[Yy] ]]; then
+    read -rsp "Admin password: " EPHEMERAL_PASSWORD
+    echo
+    # Login + create in a single pct exec so the cookie jar lives only
+    # inside the LXC's /tmp for the duration of this call. Capture the
+    # full create response to the host so we can extract id + key.
+    KEY_RESP=$(pct exec "$CTID" -- env BASE_URL="$BASE_URL" ADMIN_PASSWORD="$EPHEMERAL_PASSWORD" bash -lc '
+      JAR=$(mktemp)
+      trap "rm -f $JAR" EXIT
+      LOGIN_HTTP=$(curl -s -c "$JAR" -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"password\":\"$ADMIN_PASSWORD\"}" \
+        "$BASE_URL/api/settings/login")
+      if [ "$LOGIN_HTTP" != "200" ]; then
+        echo "{\"error\":\"login failed (http $LOGIN_HTTP)\"}"
+        exit 0
+      fi
+      curl -s -b "$JAR" -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"name\":\"site-tests-$(date +%s)\",\"quota\":600}" \
+        "$BASE_URL/api/admin/keys/create"
+    ')
+
+    TEMP_KEY=$(echo "$KEY_RESP" | jq -r '.key // empty' 2>/dev/null)
+    TEMP_KEY_ID=$(echo "$KEY_RESP" | jq -r '.id // empty' 2>/dev/null)
+
+    if [ -z "$TEMP_KEY" ] || [ "$TEMP_KEY" = "null" ]; then
+      ERR=$(echo "$KEY_RESP" | jq -r '.error // "unknown error"' 2>/dev/null)
+      echo "ERROR: failed to mint ephemeral API key: $ERR"
+      # If login fails (wrong password or 503 setup-required), wipe the
+      # password so the EXIT trap doesn't try to use it for cleanup.
+      EPHEMERAL_PASSWORD=""
+      exit 1
+    fi
+
+    API_KEY="$TEMP_KEY"
+    EPHEMERAL_KEY_ID="$TEMP_KEY_ID"
+    echo "✓ Temporary API key created (id=$TEMP_KEY_ID); will be deleted on exit"
+    unset TEMP_KEY
+  fi
+fi
+
 # ── Pass/fail tracking ───────────────────────────────────────────
 PASSES=0
 FAILS=0

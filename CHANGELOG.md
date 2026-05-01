@@ -2,6 +2,13 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.41 - 2026-05-01
+
+- **`scripts/site-tests.sh` — ephemeral admin-generated API key path.** When `API_KEY` is unset and the operator opts in to a new wizard prompt ("Generate ephemeral key with admin password?"), the harness now: (1) prompts for the admin password, (2) `POST /api/settings/login` to obtain an auth cookie inside the LXC, (3) `POST /api/admin/keys/create` with name `site-tests-<timestamp>` and a generous 600 req/min quota, (4) captures the plaintext key from the response (proxy returns it once; `settings.json` only stores an scrypt hash), (5) uses it for the run, and (6) re-logs in and `DELETE /api/admin/keys/:id` on `EXIT` trap so nothing persists. The cookie jar lives only inside the LXC's `/tmp` and is `trap`-deleted in the same `pct exec` block.
+- Backward compatible: every existing usage path (env var, wizard with manual key, wizard blank for unauthed, `INTERACTIVE=0`) is unchanged. The new code path only fires when `API_KEY` is empty AND the operator answers `y` to the new explicit prompt. CI runs (`INTERACTIVE=0`) skip the prompt and proceed unauthed as before.
+- Honest design note: the spec for this work originally proposed reading the API key from `settings.json`, which is structurally impossible — the proxy stores `apiKeys: [{ id, name, salt, hash, ... }]` with `hash = scryptSync(plaintext, salt, 64)` and discards the plaintext. Auto-discovery from disk would require reversing scrypt. The ephemeral generate-and-revoke approach honors the security model.
+- No application code changes. Only `scripts/site-tests.sh` and the `package.json` / `CHANGELOG.md` release plumbing.
+
 ## v0.3.40 - 2026-05-01
 
 - **Persistent provider metrics across restarts.** `data/providerMetrics.json` is loaded asynchronously at module init and saved via a debounced `setTimeout` (default 30s window, configurable via `PROVIDER_METRICS_SAVE_MS`). The hot path (`record()`) does NOT pay sync I/O cost — every record arms the timer if not already armed; one timer fires regardless of call volume. The save timer is `unref()`-ed so it never keeps the event loop alive. Failures (missing file, parse error, perms) are silent — the in-memory map stays empty and the proxy proceeds with fresh state.
