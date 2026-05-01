@@ -64,6 +64,10 @@ async function aggregateArtist (term) {
   )
 
   let mergedArtistName = term
+  let foreignArtistId = ''
+  let disambiguation = ''
+  let overview = ''
+  let images = []
   const albumMap = new Map() // key: normalized name -> merged album
 
   let successfulProviders = 0
@@ -105,6 +109,18 @@ async function aggregateArtist (term) {
     // Since validOutcomes are sorted by score, the best provider gets to name the artist
     if (data.artistName && mergedArtistName === term) {
       mergedArtistName = data.artistName
+    }
+    if (data.foreignArtistId && !foreignArtistId) {
+      foreignArtistId = data.foreignArtistId
+    }
+    if (data.disambiguation && !disambiguation) {
+      disambiguation = data.disambiguation
+    }
+    if (data.overview && !overview) {
+      overview = data.overview
+    }
+    if (data.images && data.images.length > 0 && images.length === 0) {
+      images = data.images
     }
 
     for (const album of data.albums) {
@@ -149,6 +165,10 @@ async function aggregateArtist (term) {
 
   return {
     artistName: mergedArtistName,
+    foreignArtistId,
+    disambiguation,
+    overview,
+    images,
     albums: Array.from(albumMap.values()).map(a => ({
       name: a.name,
       year: a.year,

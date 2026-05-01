@@ -231,13 +231,13 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.headers['X-Cache'], 'MISS')
   assert.equal(res.headers['X-Upstream-Calls'], '1')
   assert.equal(res.headers['X-Providers'], 'musicbrainz')
-  assert.equal(res.body.artistName, 'TEST ARTIST')
-  assert.equal(res.body.foreignArtistId, '')
-  assert.equal(res.body.albums[0].title, 'First Album')
-  assert.equal(res.body.albums[0].id, 'rg-1')
-  assert.equal(res.body.albums[0].firstReleaseDate, '2001')
-  assert.equal(res.body.albums[0].coverUrl, 'https://example.test/cover.jpg')
-  assert.equal(res.body.partial, false)
+  assert.equal(res.body[0].artistName, 'TEST ARTIST')
+  assert.equal(res.body[0].foreignArtistId, '')
+  assert.equal(res.body[0].albums[0].title, 'First Album')
+  assert.equal(res.body[0].albums[0].id, 'rg-1')
+  assert.equal(res.body[0].albums[0].firstReleaseDate, '2001')
+  assert.equal(res.body[0].albums[0].coverUrl, 'https://example.test/cover.jpg')
+  assert.equal(res.body[0].partial, false)
   assert.ok(cacheStore.has('artist:test artist'))
 })
 
@@ -267,8 +267,8 @@ test('artist lookup returns cached response without debug data by default', asyn
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['X-Cache'], 'HIT')
   assert.equal(res.headers['X-Providers'], 'itunes')
-  assert.equal(res.body.artistName, 'Cached Artist')
-  assert.equal(res.body.debug, undefined)
+  assert.equal(res.body[0].artistName, 'Cached Artist')
+  assert.equal(res.body[0].debug, undefined)
 })
 
 test('artist lookup returns partial error response when all providers fail', async () => {
@@ -282,11 +282,11 @@ test('artist lookup returns partial error response when all providers fail', asy
   await controller.handleArtistLookup({ query: { term: 'Broken Artist' } }, res)
 
   assert.equal(res.statusCode, 502)
-  assert.equal(res.body.artistName, 'Broken Artist')
-  assert.equal(res.body.foreignArtistId, '')
-  assert.deepEqual(res.body.albums, [])
-  assert.equal(res.body.partial, true)
-  assert.equal(res.body.warning, 'All metadata providers failed')
+  assert.equal(res.body[0].artistName, 'Broken Artist')
+  assert.equal(res.body[0].foreignArtistId, '')
+  assert.deepEqual(res.body[0].albums, [])
+  assert.equal(res.body[0].partial, true)
+  assert.equal(res.body[0].warning, 'All metadata providers failed')
 })
 
 // handleSearch tests
@@ -384,7 +384,7 @@ test('artist lookup handles lock timeout', async () => {
   await controller.handleArtistLookup({ query: { term: 'locked' } }, res)
   Date.now = originalNow
   assert.equal(res.statusCode, 502)
-  assert.equal(res.body.warning, 'Upstream request failed during coalescing (lock timeout)')
+  assert.equal(res.body[0].warning, 'Upstream request failed during coalescing (lock timeout)')
 })
 
 test('artist lookup coalescing returns cached data', async () => {
@@ -429,7 +429,7 @@ test('artist lookup coalescing returns cached data with debug', async () => {
   await controller.handleArtistLookup({ query: { term: 'coalesce', debug: 'true' } }, res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['X-Cache'], 'HIT')
-  assert.equal(res.body.debug, true)
+  assert.equal(res.body[0].debug, true)
 })
 
 // handleArtistDiscover tests

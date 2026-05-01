@@ -61,7 +61,12 @@ class MusicBrainzProvider {
       }).filter(a => a.name)
 
     return {
+      schemaVersion: 'skyhook-v1',
       artistName: artist.name || artist['sort-name'] || '',
+      foreignArtistId: artist.id || '',
+      disambiguation: artist.disambiguation || '',
+      overview: artist.disambiguation || '',
+      images: [],
       albums
     }
   }

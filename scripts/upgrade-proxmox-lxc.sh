@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
 CTID="${1:-${CTID:-}}"
 
 if [[ -z "$CTID" ]]; then
@@ -41,6 +42,16 @@ UPGRADE_SCRIPT="/tmp/melodarr-upgrade-${CTID}.sh"
 cat << 'EOF_CONTAINER' > "$UPGRADE_SCRIPT"
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Determine docker compose command
+if docker compose version >/dev/null 2>&1; then
+  DOCKER_COMPOSE="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  DOCKER_COMPOSE="docker-compose"
+else
+  echo "Error: Neither 'docker compose' nor 'docker-compose' found"
+  exit 1
+fi
 
 command -v jq >/dev/null || { echo "jq is required"; exit 1; }
 
@@ -86,11 +97,11 @@ fi
 sed -i 's/^[[:space:]]*\\*[[:space:]]*REQUIRE_API_KEY/      REQUIRE_API_KEY/g' "$COMPOSE_FILE" || true
 
 # Test configuration before proceeding
-if ! docker compose config >/dev/null 2>&1; then
+if ! $DOCKER_COMPOSE config >/dev/null 2>&1; then
   echo "WARNING: compose.yml contains invalid YAML. Attempting to fix common issues..."
   # Try to fix the exact known issue by aggressively stripping backslashes globally on that line
   sed -i '/REQUIRE_API_KEY/s/\\//g' "$COMPOSE_FILE" || true
-  if ! docker compose config >/dev/null 2>&1; then
+  if ! $DOCKER_COMPOSE config >/dev/null 2>&1; then
     echo "ERROR: compose.yml is still invalid."
     if [[ "$IS_SOURCE_BUILD" -eq 0 ]]; then
       echo "Downloading fresh compose.yml from repository..."
@@ -99,13 +110,13 @@ if ! docker compose config >/dev/null 2>&1; then
       awk '/PORT: 3000/ && !inserted { print $0; print "      REQUIRE_API_KEY: \"false\""; inserted = 1; next } { print }' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
     else
       echo "Please fix compose.yml manually:"
-      docker compose config
+      $DOCKER_COMPOSE config
       exit 1
     fi
   fi
 fi
 
-HAS_MELODASH=$(docker compose config --services 2>/dev/null | grep -cx melodash || true)
+HAS_MELODASH=$($DOCKER_COMPOSE config --services 2>/dev/null | grep -cx melodash || true)
 
 if [[ "$HAS_MELODASH" -eq 0 ]]; then
   echo "Melodash service missing from compose.yml. Adding it now..."
@@ -138,7 +149,7 @@ if [[ "$IS_SOURCE_BUILD" -gt 0 ]]; then
 else
   echo "Detected STANDARD IMAGE installation."
   echo "Pulling latest Docker images..."
-  cd /opt/melodarr-proxy && docker compose pull proxy melodash
+  cd /opt/melodarr-proxy && $DOCKER_COMPOSE pull proxy melodash
 fi
 
 echo "=========================================================="
@@ -147,7 +158,7 @@ echo "=========================================================="
 
 # Determine network
 cd /opt/melodarr-proxy
-NETWORK=$(docker compose ps -q proxy | xargs docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | head -n 1 || true)
+NETWORK=$($DOCKER_COMPOSE ps -q proxy | xargs docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | head -n 1 || true)
 if [[ -z "$NETWORK" ]]; then
   NETWORK=$(docker network ls --format '{{.Name}}' | grep proxy | head -n 1 || true)
   if [[ -z "$NETWORK" ]]; then
@@ -216,7 +227,7 @@ done
 if [[ "$SUCCESS" -eq 1 ]]; then
   echo "✅ Canary Contract Validation PASSED!"
   echo "Recreating and restarting main containers..."
-  cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash
+  cd /opt/melodarr-proxy && $DOCKER_COMPOSE up -d proxy redis melodash
   
   echo "Cleaning up canary container..."
   docker rm -f "$CANARY_ID" >/dev/null

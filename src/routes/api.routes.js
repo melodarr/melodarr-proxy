@@ -55,6 +55,7 @@ const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
 router.get('/search', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
 router.get('/v1/artist/discover', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
 router.get('/v1/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
+router.get('/v0.4/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/v1/song/albums', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
 
 // Path-based API key routes for Lidarr compatibility
@@ -70,6 +71,7 @@ const pathAuthMiddleware = (req, res, next) => {
 router.get('/:apiKey/search', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
 router.get('/:apiKey/v1/artist/discover', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
 router.get('/:apiKey/v1/artist/lookup', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
+router.get('/:apiKey/v0.4/artist/lookup', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/:apiKey/v1/song/albums', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
 
 // Control routes

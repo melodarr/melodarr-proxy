@@ -29,86 +29,91 @@ const apiRoutes = require('./routes/api.routes')
 const debugRoutes = require('./routes/debug.routes')
 const openApiDocument = require('./openapi')
 
-const app = express()
+function createApp () {
+  const app = express()
+
+  // Middleware
+  // Custom CORS middleware
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*')
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Api-Key')
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(200)
+    } else {
+      next()
+    }
+  })
+  app.use(express.json())
+
+  // Metrics tracking for all routes
+  app.use(metricsMiddleware)
+
+  // Versioning + Release Identity Endpoint
+  app.get('/api/version', (req, res) => {
+    res.json({
+      app: process.env.APP_NAME || 'Melodarr Proxy',
+      version: process.env.APP_VERSION || '0.3.18',
+      revision: process.env.APP_REVISION || 'unknown',
+      created: process.env.APP_CREATED || 'unknown',
+      environment: process.env.NODE_ENV || 'development'
+    })
+  })
+
+  app.get('/openapi.json', (req, res) => {
+    res.json(openApiDocument)
+  })
+
+  app.get('/docs', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/docs.html'))
+  })
+
+  app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'))
+  })
+
+  app.get('/stats', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/stats.html'))
+  })
+
+  app.get('/settings', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/settings.html'))
+  })
+
+  app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/login.html'))
+  })
+
+  app.get('/api/info', (req, res) => {
+    res.json({
+      app: process.env.APP_NAME || 'Melodarr Proxy',
+      version: process.env.APP_VERSION || '0.3.18',
+      role: 'api',
+      docs: '/docs',
+      openapi: '/openapi.json',
+      health: '/api/health'
+    })
+  })
+
+  app.use(express.static(path.join(__dirname, '../public')))
+  // API Routes
+  app.use('/api', apiRoutes)
+  app.use('/debug', debugRoutes)
+
+  // Fallback for unmatched routes
+  app.use((req, res) => {
+    res.status(404).json({
+      error: 'API route not found'
+    })
+  })
+
+  return app
+}
+
 const PORT = process.env.PORT || 3000
 
-// Middleware
-// Custom CORS middleware
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Api-Key')
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200)
-  } else {
-    next()
-  }
-})
-app.use(express.json())
-
-// Metrics tracking for all routes
-app.use(metricsMiddleware)
-
-// Versioning + Release Identity Endpoint
-app.get('/api/version', (req, res) => {
-  res.json({
-    app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.18',
-    revision: process.env.APP_REVISION || 'unknown',
-    created: process.env.APP_CREATED || 'unknown',
-    environment: process.env.NODE_ENV || 'development'
-  })
-})
-
-app.get('/openapi.json', (req, res) => {
-  res.json(openApiDocument)
-})
-
-app.get('/docs', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/docs.html'))
-})
-
-app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'))
-})
-
-app.get('/stats', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/stats.html'))
-})
-
-app.get('/settings', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/settings.html'))
-})
-
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/login.html'))
-})
-
-app.get('/api/info', (req, res) => {
-  res.json({
-    app: process.env.APP_NAME || 'Melodarr Proxy',
-    version: process.env.APP_VERSION || '0.3.18',
-    role: 'api',
-    docs: '/docs',
-    openapi: '/openapi.json',
-    health: '/api/health'
-  })
-})
-
-app.use(express.static(path.join(__dirname, '../public')))
-// API Routes
-app.use('/api', apiRoutes)
-app.use('/debug', debugRoutes)
-
-// Fallback for unmatched routes
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'API route not found'
-  })
-})
-
 // ── Startup Validation (Fail-Fast System) ───────────────────────
-async function boot () {
+async function boot (appInstance) {
   logger.info('Starting boot sequence...')
 
   // 1. Validate Cache Connection
@@ -145,20 +150,24 @@ async function boot () {
   // Start server
   if (!process.env.NO_LISTEN) {
     if (typeof PORT === 'string' && PORT.startsWith('/')) {
-      app.listen(PORT, () => {
+      appInstance.listen(PORT, () => {
         logger.info(`Production proxy running on socket ${PORT}`)
         logger.info(`Health Check: curl --unix-socket ${PORT} http://localhost/api/health`)
       })
     } else {
-      app.listen(PORT, '0.0.0.0', () => {
+      appInstance.listen(PORT, '0.0.0.0', () => {
         logger.info(`Production proxy running on port ${PORT}`)
         logger.info(`Health Check: http://localhost:${PORT}/api/health`)
       })
     }
   } else {
-    logger.info('Skipping app.listen due to NO_LISTEN flag.')
+    logger.info('Skipping appInstance.listen due to NO_LISTEN flag.')
   }
 }
 
-boot()
-module.exports = app
+if (require.main === module) {
+  const appInstance = createApp()
+  boot(appInstance)
+}
+
+module.exports = { createApp, boot }

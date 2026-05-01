@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Determine docker compose command
+if docker compose version >/dev/null 2>&1; then
+  DOCKER_COMPOSE="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  DOCKER_COMPOSE="docker-compose"
+else
+  echo "Error: Neither 'docker compose' nor 'docker-compose' found"
+  exit 1
+fi
+
 cd "$(dirname "$0")/.."
 
 command -v jq >/dev/null || { echo "jq is required"; exit 1; }
@@ -15,7 +25,7 @@ echo "Upgrading Melodarr Proxy to $TAG using Canary Validation"
 echo "=========================================================="
 
 # Determine the Docker network currently used by the proxy
-NETWORK=$(docker compose ps -q proxy | xargs docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' | head -n 1)
+NETWORK=$($DOCKER_COMPOSE ps -q proxy | xargs docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' | head -n 1)
 
 if [[ -z "$NETWORK" ]]; then
   echo "Could not determine Docker network. Is the proxy currently running?"
@@ -91,8 +101,8 @@ if [[ "$SUCCESS" -eq 1 ]]; then
   echo "5. Updating latest image and restarting main container..."
   
   # Ensure the compose file uses the expected tag, or just pull and up if it uses latest
-  docker compose pull proxy
-  docker compose up -d proxy
+  $DOCKER_COMPOSE pull proxy
+  $DOCKER_COMPOSE up -d proxy
   
   echo "6. Removing canary container..."
   docker rm -f "$CANARY_ID" >/dev/null

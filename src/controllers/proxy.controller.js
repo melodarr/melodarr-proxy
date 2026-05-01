@@ -82,7 +82,7 @@ async function handleSearch (req, res) {
     const data = await withTimeout(discoverArtists({ query: q, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startAgg, 'success')
 
-    const ttl = 86400 // 24h default
+    const ttl = 86400 * 30 // 30 days for SWR
 
     const startCacheSet = Date.now()
     await cache.set(cacheKey, data, ttl)
@@ -137,6 +137,84 @@ function summarizeProvidersFromAlbums (albums = []) {
   }))
 }
 
+async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedTerm, trace) {
+  const startAgg = Date.now()
+  const data = await withTimeout(aggregateArtist(term), 15000)
+  tracer.addStep(trace, 'aggregateArtist', Date.now() - startAgg, 'success')
+
+  const rankingStartTime = Date.now()
+
+  const rankingInput = {
+    query: term,
+    results: [
+      {
+        artistName: data.artistName,
+        albums: data.albums.map(album => ({
+          title: album.name,
+          id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
+          firstReleaseDate: album.year ? String(album.year) : '',
+          coverUrl: album.imageUrl || '',
+          provider: album.provider || '',
+          ids: album.ids || {}
+        })),
+        providerSources: Array.from(new Set(data.albums.map(a => a.provider))),
+        confidence: data.confidence
+      }
+    ]
+  }
+
+  const { results: rankedResults, debug: rankingDebug } = rankResults(rankingInput)
+  const rankingTimeMs = Date.now() - rankingStartTime
+  tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
+
+  const scores = rankedResults.map(r => r.score)
+  const topConfidence = rankedResults[0]?.confidence || 0
+  metrics.recordRanking(rankingTimeMs, scores, topConfidence)
+
+  const topResult = rankedResults[0]
+
+  // Enrichment Pipeline
+  const startEnrich = Date.now()
+  const enrichedTopResult = await enrichResult(topResult, isDebug)
+  tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
+
+  const response = {
+    artistName: enrichedTopResult.artistName,
+    foreignArtistId: data.foreignArtistId || '',
+    disambiguation: data.disambiguation || '',
+    overview: data.overview || '',
+    images: data.images || [],
+    albums: enrichedTopResult.albums,
+    tags: enrichedTopResult.tags,
+    genres: enrichedTopResult.genres,
+    popularity: enrichedTopResult.popularity,
+    providers: data.providers,
+    providerErrors: data.providerErrors,
+    partial: data.partial,
+    warning: data.warning,
+    confidence: enrichedTopResult.confidence,
+    score: enrichedTopResult.score,
+    results: rankedResults
+  }
+
+  if (isDebug) {
+    response.debug = {
+      ranking: rankingDebug,
+      enrichment: enrichedTopResult._enrichmentDebug
+    }
+    delete enrichedTopResult._enrichmentDebug
+  }
+
+  const SWR_TTL_SECONDS = 86400 * 30 // 30 days
+  const startCacheSet = Date.now()
+  await cache.set(cacheKey, response, SWR_TTL_SECONDS)
+  tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
+
+  await saveSnapshot(`artist:${normalizedTerm}`, response)
+
+  return { response, data }
+}
+
 async function handleArtistLookup (req, res) {
   const term = String(req.query.term || '').trim()
   const isDebug = req.query.debug === 'true'
@@ -155,7 +233,25 @@ async function handleArtistLookup (req, res) {
   const cachedData = await cache.get(cacheKey)
 
   if (cachedData) {
-    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
+    const isStale = (Date.now() - new Date(cachedData.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
+
+    if (isStale) {
+      const swrLockKey = `swr:${cacheKey}`
+      cache.acquireLock(swrLockKey, 30000).then(async (lockToken) => {
+        if (!lockToken) return
+        try {
+          const bgTrace = tracer.createTrace(`artistLookupSWR:${normalizedTerm}`)
+          const { data } = await executeArtistLookupPipeline(term, isDebug, cacheKey, normalizedTerm, bgTrace)
+          await tracer.finalizeTrace(bgTrace, { cacheHit: false, providersUsed: data.providers.map(p => p.name) })
+        } catch (err) {
+          logger.error('Background refresh failed', { context: 'SWR', error: err.message, term })
+        } finally {
+          await cache.releaseLock(swrLockKey, lockToken)
+        }
+      }).catch(() => {})
+    }
+
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
     const cachedObj = cachedData.data
     const providers = cachedObj.providers?.length
       ? cachedObj.providers
@@ -180,7 +276,7 @@ async function handleArtistLookup (req, res) {
     response._generatedAt = cachedData.generatedAt
 
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
-    return res.json(response)
+    return res.json([response])
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -230,7 +326,7 @@ async function handleArtistLookup (req, res) {
       response._generatedAt = cachedDataAfterWait.generatedAt
 
       await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
-      return res.json(response)
+      return res.json([response])
     }
   }
 
@@ -238,80 +334,11 @@ async function handleArtistLookup (req, res) {
     tracer.addStep(trace, 'error', 0, 'timeout')
     metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 502, error: 'Lock timeout' })
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json({ artistName: term, foreignArtistId: '', albums: [], partial: true, warning: 'Upstream request failed during coalescing (lock timeout)' })
+    return res.status(502).json([{ artistName: term, foreignArtistId: '', albums: [], partial: true, warning: 'Upstream request failed during coalescing (lock timeout)' }])
   }
 
   try {
-    const startAgg = Date.now()
-    const data = await withTimeout(aggregateArtist(term), 15000)
-    tracer.addStep(trace, 'aggregateArtist', Date.now() - startAgg, 'success')
-
-    const rankingStartTime = Date.now()
-
-    const rankingInput = {
-      query: term,
-      results: [
-        {
-          artistName: data.artistName,
-          albums: data.albums.map(album => ({
-            title: album.name,
-            id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
-            firstReleaseDate: album.year ? String(album.year) : '',
-            coverUrl: album.imageUrl || '',
-            provider: album.provider || '',
-            ids: album.ids || {}
-          })),
-          providerSources: Array.from(new Set(data.albums.map(a => a.provider))),
-          confidence: data.confidence
-        }
-      ]
-    }
-
-    const { results: rankedResults, debug: rankingDebug } = rankResults(rankingInput)
-    const rankingTimeMs = Date.now() - rankingStartTime
-    tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
-
-    const scores = rankedResults.map(r => r.score)
-    const topConfidence = rankedResults[0]?.confidence || 0
-    metrics.recordRanking(rankingTimeMs, scores, topConfidence)
-
-    const topResult = rankedResults[0]
-
-    // Enrichment Pipeline
-    const startEnrich = Date.now()
-    const enrichedTopResult = await enrichResult(topResult, isDebug)
-    tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
-
-    const response = {
-      artistName: enrichedTopResult.artistName,
-      foreignArtistId: '',
-      albums: enrichedTopResult.albums,
-      tags: enrichedTopResult.tags,
-      genres: enrichedTopResult.genres,
-      popularity: enrichedTopResult.popularity,
-      providers: data.providers,
-      providerErrors: data.providerErrors,
-      partial: data.partial,
-      warning: data.warning,
-      confidence: enrichedTopResult.confidence,
-      score: enrichedTopResult.score,
-      results: rankedResults
-    }
-
-    if (isDebug) {
-      response.debug = {
-        ranking: rankingDebug,
-        enrichment: enrichedTopResult._enrichmentDebug
-      }
-      // Clean up internal property
-      delete enrichedTopResult._enrichmentDebug
-    }
-
-    const startCacheSet = Date.now()
-    await cache.set(cacheKey, response, getConfigValue('cacheTtlSeconds'))
-    tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
-
-    await saveSnapshot(`artist:${normalizedTerm}`, response)
+    const { response, data } = await executeArtistLookupPipeline(term, isDebug, cacheKey, normalizedTerm, trace)
 
     metrics.recordArtistLookup({
       term,
@@ -333,7 +360,7 @@ async function handleArtistLookup (req, res) {
     }
 
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: data.providers.map(p => p.name) })
-    return res.json(finalResponse)
+    return res.json([finalResponse])
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist lookup failed', {
@@ -352,7 +379,7 @@ async function handleArtistLookup (req, res) {
 
     await tracer.finalizeTrace(trace, { cacheHit: false })
 
-    return res.status(502).json({
+    return res.status(502).json([{
       artistName: term,
       foreignArtistId: '',
       albums: [],
@@ -362,7 +389,7 @@ async function handleArtistLookup (req, res) {
         message: error.message,
         code: error.code
       }
-    })
+    }])
   } finally {
     await cache.releaseLock(lockKey)
   }

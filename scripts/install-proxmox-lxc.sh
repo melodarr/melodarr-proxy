@@ -453,18 +453,28 @@ echo "=========================================================="
 echo "Upgrading Melodarr Proxy in LXC Container: $CTID"
 echo "=========================================================="
 
+# Create an upgrade script to run INSIDE the container
+UPGRADE_SCRIPT_CONTAINER="/tmp/melodarr-upgrade-${CTID}.sh"
+
+cat << 'EOF_CONTAINER' > "$UPGRADE_SCRIPT_CONTAINER"
+#!/usr/bin/env bash
+set -euo pipefail
+
 COMPOSE_FILE="/opt/melodarr-proxy/compose.yml"
 
-if ! pct exec "$CTID" -- bash -c "test -f $COMPOSE_FILE"; then
-  echo "Error: $COMPOSE_FILE not found in container $CTID."
+if [[ ! -f "$COMPOSE_FILE" ]]; then
+  echo "Error: $COMPOSE_FILE not found in container."
   exit 1
 fi
 
-IS_SOURCE_BUILD=$(pct exec "$CTID" -- grep -c "image: melodarr-proxy:local" "$COMPOSE_FILE" || true)
+echo "Checking installation type..."
+cd /opt/melodarr-proxy
 
-if pct exec "$CTID" -- grep -q "devdash\|melodarr-proxy-devdash\|DEVDASH" "$COMPOSE_FILE"; then
+IS_SOURCE_BUILD=$(grep -c "image: melodarr-proxy:local" "$COMPOSE_FILE" || true)
+
+if grep -q "devdash\|melodarr-proxy-devdash\|DEVDASH" "$COMPOSE_FILE"; then
   echo "Renaming legacy DevDash compose entries to Melodash..."
-  pct exec "$CTID" -- sed -i \
+  sed -i \
     -e 's/devdash/melodash/g' \
     -e 's/DevDash/Melodash/g' \
     -e 's/DEVDASH/MELODASH/g' \
@@ -474,56 +484,88 @@ if pct exec "$CTID" -- grep -q "devdash\|melodarr-proxy-devdash\|DEVDASH" "$COMP
     "$COMPOSE_FILE"
 fi
 
-if ! pct exec "$CTID" -- grep -q "REQUIRE_API_KEY" "$COMPOSE_FILE"; then
+# Ensure REQUIRE_API_KEY is present
+if ! grep -q "REQUIRE_API_KEY" "$COMPOSE_FILE"; then
   echo "Disabling API Key requirement for Lidarr compatibility..."
-  pct exec "$CTID" -- sed -i '/PORT: 3000/a \      REQUIRE_API_KEY: "false"' "$COMPOSE_FILE"
+  awk '/PORT: 3000/ && !inserted {
+    print $0
+    print "      REQUIRE_API_KEY: \"false\""
+    inserted = 1
+    next
+  }
+  { print }' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
 fi
 
-HAS_MELODASH=$(pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose config --services | grep -cx melodash" || true)
+# Clean up broken YAML formatting if a previous run messed it up with backslashes
+sed -i 's/^[[:space:]]*\\*[[:space:]]*REQUIRE_API_KEY/      REQUIRE_API_KEY/g' "$COMPOSE_FILE" || true
+
+# Test configuration before proceeding
+if ! docker compose config >/dev/null 2>&1; then
+  echo "WARNING: compose.yml contains invalid YAML. Attempting to fix common issues..."
+  # Try to fix the exact known issue by aggressively stripping backslashes globally on that line
+  sed -i '/REQUIRE_API_KEY/s/\\//g' "$COMPOSE_FILE" || true
+  if ! docker compose config >/dev/null 2>&1; then
+    echo "ERROR: compose.yml is still invalid. Please fix manually:"
+    docker compose config
+    exit 1
+  fi
+fi
+
+HAS_MELODASH=$(docker compose config --services 2>/dev/null | grep -cx melodash || true)
 
 if [[ "$HAS_MELODASH" -eq 0 ]]; then
   echo "Melodash service missing from compose.yml. Adding it now..."
-  pct exec "$CTID" -- bash -c "awk '
+  awk '
     /^volumes:/ && !inserted {
-      print \"\"
-      print \"  melodash:\"
-      print \"    image: ghcr.io/melodarr/melodarr-proxy-melodash:latest\"
-      print \"    restart: unless-stopped\"
-      print \"    environment:\"
-      print \"      PORT: 3000\"
-      print \"      PROXY_API_URL: http://proxy:3000/api\"
-      print \"    ports:\"
-      print \"      - \\\"55026:3000\\\"\"
-      print \"    depends_on:\"
-      print \"      - proxy\"
+      print ""
+      print "  melodash:"
+      print "    image: ghcr.io/melodarr/melodarr-proxy-melodash:latest"
+      print "    restart: unless-stopped"
+      print "    environment:"
+      print "      PORT: 3000"
+      print "      PROXY_API_URL: http://proxy:3000/api"
+      print "    ports:"
+      print "      - \"55026:3000\""
+      print "    depends_on:"
+      print "      - proxy"
       inserted = 1
     }
     { print }
-  ' $COMPOSE_FILE > /tmp/melodarr-compose.yml && mv /tmp/melodarr-compose.yml $COMPOSE_FILE"
+  ' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
 fi
 
 if [[ "$IS_SOURCE_BUILD" -gt 0 ]]; then
   echo "Detected SOURCE BUILD fallback installation."
   echo "Pulling latest code from git..."
-  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy/src && git fetch --all && git reset --hard origin/main && git pull"
+  cd /opt/melodarr-proxy/src && git fetch --all && git reset --hard origin/main && git pull
   
   echo "Building new local image..."
-  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker build -t melodarr-proxy:local --target production src/"
+  cd /opt/melodarr-proxy && docker build -t melodarr-proxy:local --target production src/
 else
   echo "Detected STANDARD IMAGE installation."
   echo "Pulling latest Docker image..."
-  pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose pull proxy melodash"
+  cd /opt/melodarr-proxy && docker compose pull proxy melodash
 fi
 
 echo "Recreating and restarting containers..."
-pct exec "$CTID" -- bash -c "cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash"
+cd /opt/melodarr-proxy && docker compose up -d proxy redis melodash
 
 echo "Cleaning up dangling images to save space..."
-pct exec "$CTID" -- docker image prune -f
+docker image prune -f
 
 echo "=========================================================="
 echo "Upgrade Complete!"
 echo "=========================================================="
+EOF_CONTAINER
+
+# Push script into container and run it
+pct push "$CTID" "$UPGRADE_SCRIPT_CONTAINER" /root/upgrade.sh -perms 755
+pct exec "$CTID" -- bash /root/upgrade.sh
+
+# Cleanup
+pct exec "$CTID" -- rm /root/upgrade.sh
+rm "$UPGRADE_SCRIPT_CONTAINER"
+
 EOF_UPGRADE
 
 sed -i "s/%%CTID%%/${CTID}/g" "$UPGRADE_SCRIPT"
