@@ -2,6 +2,13 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.32 - 2026-05-01
+
+- Added per-attempt upstream observability. Every MusicBrainz HTTP attempt (success or failure) now records a structured entry in an in-memory ring buffer (capped at 100, FIFO eviction). Each entry captures `ts`, `requestId` (shared across the 3 retries of a single call), `provider`, `path`, `attempt#`, `selectedAddress`, `selectedFamily`, `failedStep` (`dns | tcp | tls | http | parse | null`), `error.code`, `httpStatus`, and `durationMs`. ECONNRESET → `tls`, ENOTFOUND/EAI_AGAIN → `dns`, ECONNREFUSED/EHOSTUNREACH → `tcp`, axios timeouts → `http` (phase ambiguous from axios alone — raw `error.code` is preserved for operators).
+- New endpoint: `GET /debug/upstream`. Returns `{ entries, filteredCount, totalCount, maxSize }` with newest-first ordering. Supports `?provider=<name>` (case-insensitive filter) and `?limit=<n>` query params. Answers "is this failing every time? same IP? same step? same error?" in one call.
+- No retry behavior change. The instrumentation only records — retries, backoff, queue serialization, and timeouts are unchanged. `Retry-After` handling and full request-level correlation are tracked for follow-ups.
+- Cleaned up working-tree scratch and unreviewed experimental files that were accidentally swept into a prior bulk commit (`compose.yml`, `bad.yml`, `test-{mock,yaml,compose}*`, `patch-upgrade.scratch.js`, and three unreviewed `src/e2e/*` files). The release is scoped strictly to the observability addition.
+
 ## v0.3.31 - 2026-05-01
 
 - Added runtime override reset (Option C from the env-shadowing investigation). The proxy keeps its `saved > env > fallback` precedence — Settings UI edits still win — but operators now have an escape hatch when a previously-saved value is shadowing an env var they've changed.

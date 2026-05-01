@@ -1,6 +1,0 @@
-services:
-  proxy:
-    image: a
-    environment:
-      PORT: 3000
-      - mixed

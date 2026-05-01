@@ -1,5 +1,0 @@
-services:
-  proxy:
-    environment:
-      PORT: 3000
-      REDIS_URL: redis://redis:6379
