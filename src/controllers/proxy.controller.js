@@ -10,6 +10,7 @@ const logger = require('../utils/logger')
 const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
+const { isValidArtist } = require('../utils/validateArtist')
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -37,7 +38,7 @@ async function handleSearch (req, res) {
     metrics.recordCache(true)
     await tracer.finalizeTrace(trace, { cacheHit: true })
     res.set('X-Cache-Generated-At', cached.generatedAt)
-    return res.json(toSkyhookSearchShape(cached.data))
+    return res.json(toSkyhookSearchShape(cached.data).filter(isValidArtist))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -65,7 +66,7 @@ async function handleSearch (req, res) {
     if (cachedData) {
       await tracer.finalizeTrace(trace, { cacheHit: true })
       res.set('X-Cache-Generated-At', cachedData.generatedAt)
-      return res.json(toSkyhookSearchShape(cachedData.data))
+      return res.json(toSkyhookSearchShape(cachedData.data).filter(isValidArtist))
     }
   }
 
@@ -92,7 +93,7 @@ async function handleSearch (req, res) {
     await saveSnapshot(`search:${normalizedQ}`, data)
 
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json(toSkyhookSearchShape(data))
+    return res.json(toSkyhookSearchShape(data).filter(isValidArtist))
   } catch (err) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Upstream error in handleSearch', {
@@ -271,7 +272,7 @@ async function handleArtistLookup (req, res) {
     response._generatedAt = cachedData.generatedAt
 
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
-    return res.json([response])
+    return res.json([response].filter(isValidArtist))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -321,7 +322,7 @@ async function handleArtistLookup (req, res) {
       response._generatedAt = cachedDataAfterWait.generatedAt
 
       await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
-      return res.json([response])
+      return res.json([response].filter(isValidArtist))
     }
   }
 
@@ -355,7 +356,7 @@ async function handleArtistLookup (req, res) {
     }
 
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: data.providers.map(p => p.name) })
-    return res.json([finalResponse])
+    return res.json([finalResponse].filter(isValidArtist))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist lookup failed', {
@@ -410,13 +411,14 @@ async function handleArtistDiscover (req, res) {
       providersUsed: providersTried
     })
 
+    const wrappedCandidates = toSkyhookSearchShape(candidates).filter(isValidArtist)
     return res.json({
       query,
       type,
-      candidates: toSkyhookSearchShape(candidates),
+      candidates: wrappedCandidates,
       providers: providersTried,
-      partial: candidates.length === 0,
-      warning: candidates.length === 0 ? 'No candidates returned from any configured provider' : null
+      partial: wrappedCandidates.length === 0,
+      warning: wrappedCandidates.length === 0 ? 'No candidates returned from any configured provider' : null
     })
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')

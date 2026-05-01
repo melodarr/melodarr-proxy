@@ -2,6 +2,15 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.42 - 2026-05-01
+
+- **Final validation gate before responses reach Lidarr.** New `src/utils/validateArtist.js` exports `isValidArtist(item)` — returns `false` for items whose display field (`artistName` for wrapped artists / unwrapped lookup, `title` for wrapped albums) is missing, empty, or whitespace-only. Applied as a `.filter()` immediately after every `toSkyhookSearchShape()` in `proxy.controller.js`'s `handleSearch` (cache hit, coalesce hit, fresh fetch) and `handleArtistDiscover`, plus the success paths of `handleArtistLookup`. Drops broken items rather than passing them through; never modifies fields.
+- **No fabricated IDs.** The validator deliberately does NOT check `foreignArtistId`. Empty MBID is a legitimate signal from a non-MB provider; synthesizing fake values to pass validation would let Lidarr add artists into its library that subsequently fail every metadata refresh (Lidarr keys downstream operations on `foreignArtistId` as a canonical MusicBrainz UUID — an invented value has no upstream resolution path and creates a permanent broken-state row that requires manual deletion). Keeping the field truthful is the deliberate trade.
+- 14 new unit tests in `src/utils/validateArtist.test.js` covering: null/undefined/non-object inputs, empty `{}`, wrapped artist with valid/empty/whitespace/null `artistName`, wrapped artist with empty `foreignArtistId` (still valid — explicit guard against accidental tightening), wrapped album with valid/empty/missing `title` (regression test for the spec's combined-check bug that would have rejected all albums because `undefined == null`), unwrapped lookup-shape artist, hybrid wrap+unwrapped object, non-object `.artist` value.
+- **Bug-fix vs. literal spec:** the spec's combined check `if (a.artistName === "" || a.artistName == null) return false` would silently reject every album result, because the inner album object has no `artistName` field — `undefined == null` is `true`. Implementation uses branch-specific validation (artist branch → check `artistName`; album branch → check `title`; lookup-shape branch → check top-level `artistName`).
+- **Lookup endpoint shape note:** lookup returns `[{...flat artist...}]`, not wrapped. The validator's third branch handles this. Error paths in lookup (502 with `partial: true, warning: ...`) are intentionally NOT filtered — operators rely on those structured errors as diagnostics rather than seeing a silent empty array.
+- No application code changes outside the controller wiring + new utility. Provider behavior, fallback chain, retry/rate-limit, response shape (other than dropping invalid items) all unchanged.
+
 ## v0.3.41 - 2026-05-01
 
 - **`scripts/site-tests.sh` — simplified API key handling.** When `API_KEY` is not set via env, the wizard now prompts once for it. If it remains empty after the prompt, the script aborts with a clear `ERROR: API key is required` message instead of silently running unauthed and failing every auth-gated test with 401. CI (`INTERACTIVE=0`) still relies on the env var.

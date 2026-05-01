@@ -507,7 +507,9 @@ test('artist lookup coalescing returns cached data', async () => {
     if (key === 'artist:coalesce') {
       attempts++
       if (attempts > 1) {
-        return { data: { albums: [] }, generatedAt: '2026-04-28' }
+        // v0.3.42: cached payload must include artistName so the
+        // validateArtist filter doesn't drop it as malformed.
+        return { data: { artistName: 'Coalesce', albums: [] }, generatedAt: '2026-04-28' }
       }
     }
     return originalGet.call(cacheStore, key)
@@ -529,7 +531,8 @@ test('artist lookup coalescing returns cached data with debug', async () => {
     if (key === 'artist:coalesce') {
       attempts++
       if (attempts > 1) {
-        return { data: { albums: [], debug: true }, generatedAt: '2026-04-28' }
+        // v0.3.42: include artistName for validateArtist to pass.
+        return { data: { artistName: 'Coalesce', albums: [], debug: true }, generatedAt: '2026-04-28' }
       }
     }
     return originalGet.call(cacheStore, key)
