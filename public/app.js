@@ -12,9 +12,9 @@ const albumsEl = document.querySelector('#albums')
 const jsonEl = document.querySelector('#json')
 const toggleJsonButton = document.querySelector('#toggle-json')
 
-function setStatus (message, isError = false) {
+function setStatus (message, tone = 'neutral') {
   statusEl.textContent = message
-  statusEl.style.color = isError ? '#b42318' : '#44505c'
+  statusEl.dataset.tone = tone
 }
 
 function renderAlbums (albums) {
@@ -71,9 +71,9 @@ async function lookupArtist (term) {
   renderAlbums(data.albums || [])
 
   if (data.partial) {
-    setStatus(data.warning || 'Partial data returned', true)
+    setStatus('Lookup complete with provider warnings', 'warning')
   } else {
-    setStatus('Lookup complete')
+    setStatus('Lookup complete', 'success')
   }
 }
 
@@ -92,7 +92,7 @@ form.addEventListener('submit', async (event) => {
   try {
     await lookupArtist(term)
   } catch (error) {
-    setStatus(error.message, true)
+    setStatus(error.message, 'error')
   } finally {
     button.disabled = false
   }

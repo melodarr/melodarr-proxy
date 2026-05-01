@@ -332,6 +332,24 @@ button.theme-toggle:hover {
 
 .settings-status { margin-top: 0; }
 
+.status[data-tone='success'] {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-surface));
+}
+
+.status[data-tone='warning'] {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-surface));
+}
+
+.status[data-tone='error'] {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-surface));
+}
+
 /* ── Summary Metrics Row ──────────────────────────────────────── */
 
 .summary {
