@@ -7,7 +7,7 @@
 #   BASE_URL     — proxy URL inside the LXC     (default: http://127.0.0.1:3055)
 #   API_KEY      — proxy API key                (default: empty → unauthenticated requests)
 #   SKIP_DEPLOY  — set to 1 to skip pull+up     (default: 0)
-#   EXPECTED_REV — git SHA expected from /api/version (default: v0.3.35 commit)
+#   EXPECTED_REV — git SHA expected from /api/version (default: v0.3.36 commit)
 #
 # Tracks pass/fail per check and exits non-zero if any test failed.
 
@@ -17,21 +17,29 @@ CTID="${CTID:-163}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
 API_KEY="${API_KEY:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
-EXPECTED_REV="${EXPECTED_REV:-dee90c9af3cda50b45cb1d62e4f64c8c288291ed}"
+EXPECTED_REV="${EXPECTED_REV:-f63d5fd82dc40f85a2a6172b4b566d006660cbb7}"
 
-# ── Failure tracking ─────────────────────────────────────────────
+# ── Pass/fail tracking ───────────────────────────────────────────
 PASSES=0
 FAILS=0
+declare -a PASS_LOG=()
 declare -a FAIL_LOG=()
 
 record_pass () {
   PASSES=$((PASSES + 1))
+  PASS_LOG+=("$*")
   echo "  PASS: $*"
 }
 record_fail () {
   FAILS=$((FAILS + 1))
   FAIL_LOG+=("$*")
   echo "  FAIL: $*"
+}
+
+# Strip trailing CR/whitespace — curl's `head -1` keeps the `\r` from HTTP
+# headers, which clobbers later `(...)` formatting on the same line.
+chomp () {
+  printf '%s' "$1" | tr -d '\r' | sed -e 's/[[:space:]]*$//'
 }
 
 # ── Remote curl helpers ──────────────────────────────────────────
@@ -119,7 +127,7 @@ echo "  (cache cleared)"
 # ── 4. /api/search 502 regression ────────────────────────────────
 echo
 echo "## Search endpoint should not 502"
-SEARCH_STATUS=$(remote_status_line '/api/search?type=all&query=junkyards')
+SEARCH_STATUS=$(chomp "$(remote_status_line '/api/search?type=all&query=junkyards')")
 echo "$SEARCH_STATUS"
 if echo "$SEARCH_STATUS" | grep -q ' 200'; then
   record_pass "/api/search returns 200"
@@ -135,7 +143,7 @@ remote_get '/api/search?type=all&query=junkyards' \
 # ── 5. /api/v1/artist/discover 502 regression ────────────────────
 echo
 echo "## Artist discover should not 502"
-DISC_STATUS=$(remote_status_line '/api/v1/artist/discover?q=junkyards')
+DISC_STATUS=$(chomp "$(remote_status_line '/api/v1/artist/discover?q=junkyards')")
 echo "$DISC_STATUS"
 if echo "$DISC_STATUS" | grep -q ' 200'; then
   record_pass "/api/v1/artist/discover returns 200"
@@ -151,7 +159,7 @@ remote_get '/api/v1/artist/discover?q=junkyards' \
 # ── 6. Negative path ─────────────────────────────────────────────
 echo
 echo "## Negative search (garbage query → 200, never 5xx)"
-NEG_STATUS=$(remote_status_line '/api/search?query=zzzzzzz_no_such_artist_xyz_98765')
+NEG_STATUS=$(chomp "$(remote_status_line '/api/search?query=zzzzzzz_no_such_artist_xyz_98765')")
 echo "$NEG_STATUS"
 if echo "$NEG_STATUS" | grep -qE '^HTTP/[0-9.]+ (200|404)'; then
   record_pass "garbage query handled gracefully ($NEG_STATUS)"
@@ -218,9 +226,9 @@ remote_get_full '/api/v0.4/artist/lookup?term=Radiohead' | head -100
 echo
 echo "### Path-key auth form: /api/<key>/v1/artist/lookup"
 if [ -n "$API_KEY" ]; then
-  PATH_KEY_STATUS=$(pct exec "$CTID" -- env API_KEY="$API_KEY" BASE_URL="$BASE_URL" bash -lc '
+  PATH_KEY_STATUS=$(chomp "$(pct exec "$CTID" -- env API_KEY="$API_KEY" BASE_URL="$BASE_URL" bash -lc '
     curl -i -s "$BASE_URL/api/$API_KEY/v1/artist/lookup?term=Radiohead" | head -1
-  ')
+  ')")
   echo "$PATH_KEY_STATUS"
   if echo "$PATH_KEY_STATUS" | grep -q ' 200'; then
     record_pass "path-key auth form returns 200"
@@ -312,11 +320,18 @@ echo "  Revision:         $ACTUAL_REV"
 echo "  Active providers: $ACTIVE_PROVIDERS"
 echo "  Tests passed:     $PASSES"
 echo "  Tests failed:     $FAILS"
+if [ "$PASSES" -gt 0 ]; then
+  echo
+  echo "Passed:"
+  for p in "${PASS_LOG[@]}"; do
+    echo "  ✓ $p"
+  done
+fi
 if [ "$FAILS" -gt 0 ]; then
   echo
-  echo "Failures:"
+  echo "Failed:"
   for f in "${FAIL_LOG[@]}"; do
-    echo "  - $f"
+    echo "  ✗ $f"
   done
 fi
 echo "========================================"
