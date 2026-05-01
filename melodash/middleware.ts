@@ -6,23 +6,24 @@ export function middleware(request: NextRequest) {
   const proxyOrigin = proxyApiUrl.replace(/\/api\/?$/, '')
 
   const pathname = request.nextUrl.pathname
+  const search = request.nextUrl.search
   
   if (pathname.startsWith('/api/')) {
     const newPath = pathname.replace(/^\/api/, '')
-    return NextResponse.rewrite(new URL(`${proxyApiUrl}${newPath}`, request.url))
+    return NextResponse.rewrite(new URL(`${proxyApiUrl}${newPath}${search}`, request.url))
   }
   
   if (pathname.startsWith('/debug/')) {
     const newPath = pathname.replace(/^\/debug/, '')
-    return NextResponse.rewrite(new URL(`${proxyOrigin}/debug${newPath}`, request.url))
+    return NextResponse.rewrite(new URL(`${proxyOrigin}/debug${newPath}${search}`, request.url))
   }
 
   if (pathname === '/docs') {
-    return NextResponse.rewrite(new URL(`${proxyOrigin}/docs`, request.url))
+    return NextResponse.rewrite(new URL(`${proxyOrigin}/docs${search}`, request.url))
   }
 
   if (pathname === '/openapi.json') {
-    return NextResponse.rewrite(new URL(`${proxyOrigin}/openapi.json`, request.url))
+    return NextResponse.rewrite(new URL(`${proxyOrigin}/openapi.json${search}`, request.url))
   }
 
   return NextResponse.next()
