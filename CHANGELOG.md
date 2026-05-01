@@ -2,6 +2,12 @@
 
 All notable changes to Melodarr Proxy will be documented here.
 
+## v0.3.28 - 2026-05-01
+
+- Fixed Proxmox installer's compose template so fresh installs route MusicBrainz over IPv6 by default. Removed `NODE_OPTIONS: --dns-result-order=ipv4first` (which forced Node to prefer IPv4 globally and caused TLS resets to MusicBrainz on networks where IPv4 fails) and added `MUSICBRAINZ_IP_FAMILY: "6"` so the proxy's https.Agent pins MusicBrainz to IPv6.
+- Updated the upgrade script to auto-heal existing installs: after enabling Docker IPv6, it now also strips the `ipv4first` NODE_OPTIONS line and inserts `MUSICBRAINZ_IP_FAMILY: "6"` into the deployed compose. Existing installs flip green on next `upgrade-proxmox-lxc.sh` run.
+- Updated the upgrade canary's `docker run` to use `MUSICBRAINZ_IP_FAMILY=6` instead of the IPv4-first NODE_OPTIONS, so canary contract validation passes on networks where only IPv6 reaches MusicBrainz.
+
 ## v0.3.27 - 2026-04-30
 
 - Added `scripts/recover-compose.sh`: regenerates a clean `/opt/melodarr-proxy/compose.yml` on a deployed LXC and force-recreates the stack. Backs up the existing compose, validates YAML before applying, then polls `/api/ready` for up to 60s. Use it when manual sed edits or terminal-paste indentation drift have corrupted the deployed compose.

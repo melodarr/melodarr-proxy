@@ -114,6 +114,25 @@ if ! grep -q "REQUIRE_API_KEY" "$COMPOSE_FILE"; then
   { print }' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
 fi
 
+# Remove the IPv4-first Node flag if present — it causes ECONNRESET to MusicBrainz
+# when Docker IPv6 is the working path.
+if grep -q "NODE_OPTIONS:.*ipv4first" "$COMPOSE_FILE"; then
+  echo "Removing NODE_OPTIONS=--dns-result-order=ipv4first (forces IPv4 to MusicBrainz)..."
+  sed -i "/NODE_OPTIONS:.*ipv4first/d" "$COMPOSE_FILE"
+fi
+
+# Ensure MUSICBRAINZ_IP_FAMILY is set so the proxy pins MusicBrainz over IPv6.
+if ! grep -q "MUSICBRAINZ_IP_FAMILY" "$COMPOSE_FILE"; then
+  echo "Adding MUSICBRAINZ_IP_FAMILY=6 to compose.yml..."
+  awk '/MUSICBRAINZ_BASE_URL:/ && !inserted {
+    print $0
+    print "      MUSICBRAINZ_IP_FAMILY: \"6\""
+    inserted = 1
+    next
+  }
+  { print }' "$COMPOSE_FILE" > "${COMPOSE_FILE}.tmp" && mv "${COMPOSE_FILE}.tmp" "$COMPOSE_FILE"
+fi
+
 # Clean up broken YAML formatting if a previous run messed it up with backslashes
 sed -i 's/^[[:space:]]*\\*[[:space:]]*REQUIRE_API_KEY/      REQUIRE_API_KEY/g' "$COMPOSE_FILE" || true
 
@@ -195,7 +214,7 @@ fi
 
 echo "Running canary container on network $NETWORK..."
 docker rm -f melodarr-proxy-canary >/dev/null 2>&1 || true
-CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e NODE_OPTIONS=--dns-result-order=ipv4first "$CANARY_IMAGE")
+CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e MUSICBRAINZ_IP_FAMILY=6 -e APP_NAME=melodarr-proxy-canary -e APP_VERSION=canary -e APP_CONTACT=admin@example.com "$CANARY_IMAGE")
 
 echo "Waiting 5s for canary to initialize..."
 sleep 5
