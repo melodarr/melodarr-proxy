@@ -7,6 +7,9 @@
 #   BASE_URL     — proxy URL inside the LXC     (default: http://127.0.0.1:3055)
 #   API_KEY      — proxy API key                (default: empty → unauthenticated requests)
 #   SKIP_DEPLOY  — set to 1 to skip pull+up     (default: 0)
+#   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
+#                  overrides and restart the proxy (re-enables MusicBrainz)
+#                  (default: 0 — verify-only, never mutate)
 #   EXPECTED_REV — git SHA expected from /api/version (default: v0.3.36 commit)
 #
 # Tracks pass/fail per check and exits non-zero if any test failed.
@@ -17,7 +20,41 @@ CTID="${CTID:-163}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
 API_KEY="${API_KEY:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
+REENABLE_MB="${REENABLE_MB:-0}"
 EXPECTED_REV="${EXPECTED_REV:-f63d5fd82dc40f85a2a6172b4b566d006660cbb7}"
+
+# ── Optional interactive wizard ──────────────────────────────────
+# Prompts for each knob when stdin is a TTY.  Users can:
+#   - press Enter to accept the default shown in [brackets]
+#   - pre-set any var via env to skip that prompt's default
+#   - pass INTERACTIVE=0 to bypass the wizard entirely (CI use)
+ask () {
+  local var="$1" prompt="$2" default="$3" reply
+  read -rp "$prompt [$default]: " reply
+  printf -v "$var" '%s' "${reply:-$default}"
+}
+ask_yn () {
+  local var="$1" prompt="$2" default="$3" reply hint="(y/N)"
+  [ "$default" = "1" ] && hint="(Y/n)"
+  read -rp "$prompt $hint: " reply
+  case "${reply:-$default}" in
+    1|y|Y|yes|YES) printf -v "$var" '%s' "1" ;;
+    *)             printf -v "$var" '%s' "0" ;;
+  esac
+}
+
+if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
+  echo "Melodarr verification harness — interactive setup"
+  echo "Press Enter for the default; set INTERACTIVE=0 to skip the wizard."
+  echo
+  ask    CTID         "Proxmox CTID"                          "$CTID"
+  ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
+  ask    API_KEY      "Proxy API key (blank = unauthed)"      "$API_KEY"
+  ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
+  ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
+  ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
+  echo
+fi
 
 # ── Pass/fail tracking ───────────────────────────────────────────
 PASSES=0
@@ -116,6 +153,53 @@ if [ "$ACTUAL_REV" = "$EXPECTED_REV" ]; then
   record_pass "running expected revision $ACTUAL_REV"
 else
   record_fail "expected revision=$EXPECTED_REV, got=$ACTUAL_REV — deploy did not land or you're on a different version"
+fi
+
+# ── 2.5. Optional: re-enable MusicBrainz (REENABLE_MB=1) ─────────
+# Lidarr's data model is keyed on MB UUIDs.  When MB has been excluded
+# from metadataProviders (e.g. during a TLS outage), Lidarr searches
+# return empty foreignArtistIds and Lidarr rejects the response.
+# Setting REENABLE_MB=1 clears the saved override on the LXC and
+# restarts the proxy so MB is back in the active set.
+#
+# Direct file edit (not the API) so we don't need a settings session
+# cookie — the script already has root inside the LXC via pct exec.
+# Backs up settings.json before editing.
+if [ "$REENABLE_MB" = "1" ]; then
+  echo
+  echo "## Re-enable MusicBrainz (REENABLE_MB=1)"
+  CURRENT_ACTIVE=$(remote_get /api/ready | jq -r '.upstreamDetail.activeProviders // [] | join(",")')
+  echo "  Current active providers: $CURRENT_ACTIVE"
+  if echo ",$CURRENT_ACTIVE," | grep -q ',musicbrainz,'; then
+    echo "  MB is already in the active set — nothing to do."
+    record_pass "MB re-enable: MB already active"
+  else
+    REENABLE_TS=$(date +%s)
+    if pct exec "$CTID" -- bash -lc "
+set -e
+SETTINGS=/opt/melodarr-proxy/data/settings.json
+if [ ! -f \"\$SETTINGS\" ]; then
+  echo 'ERROR: \$SETTINGS not found — cannot re-enable MB via file edit' >&2
+  exit 1
+fi
+cp \"\$SETTINGS\" \"\${SETTINGS}.bak.${REENABLE_TS}\"
+jq 'del(.metadataProviders, .providerPriority)' \"\$SETTINGS\" > /tmp/settings.new
+mv /tmp/settings.new \"\$SETTINGS\"
+cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
+"; then
+      echo "  Backup: settings.json.bak.${REENABLE_TS}"
+      echo "  Proxy restarting; waiting 8s for it to come back up..."
+      sleep 8
+      NEW_ACTIVE=$(remote_get /api/ready | jq -r '.upstreamDetail.activeProviders // [] | join(",")')
+      if echo ",$NEW_ACTIVE," | grep -q ',musicbrainz,'; then
+        record_pass "MB re-enabled — activeProviders now: $NEW_ACTIVE"
+      else
+        record_fail "MB re-enable did not take effect — activeProviders: $NEW_ACTIVE"
+      fi
+    else
+      record_fail "MB re-enable: settings.json edit or proxy restart failed (see ERROR above)"
+    fi
+  fi
 fi
 
 # ── 3. Cache clear (forces fresh aggregations for Lidarr-shape tests) ──
