@@ -12,6 +12,7 @@
     "lint": "XDG_CACHE_HOME=.cache standard",
     "test": "node --test src/**/*.test.js",
     "test:e2e": "node --test src/e2e/**/*.e2e.test.js",
+    "test:e2e:real": "E2E_REAL_HTTP=true node --test src/e2e/**/*.e2e.test.js",
     "docker:lint": "docker compose run --rm --entrypoint \"yarn lint\" proxy",
     "docker:test": "docker compose run --rm --entrypoint \"yarn test && yarn test:e2e\" proxy",
     "prepare": "husky"
