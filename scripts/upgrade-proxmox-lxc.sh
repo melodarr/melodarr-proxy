@@ -70,7 +70,7 @@ JSON
   
   if [[ -d "/opt/melodarr-proxy" ]] && [[ -f "/opt/melodarr-proxy/compose.yml" ]]; then
     echo "Recreating existing Docker compose networks to apply IPv6..."
-    cd /opt/melodarr-proxy && $DOCKER_COMPOSE up -d --force-recreate
+    cd /opt/melodarr-proxy && $DOCKER_COMPOSE down && $DOCKER_COMPOSE up -d
   fi
 fi
 
@@ -195,7 +195,7 @@ fi
 
 echo "Running canary container on network $NETWORK..."
 docker rm -f melodarr-proxy-canary >/dev/null 2>&1 || true
-CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 "$CANARY_IMAGE")
+CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e NODE_OPTIONS=--dns-result-order=ipv4first "$CANARY_IMAGE")
 
 echo "Waiting 5s for canary to initialize..."
 sleep 5

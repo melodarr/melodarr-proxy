@@ -38,7 +38,7 @@ docker tag "$LATEST_IMAGE" "$CANARY_IMAGE"
 
 echo "2. Starting canary container on network $NETWORK (port 3056)..."
 # We start it mapping 3056 to 3000 to avoid conflicting with the main proxy
-CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 "$CANARY_IMAGE")
+CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e NODE_OPTIONS=--dns-result-order=ipv4first "$CANARY_IMAGE")
 
 echo "3. Waiting 5s for canary to initialize..."
 sleep 5
