@@ -110,6 +110,36 @@ fi
 
 check "Discovery returns results" test "$DCOUNT" -gt 0
 
+# /debug/* routes are not auth-gated — no x-api-key needed. Per the
+# strict spec, these checks fail the deploy ONLY on zero providers or
+# invalid JSON; disabled / degraded providers are warnings, not
+# failures (the circuit breaker doing its job is healthy behavior).
+echo
+echo "[6] Provider Health Validation"
+
+curl -s -o "$TMP_BODY" -w '%{http_code}' "$BASE_URL/debug/providers/health" > /dev/null
+HEALTH_BODY=$(cat "$TMP_BODY")
+COUNT=$(echo "$HEALTH_BODY" | jq '.providers | length' 2>/dev/null || echo 0)
+
+check "Health endpoint returns providers" test "$COUNT" -gt 0
+
+echo
+echo "[7] Provider Metrics Validation"
+
+curl -s -o "$TMP_BODY" -w '%{http_code}' "$BASE_URL/debug/providers/metrics" > /dev/null
+METRICS_BODY=$(cat "$TMP_BODY")
+MCOUNT=$(echo "$METRICS_BODY" | jq '.providers | length' 2>/dev/null || echo 0)
+
+check "Metrics endpoint returns providers" test "$MCOUNT" -gt 0
+
+# Non-fatal warning: surface disabled providers so the operator sees
+# them in the run log, but do not flip FAIL — disabled is the circuit
+# breaker working as intended.
+DISABLED=$(echo "$HEALTH_BODY" | jq '[.providers[] | select(.status=="disabled")] | length' 2>/dev/null || echo 0)
+if [ "$DISABLED" -gt 0 ] 2>/dev/null; then
+  echo "⚠ Warning: $DISABLED provider(s) currently disabled (circuit breaker open) — not a deploy failure"
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   echo "========================================"
