@@ -51,13 +51,16 @@ class TheAudioDbProvider {
       throw new Error('TheAudioDB API key not configured')
     }
 
-    const response = await axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/searchalbum.php`, {
-      params: { s: term },
-      httpsAgent,
-      timeout: getConfigValue('upstreamTimeoutMs') || 10000
-    })
+    const [profile, response] = await Promise.allSettled([
+      this.searchArtistProfile(term),
+      axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/searchalbum.php`, {
+        params: { s: term },
+        httpsAgent,
+        timeout: getConfigValue('upstreamTimeoutMs') || 10000
+      })
+    ])
 
-    const albumsData = response.data?.album || []
+    const albumsData = response.status === 'fulfilled' ? response.value.data?.album || [] : []
     const albumsArray = Array.isArray(albumsData) ? albumsData : [albumsData]
 
     const albums = albumsArray
@@ -77,8 +80,11 @@ class TheAudioDbProvider {
       })
       .filter((album) => album.name)
 
+    const images = profile.status === 'fulfilled' && profile.value ? profile.value.images : []
+
     return {
       artistName: albumsArray[0]?.strArtist || term,
+      images,
       albums
     }
   }

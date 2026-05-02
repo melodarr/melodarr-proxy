@@ -149,7 +149,9 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
           title: album.name,
           id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
           firstReleaseDate: toIsoDate(album.releaseDate || album.year),
-          coverUrl: album.imageUrl || '',
+          releaseDate: toIsoDate(album.releaseDate || album.year),
+          images: album.imageUrl ? [{ coverType: 'cover', url: album.imageUrl, remoteUrl: album.imageUrl }] : [],
+          remoteCover: album.imageUrl || '',
           provider: album.provider || '',
           ids: album.ids || {}
         })),

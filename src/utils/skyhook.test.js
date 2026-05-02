@@ -81,6 +81,9 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
     match: 'OK Computer',
     type: 'album',
     source: 'musicbrainz',
+    releaseDate: '1997-05-21T00:00:00Z',
+    genres: ['Alternative Rock'],
+    secondaryTypes: ['Studio'],
     images: [{ coverType: 'cover', url: 'https://example.test/ok.jpg' }],
     ids: {
       musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
@@ -95,13 +98,38 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   const al = out[0].album
   assert.equal(al.id, 'b1392450-e666-3926-a536-22c65f834433')
   assert.equal(al.title, 'OK Computer')
-  assert.equal(al.releaseDate, '')
+  assert.equal(al.disambiguation, '')
+  assert.equal(al.overview, '')
+  assert.equal(al.artistId, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
+  assert.equal(al.monitored, false)
+  assert.equal(al.anyReleaseOk, false)
+  assert.equal(al.profileId, 0)
+  assert.equal(al.duration, 0)
+  assert.equal(al.albumType, 'Album')
+  assert.deepEqual(al.secondaryTypes, ['Studio'])
+  assert.equal(al.mediumCount, 0)
+  assert.deepEqual(al.ratings, { votes: 0, value: 0 })
+  assert.equal(al.releaseDate, '1997-05-21T00:00:00Z')
+  assert.deepEqual(al.releases, [])
+  assert.deepEqual(al.genres, ['Alternative Rock'])
+  assert.deepEqual(al.media, [])
+  assert.equal(al.artist.id, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
+  assert.equal(al.artist.artistName, 'Radiohead')
+  assert.deepEqual(al.links, [])
+  assert.equal(al.lastSearchTime, null)
+  assert.deepEqual(al.statistics, {
+    albumCount: 0,
+    songCount: 0,
+    sizeOnDisk: 0,
+    percentOfSongs: 0
+  })
+  assert.deepEqual(al.addOptions, {})
+  assert.equal(al.remoteCover, 'https://example.test/ok.jpg')
   assert.deepEqual(al.images, [{
     coverType: 'cover',
     url: 'https://example.test/ok.jpg',
     remoteUrl: 'https://example.test/ok.jpg'
   }])
-  assert.equal(al.artistId, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
   assert.equal(al.artists[0].id, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
   assert.equal(al.artists[0].artistName, 'Radiohead')
 })
@@ -148,7 +176,12 @@ test('toSkyhookSearchShape — output has stable required Lidarr fields (deseria
     'type', 'status', 'links', 'images', 'albums'
   ]
   const REQUIRED_ALBUM_KEYS = [
-    'id', 'title', 'releaseDate', 'images', 'artistId', 'artists'
+    'id', 'title', 'disambiguation', 'overview', 'artistId',
+    'monitored', 'anyReleaseOk', 'profileId',
+    'duration', 'albumType', 'secondaryTypes', 'mediumCount',
+    'ratings', 'releaseDate', 'releases', 'genres', 'media',
+    'artist', 'images', 'links', 'lastSearchTime', 'statistics',
+    'addOptions', 'remoteCover', 'artists'
   ]
 
   const out = toSkyhookSearchShape([

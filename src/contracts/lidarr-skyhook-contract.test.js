@@ -36,11 +36,43 @@ function assertArtistContract (artist) {
   assert.equal(typeof artist.status, 'string')
   assert.ok(Array.isArray(artist.links))
   assert.ok(Array.isArray(artist.images))
+  for (const image of artist.images) {
+    assert.equal(typeof image.coverType, 'string', 'artist image missing coverType')
+    assert.equal(typeof image.url, 'string', 'artist image missing url')
+  }
   assert.ok(Array.isArray(artist.albums))
+
+  assert.equal(artist.foreignArtistId, undefined, 'Lidarr expects id, not foreignArtistId')
 }
 
 function assertAlbumContract (album) {
-  const required = ['id', 'title', 'releaseDate', 'images', 'artistId', 'artists']
+  const required = [
+    'id',
+    'title',
+    'disambiguation',
+    'overview',
+    'artistId',
+    'monitored',
+    'anyReleaseOk',
+    'profileId',
+    'duration',
+    'albumType',
+    'secondaryTypes',
+    'mediumCount',
+    'ratings',
+    'releaseDate',
+    'releases',
+    'genres',
+    'media',
+    'artist',
+    'images',
+    'links',
+    'lastSearchTime',
+    'statistics',
+    'addOptions',
+    'remoteCover',
+    'artists'
+  ]
 
   for (const key of required) {
     assert.ok(Object.prototype.hasOwnProperty.call(album, key), `album missing ${key}`)
@@ -48,13 +80,40 @@ function assertAlbumContract (album) {
 
   assert.equal(typeof album.id, 'string')
   assert.equal(typeof album.title, 'string')
-  assert.equal(typeof album.releaseDate, 'string')
-  assert.ok(Array.isArray(album.images))
+  assert.equal(typeof album.disambiguation, 'string')
+  assert.equal(typeof album.overview, 'string')
   assert.equal(typeof album.artistId, 'string')
+  assert.equal(typeof album.monitored, 'boolean')
+  assert.equal(typeof album.anyReleaseOk, 'boolean')
+  assert.equal(typeof album.profileId, 'number')
+  assert.equal(typeof album.duration, 'number')
+  assert.equal(typeof album.albumType, 'string')
+  assert.ok(Array.isArray(album.secondaryTypes))
+  assert.equal(typeof album.mediumCount, 'number')
+  assert.equal(typeof album.ratings, 'object')
+  assert.equal(typeof album.releaseDate, 'string')
+  assert.ok(Array.isArray(album.releases))
+  assert.ok(Array.isArray(album.genres))
+  assert.ok(Array.isArray(album.media))
+  assert.equal(typeof album.artist, 'object')
+  assert.ok(Array.isArray(album.images))
+  for (const image of album.images) {
+    assert.equal(typeof image.coverType, 'string', 'album image missing coverType')
+    assert.equal(typeof image.url, 'string', 'album image missing url')
+  }
+  assert.ok(Array.isArray(album.links))
+  assert.equal(album.lastSearchTime, null)
+  assert.equal(typeof album.statistics, 'object')
+  assert.equal(typeof album.addOptions, 'object')
+  assert.equal(typeof album.remoteCover, 'string')
   assert.ok(Array.isArray(album.artists))
+  assert.equal(typeof album.artist.id, 'string')
+  assert.equal(typeof album.artist.artistName, 'string')
   assert.equal(typeof album.artists[0].id, 'string')
   assert.equal(typeof album.artists[0].artistName, 'string')
   assert.equal(typeof album.artists[0].disambiguation, 'string')
+
+  assert.equal(album.foreignAlbumId, undefined, 'Lidarr expects id, not foreignAlbumId')
 }
 
 test('Lidarr/SkyHook search contract matches golden fixture', () => {
@@ -64,7 +123,8 @@ test('Lidarr/SkyHook search contract matches golden fixture', () => {
       id: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
       type: 'artist',
       source: 'musicbrainz',
-      ids: { musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711' }
+      ids: { musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711' },
+      images: ['https://example.com/radiohead.jpg']
     },
     {
       artistName: 'Radiohead',
@@ -74,7 +134,8 @@ test('Lidarr/SkyHook search contract matches golden fixture', () => {
       ids: {
         musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
         musicbrainzReleaseGroupId: 'b1392450-e666-3926-a536-22c65f834433'
-      }
+      },
+      images: ['https://example.com/ok-computer.jpg']
     }
   ]
 
@@ -113,6 +174,8 @@ test('artist lookup golden fixture keeps Lidarr-safe fields stable', () => {
   assert.equal(artist.schemaVersion, 'skyhook-v1')
   assert.equal(typeof artist.artistName, 'string')
   assert.equal(typeof artist.id, 'string')
+  assert.ok(Array.isArray(artist.images))
+  assert.equal(artist.images[0].coverType, 'poster')
   assert.ok(Array.isArray(artist.albums))
   assert.ok(Array.isArray(artist.providers))
   assert.equal(typeof artist.partial, 'boolean')
@@ -122,7 +185,9 @@ test('artist lookup golden fixture keeps Lidarr-safe fields stable', () => {
   assert.equal(typeof album.id, 'string')
   assert.match(album.firstReleaseDate, /^\d{4}-\d{2}-\d{2}T/)
   assert.match(album.releaseDate, /^\d{4}-\d{2}-\d{2}T/)
-  assert.equal(typeof album.coverUrl, 'string')
+  assert.ok(Array.isArray(album.images))
+  assert.equal(album.images[0].coverType, 'cover')
+  assert.equal(typeof album.remoteCover, 'string')
   assert.equal(typeof album.provider, 'string')
   assert.equal(typeof album.ids, 'object')
 })

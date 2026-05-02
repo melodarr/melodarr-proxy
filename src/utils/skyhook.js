@@ -26,6 +26,10 @@ function asString (v) {
   return v == null ? '' : String(v)
 }
 
+function asStringArray (v) {
+  return Array.isArray(v) ? v.map(asString).filter(Boolean) : []
+}
+
 function pickArtistMbid (candidate) {
   return asString(candidate.id || candidate.ids?.musicbrainzArtistId)
 }
@@ -66,6 +70,20 @@ function normalizeImages (candidate, coverType) {
   return out
 }
 
+function buildNestedArtist (candidate, artistId) {
+  return {
+    id: artistId,
+    artistName: asString(candidate.artistName),
+    disambiguation: asString(candidate.disambiguation),
+    overview: '',
+    type: ARTIST_DEFAULTS.type,
+    status: ARTIST_DEFAULTS.status,
+    links: [],
+    images: [],
+    albums: []
+  }
+}
+
 function wrapArtist (candidate) {
   return {
     artist: {
@@ -83,14 +101,41 @@ function wrapArtist (candidate) {
 }
 
 function wrapAlbum (candidate) {
+  const albumId = pickAlbumMbid(candidate)
   const artistId = pickArtistMbid(candidate)
+  const images = normalizeImages(candidate, 'cover')
+  const releaseDate = asString(candidate.releaseDate || candidate.firstReleaseDate || candidate.year)
   return {
     album: {
-      id: pickAlbumMbid(candidate),
-      title: asString(candidate.match || candidate.albumName),
-      releaseDate: '',
-      images: normalizeImages(candidate, 'cover'),
+      id: albumId,
+      title: asString(candidate.match || candidate.albumName || candidate.title),
+      disambiguation: asString(candidate.disambiguation),
+      overview: asString(candidate.overview),
       artistId,
+      monitored: false,
+      anyReleaseOk: false,
+      profileId: 0,
+      duration: 0,
+      albumType: asString(candidate.albumType || candidate.primaryType || 'Album'),
+      secondaryTypes: asStringArray(candidate.secondaryTypes),
+      mediumCount: 0,
+      ratings: { votes: 0, value: 0 },
+      releaseDate,
+      releases: [],
+      genres: asStringArray(candidate.genres),
+      media: [],
+      artist: buildNestedArtist(candidate, artistId),
+      images,
+      links: [],
+      lastSearchTime: null,
+      statistics: {
+        albumCount: 0,
+        songCount: 0,
+        sizeOnDisk: 0,
+        percentOfSongs: 0
+      },
+      addOptions: {},
+      remoteCover: images[0]?.remoteUrl || images[0]?.url || '',
       artists: [
         {
           id: artistId,

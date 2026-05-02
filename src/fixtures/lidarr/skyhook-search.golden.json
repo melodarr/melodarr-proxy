@@ -8,7 +8,13 @@
       "type": "Group",
       "status": "active",
       "links": [],
-      "images": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "https://example.com/radiohead.jpg",
+          "remoteUrl": "https://example.com/radiohead.jpg"
+        }
+      ],
       "albums": []
     }
   },
@@ -16,9 +22,52 @@
     "album": {
       "id": "b1392450-e666-3926-a536-22c65f834433",
       "title": "OK Computer",
-      "releaseDate": "",
-      "images": [],
+      "disambiguation": "",
+      "overview": "",
       "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "monitored": false,
+      "anyReleaseOk": false,
+      "profileId": 0,
+      "duration": 0,
+      "albumType": "Album",
+      "secondaryTypes": [],
+      "mediumCount": 0,
+      "ratings": {
+        "votes": 0,
+        "value": 0
+      },
+      "releaseDate": "",
+      "releases": [],
+      "genres": [],
+      "media": [],
+      "artist": {
+        "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+        "artistName": "Radiohead",
+        "disambiguation": "",
+        "overview": "",
+        "type": "Group",
+        "status": "active",
+        "links": [],
+        "images": [],
+        "albums": []
+      },
+      "images": [
+        {
+          "coverType": "cover",
+          "url": "https://example.com/ok-computer.jpg",
+          "remoteUrl": "https://example.com/ok-computer.jpg"
+        }
+      ],
+      "links": [],
+      "lastSearchTime": null,
+      "statistics": {
+        "albumCount": 0,
+        "songCount": 0,
+        "sizeOnDisk": 0,
+        "percentOfSongs": 0
+      },
+      "addOptions": {},
+      "remoteCover": "https://example.com/ok-computer.jpg",
       "artists": [
         {
           "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",

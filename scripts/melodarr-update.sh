@@ -55,7 +55,7 @@ for i in {1..5}; do
     
     if [[ "$HTTP_STATUS" == "200" ]] && [[ -n "$RESPONSE" ]]; then
       # Strict SkyHook schema and Semantic validation
-      if echo "$RESPONSE" | jq -e '(type == "array") and (length > 0) and (.[0] | has("foreignArtistId")) and (.[0] | has("artistName")) and (.[0] | has("images")) and (.[0] | has("overview")) and (.[0].images | type == "array") and (.[0].schemaVersion == "skyhook-v1")' >/dev/null 2>&1 && \
+      if echo "$RESPONSE" | jq -e '(type == "array") and (length > 0) and (.[0] | has("id")) and (.[0] | has("artistName")) and (.[0] | has("images")) and (.[0] | has("overview")) and (.[0].images | type == "array") and (.[0].schemaVersion == "skyhook-v1")' >/dev/null 2>&1 && \
          echo "$RESPONSE" | jq -e '.[0].artistName | test("Beatles"; "i")' >/dev/null 2>&1; then
         
         echo "Schema validation passed. Testing Negative Query..."
@@ -73,7 +73,7 @@ for i in {1..5}; do
           rm -f /tmp/canary_cache.json
           
           if [[ "$CACHE_HTTP_STATUS" == "200" ]] && [[ -n "$RESPONSE_CACHE" ]] && \
-             echo "$RESPONSE_CACHE" | jq -e '(type == "array") and (length > 0) and (.[0] | has("foreignArtistId")) and (.[0] | has("artistName")) and (.[0] | has("images")) and (.[0] | has("overview")) and (.[0].images | type == "array") and (.[0].schemaVersion == "skyhook-v1")' >/dev/null 2>&1 && \
+             echo "$RESPONSE_CACHE" | jq -e '(type == "array") and (length > 0) and (.[0] | has("id")) and (.[0] | has("artistName")) and (.[0] | has("images")) and (.[0] | has("overview")) and (.[0].images | type == "array") and (.[0].schemaVersion == "skyhook-v1")' >/dev/null 2>&1 && \
              echo "$RESPONSE_CACHE" | jq -e '.[0].artistName | test("Beatles"; "i")' >/dev/null 2>&1; then
             
             docker exec -u root melodarr-proxy-canary iptables -D OUTPUT -p tcp --dport 443 -j REJECT || true

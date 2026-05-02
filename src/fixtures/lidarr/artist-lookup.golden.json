@@ -2,14 +2,27 @@
   {
     "artistName": "Radiohead",
     "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "https://example.com/radiohead.jpg",
+        "remoteUrl": "https://example.com/radiohead.jpg"
+      }
+    ],
     "albums": [
       {
         "title": "OK Computer",
         "id": "b1392450-e666-3926-a536-22c65f834433",
-        "foreignAlbumId": "b1392450-e666-3926-a536-22c65f834433",
         "firstReleaseDate": "1997-05-21T00:00:00Z",
         "releaseDate": "1997-05-21T00:00:00Z",
-        "coverUrl": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front",
+        "images": [
+          {
+            "coverType": "cover",
+            "url": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front",
+            "remoteUrl": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front"
+          }
+        ],
+        "remoteCover": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front",
         "provider": "musicbrainz",
         "ids": {
           "musicbrainzReleaseGroupId": "b1392450-e666-3926-a536-22c65f834433"

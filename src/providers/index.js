@@ -187,6 +187,47 @@ async function aggregateArtist (term) {
     }
   }
 
+  // --- ARTIST IMAGE RESOLUTION FALLBACK CHAIN ---
+  // If we don't have an explicitly provided artist image, we fall back sequentially:
+  // 1. Cover Art Archive (from an album) if we have an MBID
+  // 2. TheAudioDB profile image
+  // 3. iTunes upscaled album artwork
+  if (images.length === 0) {
+    let caaFallback = null
+    let tadbFallback = null
+    let itunesFallback = null
+    
+    for (const outcome of validOutcomes) {
+      const { data, provider } = outcome
+      
+      if (provider === 'musicbrainz' && data.id) {
+        const albumWithImage = data.albums.find(a => a.imageUrl && a.imageUrl.includes('coverartarchive.org'))
+        if (albumWithImage) {
+          caaFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl }
+        }
+      }
+      
+      if (provider === 'theaudiodb' && data.images && data.images.length > 0) {
+        tadbFallback = data.images[0]
+      }
+      
+      if (provider === 'itunes') {
+        const albumWithImage = data.albums.find(a => a.imageUrl)
+        if (albumWithImage) {
+          itunesFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl }
+        }
+      }
+    }
+    
+    if (caaFallback) {
+      images = [caaFallback]
+    } else if (tadbFallback) {
+      images = [tadbFallback]
+    } else if (itunesFallback) {
+      images = [itunesFallback]
+    }
+  }
+
   if (successfulProviders === 0) {
     throw new Error(`All metadata providers failed. Errors: ${warningMessages.join(' | ')}`)
   }
