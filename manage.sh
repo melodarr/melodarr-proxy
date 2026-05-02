@@ -16,14 +16,14 @@ compose_cmd() {
 
 run_proxy_lint() {
   echo "Running proxy lint inside a container..."
-  compose_cmd build proxy
-  compose_cmd run --rm --no-deps --entrypoint "yarn lint" proxy
+  compose_cmd --profile test build test
+  compose_cmd --profile test run --rm --no-deps test yarn lint
 }
 
 run_proxy_tests() {
   echo "Running proxy tests inside a container..."
-  compose_cmd build proxy
-  compose_cmd run --rm --no-deps --entrypoint "yarn test" proxy
+  compose_cmd --profile test build test
+  compose_cmd --profile test run --rm --no-deps test yarn test
 }
 
 run_melodash_lint() {
