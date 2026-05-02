@@ -19,6 +19,7 @@ function assertArtistContract (artist) {
     'overview',
     'type',
     'status',
+    'aliases',
     'links',
     'images',
     'albums'
@@ -34,6 +35,7 @@ function assertArtistContract (artist) {
   assert.equal(typeof artist.overview, 'string')
   assert.equal(typeof artist.type, 'string')
   assert.equal(typeof artist.status, 'string')
+  assert.ok(Array.isArray(artist.aliases))
   assert.ok(Array.isArray(artist.links))
   assert.ok(Array.isArray(artist.images))
   for (const image of artist.images) {
@@ -96,6 +98,7 @@ function assertAlbumContract (album) {
   assert.ok(Array.isArray(album.genres))
   assert.ok(Array.isArray(album.media))
   assert.equal(typeof album.artist, 'object')
+  assert.ok(Array.isArray(album.artist.aliases))
   assert.ok(Array.isArray(album.images))
   for (const image of album.images) {
     assert.equal(typeof image.coverType, 'string', 'album image missing coverType')

@@ -78,6 +78,7 @@ function buildNestedArtist (candidate, artistId) {
     overview: '',
     type: ARTIST_DEFAULTS.type,
     status: ARTIST_DEFAULTS.status,
+    aliases: asStringArray(candidate.aliases),
     links: [],
     images: [],
     albums: []
@@ -93,6 +94,7 @@ function wrapArtist (candidate) {
       overview: '',
       type: ARTIST_DEFAULTS.type,
       status: ARTIST_DEFAULTS.status,
+      aliases: asStringArray(candidate.aliases),
       links: [],
       images: normalizeImages(candidate, 'poster'),
       albums: []

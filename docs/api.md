@@ -52,6 +52,9 @@ Response body:
 {
   "artistName": "Radiohead",
   "foreignArtistId": "",
+  "status": "continuing",
+  "aliases": [],
+  "links": [],
   "providers": [
     {
       "name": "musicbrainz",

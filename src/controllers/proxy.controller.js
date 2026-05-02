@@ -134,6 +134,21 @@ function summarizeProvidersFromAlbums (albums = []) {
   }))
 }
 
+function normalizeStringArray (value) {
+  return Array.isArray(value)
+    ? value.map(item => String(item ?? '').trim()).filter(Boolean)
+    : []
+}
+
+function withArtistLookupDefaults (artist) {
+  return {
+    ...artist,
+    status: artist.status || 'continuing',
+    aliases: normalizeStringArray(artist.aliases),
+    links: Array.isArray(artist.links) ? artist.links : []
+  }
+}
+
 function buildArtistLookupRankingInput (term, data) {
   return {
     query: term,
@@ -158,13 +173,14 @@ function buildArtistLookupRankingInput (term, data) {
 }
 
 function buildArtistLookupResponse (data, enrichedTopResult, rankedResults) {
-  return {
+  return withArtistLookupDefaults({
     artistName: enrichedTopResult.artistName,
     id: data.id || '',
     foreignArtistId: data.id || '',
     disambiguation: data.disambiguation || '',
     overview: data.overview || '',
     status: data.status || 'continuing',
+    aliases: normalizeStringArray(data.aliases),
     links: data.links || [],
     images: data.images || [],
     albums: enrichedTopResult.albums,
@@ -178,7 +194,7 @@ function buildArtistLookupResponse (data, enrichedTopResult, rankedResults) {
     confidence: enrichedTopResult.confidence,
     score: enrichedTopResult.score,
     results: rankedResults
-  }
+  })
 }
 
 async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedTerm, trace) {
@@ -279,7 +295,7 @@ async function handleArtistLookup (req, res) {
     res.set('X-Providers', providers.map(provider => provider.name).join(','))
     res.set('X-Cache-Generated-At', cachedData.generatedAt)
 
-    const response = { ...cachedObj, providers }
+    const response = withArtistLookupDefaults({ ...cachedObj, providers })
     if (!isDebug && response.debug) {
       delete response.debug
     }
@@ -329,7 +345,7 @@ async function handleArtistLookup (req, res) {
       res.set('X-Providers', providers.map(provider => provider.name).join(','))
       res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
 
-      const response = { ...cachedObj, providers }
+      const response = withArtistLookupDefaults({ ...cachedObj, providers })
       if (!isDebug && response.debug) {
         delete response.debug
       }
@@ -349,6 +365,7 @@ async function handleArtistLookup (req, res) {
       id: '',
       foreignArtistId: '',
       status: 'continuing',
+      aliases: [],
       links: [],
       albums: [],
       partial: true,
@@ -403,6 +420,7 @@ async function handleArtistLookup (req, res) {
       id: '',
       foreignArtistId: '',
       status: 'continuing',
+      aliases: [],
       links: [],
       albums: [],
       partial: true,
@@ -433,7 +451,7 @@ async function handleArtistById (req, res) {
   if (cachedData) {
     tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
     metrics.recordCache(true)
-    const response = { ...cachedData.data, _generatedAt: cachedData.generatedAt }
+    const response = withArtistLookupDefaults({ ...cachedData.data, _generatedAt: cachedData.generatedAt })
     if (!isDebug && response.debug) delete response.debug
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: ['musicbrainz'] })
     res.set('X-Cache', 'HIT')
