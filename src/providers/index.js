@@ -138,10 +138,6 @@ async function aggregateArtist (term) {
     if (data.overview && !overview) {
       overview = data.overview
     }
-    if (data.images && data.images.length > 0 && images.length === 0) {
-      images = data.images
-    }
-
     for (const album of data.albums) {
       // Simple deduplication by normalized name
       const normName = album.name.toLowerCase().trim()
@@ -187,62 +183,100 @@ async function aggregateArtist (term) {
     }
   }
 
-  // --- ARTIST IMAGE RESOLUTION FALLBACK CHAIN ---
-  // If we don't have an explicitly provided artist image, we fall back sequentially:
-  // 1. Cover Art Archive (from a self-titled album) if we have an MBID
-  // 2. TheAudioDB profile image
-  // 3. iTunes upscaled album artwork (from a self-titled album)
-  if (images.length === 0) {
-    let caaFallback = null
-    let tadbFallback = null
-    let itunesFallback = null
+  // --- IMAGE SCORING & SELECTION ---
+  const imageCandidates = []
+  const normalizedArtist = String(mergedArtistName || term).trim().toLowerCase()
 
-    const normalizedArtist = String(mergedArtistName || term).trim().toLowerCase()
+  for (const outcome of validOutcomes) {
+    const { data, provider } = outcome
 
-    for (const outcome of validOutcomes) {
-      const { data, provider } = outcome
-
-      if (provider === 'musicbrainz' && data.id) {
-        const albumWithImage = data.albums.find(a => {
-          if (!a.imageUrl || !a.imageUrl.includes('coverartarchive.org')) return false
-          return String(a.name || '').trim().toLowerCase() === normalizedArtist
+    // 1. Artist profile images
+    if (data.images && data.images.length > 0) {
+      for (const img of data.images) {
+        imageCandidates.push({
+          url: img.url,
+          imageSource: provider,
+          type: 'artist',
+          isSelfTitled: false
         })
-        if (albumWithImage) {
-          caaFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl, imageSource: 'coverartarchive' }
-        }
-      }
-
-      if (provider === 'theaudiodb' && data.images && data.images.length > 0) {
-        tadbFallback = { ...data.images[0], imageSource: 'audiodb' }
-      }
-
-      if (provider === 'itunes') {
-        const albumWithImage = data.albums.find(a => {
-          if (!a.imageUrl) return false
-          return String(a.name || '').trim().toLowerCase() === normalizedArtist
-        })
-        if (albumWithImage) {
-          itunesFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl, imageSource: 'itunes' }
-        }
       }
     }
 
-    if (caaFallback) {
-      images = [caaFallback]
-    } else if (tadbFallback) {
-      images = [tadbFallback]
-    } else if (itunesFallback) {
-      images = [itunesFallback]
+    // 2. Album covers (restricted to self-titled per guards)
+    if (data.albums) {
+      for (const album of data.albums) {
+        if (!album.imageUrl) continue
+        const isSelfTitled = String(album.name || '').trim().toLowerCase() === normalizedArtist
+        if (!isSelfTitled) continue
+
+        let imageSource = provider
+        if (album.imageUrl.includes('coverartarchive.org')) {
+          imageSource = 'coverartarchive'
+        }
+
+        imageCandidates.push({
+          url: album.imageUrl,
+          imageSource,
+          type: 'album',
+          isSelfTitled
+        })
+      }
     }
   }
 
-  // Deduplicate images by URL
-  const uniqueUrls = new Set()
-  images = images.filter(img => {
-    if (uniqueUrls.has(img.url)) return false
-    uniqueUrls.add(img.url)
-    return true
+  const scoredImages = imageCandidates.map(candidate => {
+    let score = 0
+    // Type bonus
+    if (candidate.type === 'artist') score += 100
+    else if (candidate.type === 'album') score += 10
+
+    // Self-titled bonus
+    if (candidate.type === 'album' && candidate.isSelfTitled) score += 50
+
+    // Resolution bonus (cap at 600x600 = 360,000)
+    let width = 0
+    let height = 0
+    if (candidate.imageSource === 'audiodb') { width = 1000; height = 1000 }
+    else if (candidate.imageSource === 'itunes') { width = 600; height = 600 }
+    else if (candidate.imageSource === 'coverartarchive') { width = 500; height = 500 }
+    
+    const resolution = Math.min(width * height, 600 * 600)
+    score += Math.floor(resolution / 10000)
+
+    // Source weight
+    if (candidate.imageSource === 'audiodb') score += 30
+    else if (candidate.imageSource === 'coverartarchive') score += 20
+    else if (candidate.imageSource === 'itunes') score += 10
+
+    // HTTPS bonus
+    if (candidate.url && candidate.url.startsWith('https://')) score += 5
+
+    return { ...candidate, score }
   })
+
+  // Deduplicate by URL and Sort desc
+  const uniqueScored = []
+  const seenUrls = new Set()
+  for (const img of scoredImages) {
+    if (!seenUrls.has(img.url)) {
+      seenUrls.add(img.url)
+      uniqueScored.push(img)
+    }
+  }
+  uniqueScored.sort((a, b) => b.score - a.score)
+
+  images = []
+  if (uniqueScored.length > 0) {
+    const best = uniqueScored[0]
+    images = [{
+      coverType: 'poster',
+      url: best.url,
+      remoteUrl: best.url,
+      imageSource: best.imageSource
+    }]
+  }
+
+  const imageDebug = uniqueScored.map(img => ({ url: img.url, score: img.score, source: img.imageSource, type: img.type }))
 
   if (successfulProviders === 0) {
     throw new Error(`All metadata providers failed. Errors: ${warningMessages.join(' | ')}`)
@@ -254,6 +288,7 @@ async function aggregateArtist (term) {
     disambiguation,
     overview,
     images,
+    imageDebug,
     albums: Array.from(albumMap.values()).map(a => ({
       name: a.name,
       year: a.year,
