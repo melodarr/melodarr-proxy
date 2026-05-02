@@ -189,36 +189,44 @@ async function aggregateArtist (term) {
 
   // --- ARTIST IMAGE RESOLUTION FALLBACK CHAIN ---
   // If we don't have an explicitly provided artist image, we fall back sequentially:
-  // 1. Cover Art Archive (from an album) if we have an MBID
+  // 1. Cover Art Archive (from a self-titled album) if we have an MBID
   // 2. TheAudioDB profile image
-  // 3. iTunes upscaled album artwork
+  // 3. iTunes upscaled album artwork (from a self-titled album)
   if (images.length === 0) {
     let caaFallback = null
     let tadbFallback = null
     let itunesFallback = null
-    
+
+    const normalizedArtist = String(mergedArtistName || term).trim().toLowerCase()
+
     for (const outcome of validOutcomes) {
       const { data, provider } = outcome
-      
+
       if (provider === 'musicbrainz' && data.id) {
-        const albumWithImage = data.albums.find(a => a.imageUrl && a.imageUrl.includes('coverartarchive.org'))
+        const albumWithImage = data.albums.find(a => {
+          if (!a.imageUrl || !a.imageUrl.includes('coverartarchive.org')) return false
+          return String(a.name || '').trim().toLowerCase() === normalizedArtist
+        })
         if (albumWithImage) {
-          caaFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl }
+          caaFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl, imageSource: 'coverartarchive' }
         }
       }
-      
+
       if (provider === 'theaudiodb' && data.images && data.images.length > 0) {
-        tadbFallback = data.images[0]
+        tadbFallback = { ...data.images[0], imageSource: 'audiodb' }
       }
-      
+
       if (provider === 'itunes') {
-        const albumWithImage = data.albums.find(a => a.imageUrl)
+        const albumWithImage = data.albums.find(a => {
+          if (!a.imageUrl) return false
+          return String(a.name || '').trim().toLowerCase() === normalizedArtist
+        })
         if (albumWithImage) {
-          itunesFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl }
+          itunesFallback = { coverType: 'poster', url: albumWithImage.imageUrl, remoteUrl: albumWithImage.imageUrl, imageSource: 'itunes' }
         }
       }
     }
-    
+
     if (caaFallback) {
       images = [caaFallback]
     } else if (tadbFallback) {
@@ -227,6 +235,14 @@ async function aggregateArtist (term) {
       images = [itunesFallback]
     }
   }
+
+  // Deduplicate images by URL
+  const uniqueUrls = new Set()
+  images = images.filter(img => {
+    if (uniqueUrls.has(img.url)) return false
+    uniqueUrls.add(img.url)
+    return true
+  })
 
   if (successfulProviders === 0) {
     throw new Error(`All metadata providers failed. Errors: ${warningMessages.join(' | ')}`)

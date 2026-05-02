@@ -3,7 +3,7 @@ const { getConfigValue } = require('../settings/store')
 const { httpsAgent } = require('./http')
 
 function upgradeArtworkUrl (url) {
-  return String(url || '').replace(/100x100bb\.jpg$/, '300x300bb.jpg')
+  return String(url || '').replace(/100x100bb\.jpg$/, '600x600bb.jpg')
 }
 
 function normalizeName (value) {
