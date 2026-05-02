@@ -124,6 +124,69 @@ test('buildUpdateStatus returns status when update is available', async () => {
   assert.equal(status.error, null)
 })
 
+test('buildUpdateStatus picks first non-prerelease semver tag from releases list', async () => {
+  process.env.APP_VERSION = '0.1.0'
+
+  mockHttpsGet = (url, cb) => {
+    const body = url.includes('/releases?')
+      ? JSON.stringify([
+        { tag_name: 'latest', name: 'latest', draft: false, prerelease: false },
+        { tag_name: 'v0.4.0-beta', name: 'beta', draft: false, prerelease: true },
+        { tag_name: 'v0.3.5', name: 'Release 0.3.5', draft: false, prerelease: false },
+        { tag_name: 'v0.3.4', name: 'Release 0.3.4', draft: false, prerelease: false }
+      ])
+      : JSON.stringify({ tag_name: 'latest', name: 'latest' })
+    const res = {
+      statusCode: 200,
+      setEncoding: () => {},
+      on: (event, handler) => {
+        if (event === 'data') handler(body)
+        if (event === 'end') handler()
+      }
+    }
+    cb(res)
+    return { on: () => {}, setTimeout: () => {}, destroy: () => {} }
+  }
+
+  mockExistsSync = () => false
+
+  const { buildUpdateStatus } = loadController()
+  const status = await buildUpdateStatus()
+
+  assert.equal(status.latest.version, '0.3.5')
+  assert.equal(status.updateAvailable, true)
+})
+
+test('buildUpdateStatus extracts version from name when tag is the latest rolling tag', async () => {
+  process.env.APP_VERSION = '0.1.0'
+
+  mockHttpsGet = (url, cb) => {
+    const body = url.includes('/releases?')
+      ? JSON.stringify([
+        { tag_name: 'latest', name: 'Release 0.5.2', draft: false, prerelease: false }
+      ])
+      : JSON.stringify({ tag_name: 'latest', name: 'Release 0.5.2' })
+    const res = {
+      statusCode: 200,
+      setEncoding: () => {},
+      on: (event, handler) => {
+        if (event === 'data') handler(body)
+        if (event === 'end') handler()
+      }
+    }
+    cb(res)
+    return { on: () => {}, setTimeout: () => {}, destroy: () => {} }
+  }
+
+  mockExistsSync = () => false
+
+  const { buildUpdateStatus } = loadController()
+  const status = await buildUpdateStatus()
+
+  assert.equal(status.latest.version, '0.5.2')
+  assert.equal(status.updateAvailable, true)
+})
+
 test('buildUpdateStatus handles GitHub API error', async () => {
   process.env.APP_VERSION = '0.1.0'
   mockHttpsGet = (url, cb) => {
@@ -138,10 +201,12 @@ test('buildUpdateStatus handles GitHub API error', async () => {
     return { on: () => {}, setTimeout: () => {}, destroy: () => {} }
   }
 
+  mockExecFile = (cmd, args, cb) => cb(new Error('git ls-remote failed'))
+
   const { buildUpdateStatus } = loadController()
   const status = await buildUpdateStatus()
   assert.equal(status.updateAvailable, false)
-  assert.match(status.error, /GitHub returned 500/)
+  assert.match(status.error, /Unable to check for updates/)
 })
 
 test('getUpdateStatus sends JSON response', async () => {

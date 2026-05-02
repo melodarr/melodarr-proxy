@@ -80,24 +80,59 @@ async function getLatestRelease () {
   }
 
   if (!release) {
-    release = await requestJson(`https://api.github.com/repos/${repository}/releases/latest`)
+    try {
+      release = await requestJson(`https://api.github.com/repos/${repository}/releases/latest`)
+    } catch (error) {
+      // API completely failed or blocked
+    }
   }
 
-  let version = normalizeVersion(release.tag_name || release.name)
-  if (version === 'latest' && release.name) {
-    const match = release.name.match(/v?(\d+\.\d+\.\d+)/)
-    if (match) version = match[1]
+  if (release) {
+    let version = normalizeVersion(release.tag_name || release.name)
+    if (version === 'latest' && release.name) {
+      const match = release.name.match(/v?(\d+\.\d+\.\d+)/)
+      if (match) version = match[1]
+    }
+
+    return {
+      repository,
+      version,
+      tagName: release.tag_name || '',
+      name: release.name || release.tag_name || '',
+      publishedAt: release.published_at || '',
+      changelog: release.body || '',
+      htmlUrl: release.html_url || `https://github.com/${repository}/releases`
+    }
   }
 
-  return {
-    repository,
-    version,
-    tagName: release.tag_name || '',
-    name: release.name || release.tag_name || '',
-    publishedAt: release.published_at || '',
-    changelog: release.body || '',
-    htmlUrl: release.html_url || `https://github.com/${repository}/releases`
+  // Fallback to git ls-remote origin if API fails completely
+  try {
+    const projectDir = process.env.UPDATE_PROJECT_DIR || process.cwd()
+    const { stdout } = await execFileAsync('git', ['ls-remote', '--tags', 'origin'], { cwd: projectDir, timeout: UPDATE_TIMEOUT_MS })
+    const tags = stdout.split('\n')
+      .map(line => line.split('refs/tags/')[1])
+      .filter(Boolean)
+      .filter(tag => !tag.endsWith('^{}'))
+      .filter(tag => tag.match(/^v?\d+\.\d+\.\d+/))
+
+    if (tags.length > 0) {
+      tags.sort((a, b) => compareVersions(a, b))
+      const latestTag = tags[tags.length - 1]
+      return {
+        repository,
+        version: normalizeVersion(latestTag),
+        tagName: latestTag,
+        name: latestTag,
+        publishedAt: '',
+        changelog: 'Release notes unavailable (failed to reach GitHub API, used local git reference).',
+        htmlUrl: ''
+      }
+    }
+  } catch (error) {
+    // Git ls-remote failed
   }
+
+  throw new Error('Unable to check for updates: GitHub API unreachable and git fallback failed.')
 }
 
 async function commandAvailable (command, args = ['--version']) {
