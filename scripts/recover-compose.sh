@@ -14,7 +14,7 @@
 #
 # Override any of these via env vars:
 #   APP_CONTACT, HOST_PORT, MELODASH_HOST_PORT, APP_VERSION,
-#   MUSICBRAINZ_IP_FAMILY (default: 6).
+#   MUSICBRAINZ_IP_FAMILY (default: 6), COMPOSE_IPV6_SUBNET.
 
 set -euo pipefail
 
@@ -44,6 +44,8 @@ APP_VERSION="${APP_VERSION:-latest}"
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
 COMPOSE_PATH="${COMPOSE_PATH:-/opt/melodarr-proxy/compose.yml}"
+MUSICBRAINZ_IP_FAMILY="${MUSICBRAINZ_IP_FAMILY:-6}"
+COMPOSE_IPV6_SUBNET="${COMPOSE_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
 TMP_FILE="$(mktemp -t melodarr-compose.XXXXXX.yml)"
 trap 'rm -f "$TMP_FILE"' EXIT
@@ -64,7 +66,7 @@ services:
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "4"
+      MUSICBRAINZ_IP_FAMILY: "${MUSICBRAINZ_IP_FAMILY}"
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
@@ -94,6 +96,13 @@ services:
 
 volumes:
   melodarr_proxy_data:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${COMPOSE_IPV6_SUBNET}
 COMPOSE
 
 echo "Wrote temp template: $TMP_FILE"

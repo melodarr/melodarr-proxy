@@ -121,8 +121,8 @@ set_compose_env_value () {
 # Ensure the setting exists; the exact value is selected from a live network
 # probe after the new image has been pulled.
 if ! grep -q "MUSICBRAINZ_IP_FAMILY" "$COMPOSE_FILE"; then
-  echo "Adding MUSICBRAINZ_IP_FAMILY=4 to compose.yml..."
-  set_compose_env_value MUSICBRAINZ_IP_FAMILY 4
+  echo "Adding MUSICBRAINZ_IP_FAMILY=6 to compose.yml..."
+  set_compose_env_value MUSICBRAINZ_IP_FAMILY 6
 fi
 
 # Clean up broken YAML formatting if a previous run messed it up with backslashes
@@ -228,18 +228,18 @@ probe_musicbrainz_family () {
 echo "Probing MusicBrainz connectivity from Docker network $NETWORK..."
 MUSICBRAINZ_FAMILY=""
 MUSICBRAINZ_REACHABLE=1
-if probe_musicbrainz_family 4; then
-  MUSICBRAINZ_FAMILY="4"
-elif probe_musicbrainz_family 6; then
+if probe_musicbrainz_family 6; then
   MUSICBRAINZ_FAMILY="6"
+elif probe_musicbrainz_family 4; then
+  MUSICBRAINZ_FAMILY="4"
 else
   MUSICBRAINZ_REACHABLE=0
-  MUSICBRAINZ_FAMILY="4"
+  MUSICBRAINZ_FAMILY="6"
   echo "⚠️  Cannot reach MusicBrainz from Docker network $NETWORK over IPv4 or IPv6."
-  echo "--- IPv4 probe ---"
-  cat /tmp/musicbrainz-family-4.log 2>/dev/null || true
   echo "--- IPv6 probe ---"
   cat /tmp/musicbrainz-family-6.log 2>/dev/null || true
+  echo "--- IPv4 probe ---"
+  cat /tmp/musicbrainz-family-4.log 2>/dev/null || true
   echo "Continuing with application canary validation. MusicBrainz will remain degraded until network connectivity is fixed."
 fi
 

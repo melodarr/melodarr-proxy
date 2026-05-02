@@ -157,7 +157,7 @@ services:
       REQUIRE_API_KEY: "true"
       DATA_DIR: /data
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "4"
+      MUSICBRAINZ_IP_FAMILY: "6"
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
     ports:
@@ -228,7 +228,7 @@ Common variables:
 | `REQUIRE_API_KEY` | Require API keys for metadata endpoints. Default `true` in Compose. |
 | `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` should be a real contact email or URL. |
 | `MUSICBRAINZ_BASE_URL` | MusicBrainz API base URL. |
-| `MUSICBRAINZ_IP_FAMILY` | `4`, `6`, or unset/auto depending on network. Useful for Proxmox/LXC TLS reset troubleshooting. |
+| `MUSICBRAINZ_IP_FAMILY` | `6`, `4`, or unset/auto depending on network. Useful for Proxmox/LXC TLS reset troubleshooting. |
 | `CACHE_TTL_SECONDS` | Metadata cache TTL. Compose default is one day. |
 | `METADATA_PROVIDERS` | Enabled providers, comma-separated. Default `musicbrainz,itunes`. |
 | `PROVIDER_PRIORITY` | Merge/fallback preference when providers disagree. |
@@ -345,8 +345,8 @@ or:
 ```bash
 scripts/proxy-diag.sh all
 scripts/proxy-diag.sh ready
-scripts/proxy-diag.sh mb 4
 scripts/proxy-diag.sh mb 6
+scripts/proxy-diag.sh mb 4
 curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
 ```
 
@@ -427,21 +427,21 @@ curl -s http://localhost:3055/api/ready
 Run targeted diagnostics:
 
 ```bash
-scripts/proxy-diag.sh mb 4
 scripts/proxy-diag.sh mb 6
+scripts/proxy-diag.sh mb 4
 curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
 ```
 
 Then set:
 
 ```env
-MUSICBRAINZ_IP_FAMILY=4
+MUSICBRAINZ_IP_FAMILY=6
 ```
 
-or:
+or, only when IPv6 is unavailable:
 
 ```env
-MUSICBRAINZ_IP_FAMILY=6
+MUSICBRAINZ_IP_FAMILY=4
 ```
 
 If MusicBrainz remains unreachable, Melodarr Proxy can still serve fallback providers when enabled, but readiness will show degraded while MusicBrainz is part of `METADATA_PROVIDERS`.

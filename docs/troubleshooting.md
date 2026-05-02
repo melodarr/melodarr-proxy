@@ -47,20 +47,20 @@ Run:
 ```bash
 curl -s "http://127.0.0.1:3055/debug/diagnose?provider=musicbrainz"
 curl -s http://127.0.0.1:3055/debug/upstream
-scripts/proxy-diag.sh mb 4
 scripts/proxy-diag.sh mb 6
+scripts/proxy-diag.sh mb 4
 ```
 
-Try forcing the working IP family:
-
-```env
-MUSICBRAINZ_IP_FAMILY=4
-```
-
-or:
+Default to IPv6 first, then force IPv4 only if IPv6 is unavailable:
 
 ```env
 MUSICBRAINZ_IP_FAMILY=6
+```
+
+or, only when IPv6 is unavailable:
+
+```env
+MUSICBRAINZ_IP_FAMILY=4
 ```
 
 Then recreate the proxy:

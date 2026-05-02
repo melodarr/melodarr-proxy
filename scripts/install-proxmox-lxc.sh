@@ -13,10 +13,13 @@ SWAP="${SWAP:-512}"
 BRIDGE="${BRIDGE:-vmbr0}"
 IPADDR="${IPADDR:-dhcp}" # Example static: 172.16.0.240/16
 GATEWAY="${GATEWAY:-}" # Example static gateway: 172.16.0.1
+IP6ADDR="${IP6ADDR:-auto}" # Use "auto" for SLAAC, "dhcp", or "manual" to disable.
 DNS="${DNS:-1.1.1.1 8.8.8.8}"
 TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"
 TEMPLATE_FILE="${TEMPLATE_FILE:-debian-12-standard_12.12-1_amd64.tar.zst}"
 UNPRIVILEGED="${UNPRIVILEGED:-1}"
+DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef::/64}"
+COMPOSE_IPV6_SUBNET="${COMPOSE_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
@@ -160,6 +163,9 @@ NET0="name=eth0,bridge=${BRIDGE},ip=${IPADDR}"
 if [[ -n "$GATEWAY" && "$IPADDR" != "dhcp" ]]; then
   NET0="${NET0},gw=${GATEWAY}"
 fi
+if [[ -n "$IP6ADDR" && "$IP6ADDR" != "manual" ]]; then
+  NET0="${NET0},ip6=${IP6ADDR}"
+fi
 
 echo "Creating LXC $CTID ($HOSTNAME)..."
 
@@ -215,8 +221,24 @@ echo "deb [arch=\${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://downloa
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
+cat > /etc/sysctl.d/99-melodarr-ipv6-forwarding.conf <<SYSCTL
+net.ipv6.conf.all.forwarding=1
+net.ipv6.conf.default.forwarding=1
+SYSCTL
+sysctl --system
+
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<DOCKER
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "${DOCKER_IPV6_SUBNET}",
+  "ip6tables": true,
+  "experimental": true
+}
+DOCKER
+
 systemctl enable docker
-systemctl start docker
+systemctl restart docker
 
 if [[ -n "${GHCR_USER}" ]] && [[ -n "${GHCR_TOKEN}" ]]; then
   echo "Authenticating with GHCR as ${GHCR_USER}..."
@@ -241,7 +263,7 @@ services:
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "4"
+      MUSICBRAINZ_IP_FAMILY: "6"
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
@@ -271,6 +293,13 @@ services:
 
 volumes:
   melodarr_proxy_data:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${COMPOSE_IPV6_SUBNET}
 COMPOSE
 
 cd /opt/melodarr-proxy
@@ -345,7 +374,7 @@ services:
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "4"
+      MUSICBRAINZ_IP_FAMILY: "6"
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
@@ -376,6 +405,13 @@ services:
 
 volumes:
   melodarr_proxy_data:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${COMPOSE_IPV6_SUBNET}
 SOURCE_COMPOSE
 
 fi

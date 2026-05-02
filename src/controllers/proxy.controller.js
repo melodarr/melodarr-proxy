@@ -335,15 +335,15 @@ async function handleArtistLookup (req, res) {
     tracer.addStep(trace, 'error', 0, 'timeout')
     metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 502, error: 'Lock timeout' })
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json([{ 
-      artistName: term, 
-      id: '', 
+    return res.status(502).json([{
+      artistName: term,
+      id: '',
       foreignArtistId: '',
       status: 'continuing',
       links: [],
-      albums: [], 
-      partial: true, 
-      warning: 'Upstream request failed during coalescing (lock timeout)' 
+      albums: [],
+      partial: true,
+      warning: 'Upstream request failed during coalescing (lock timeout)'
     }])
   }
 

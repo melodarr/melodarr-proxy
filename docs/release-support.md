@@ -206,7 +206,7 @@ docker compose up -d --build proxy redis melodash
 - Do not delete the data volume unless explicitly troubleshooting corrupted settings.
 - Redis cache can be cleared safely, but clearing it is not a rollback.
 - If the new release changed runtime settings, review Melodash Settings after rollback.
-- If the issue is only MusicBrainz connectivity, try `MUSICBRAINZ_IP_FAMILY=4` or `6` before rolling back.
+- If the issue is only MusicBrainz connectivity, try `MUSICBRAINZ_IP_FAMILY=6` or `4` before rolling back.
 
 ## Reporting Problems On Older Versions
 

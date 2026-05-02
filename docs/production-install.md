@@ -50,7 +50,7 @@ SETTINGS_SESSION_SECRET=change-this-random-secret
 REDIS_URL=redis://redis:6379
 DATA_DIR=/data
 MUSICBRAINZ_BASE_URL=https://musicbrainz.org/ws/2
-MUSICBRAINZ_IP_FAMILY=4
+MUSICBRAINZ_IP_FAMILY=6
 METADATA_PROVIDERS=musicbrainz,itunes
 PROVIDER_PRIORITY=musicbrainz,theaudiodb,itunes,lastfm,discogs
 CACHE_TTL_SECONDS=86400
@@ -155,7 +155,7 @@ services:
       APP_VERSION: 0.3.42
       APP_CONTACT: ${APP_CONTACT}
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
-      MUSICBRAINZ_IP_FAMILY: "4"
+      MUSICBRAINZ_IP_FAMILY: "6"
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: 86400
       UPSTREAM_TIMEOUT_MS: 8000
