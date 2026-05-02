@@ -4,9 +4,15 @@ WORKDIR /app
 
 RUN corepack enable
 COPY package.json yarn.lock .yarnrc.yml ./
-RUN yarn install --immutable
 
+FROM base AS dev
+RUN yarn install --immutable
 COPY . .
+
+FROM dev AS test
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+FROM dev AS production
 RUN yarn build
 RUN rm -rf node_modules .yarn/cache \
   && node -e "const fs=require('fs'); const p=require('./package.json'); delete p.devDependencies; fs.writeFileSync('package.json', JSON.stringify(p, null, 2))" \

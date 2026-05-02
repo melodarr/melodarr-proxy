@@ -28,8 +28,8 @@ run_proxy_tests() {
 
 run_melodash_lint() {
   echo "Running Melodash typecheck inside a container..."
-  compose_cmd build melodash
-  compose_cmd run --rm --no-deps --entrypoint "yarn run lint" melodash
+  compose_cmd --profile test build melodash-test
+  compose_cmd --profile test run --rm --no-deps melodash-test yarn lint
 }
 
 run_all_checks() {
