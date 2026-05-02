@@ -179,8 +179,11 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
   const response = {
     artistName: enrichedTopResult.artistName,
     id: data.id || '',
+    foreignArtistId: data.id || '',
     disambiguation: data.disambiguation || '',
     overview: data.overview || '',
+    status: data.status || 'continuing',
+    links: data.links || [],
     images: data.images || [],
     albums: enrichedTopResult.albums,
     tags: enrichedTopResult.tags,
