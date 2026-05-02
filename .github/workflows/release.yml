@@ -53,7 +53,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4
+        uses: sigstore/cosign-installer@v4.1.1
 
       # 1. GHCR Authentication
       - name: Login to GitHub Container Registry
