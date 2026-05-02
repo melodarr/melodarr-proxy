@@ -22,7 +22,9 @@ function loadServer () {
   const metricsMiddlewarePath = require.resolve('./middleware/metrics.middleware')
   const apiRoutesPath = require.resolve('./routes/api.routes')
   const debugRoutesPath = require.resolve('./routes/debug.routes')
+  const publicRoutesPath = require.resolve('./routes/public.routes')
   const loggerPath = require.resolve('./utils/logger')
+  const logRecords = []
 
   for (const modulePath of [
     serverPath,
@@ -33,6 +35,7 @@ function loadServer () {
     metricsMiddlewarePath,
     apiRoutesPath,
     debugRoutesPath,
+    publicRoutesPath,
     loggerPath
   ]) {
     delete require.cache[modulePath]
@@ -41,6 +44,8 @@ function loadServer () {
   const apiRoutes = express.Router()
   apiRoutes.get('/health', (_req, res) => res.json({ status: 'ok' }))
   const debugRoutes = express.Router()
+  const publicRoutes = express.Router()
+  publicRoutes.get('/artist/search', (_req, res) => res.json([{ artistName: 'Public Artist', id: '', albums: [] }]))
 
   mockModule(cachePath, {
     async isReady () {
@@ -71,10 +76,11 @@ function loadServer () {
   mockModule(metricsMiddlewarePath, (_req, _res, next) => next())
   mockModule(apiRoutesPath, apiRoutes)
   mockModule(debugRoutesPath, debugRoutes)
+  mockModule(publicRoutesPath, publicRoutes)
   mockModule(loggerPath, {
-    info () {},
-    warn () {},
-    error () {}
+    info (message, meta) { logRecords.push({ level: 'info', message, meta }) },
+    warn (message, meta) { logRecords.push({ level: 'warn', message, meta }) },
+    error (message, meta) { logRecords.push({ level: 'error', message, meta }) }
   })
 
   const originalNoListen = process.env.NO_LISTEN
@@ -87,7 +93,7 @@ function loadServer () {
     this.send(fs.readFileSync(filePath, 'utf8'))
   }
 
-  return app
+  return { app, logRecords }
 }
 
 function invokeApp (app, path) {
@@ -148,7 +154,8 @@ function invokeApp (app, path) {
 }
 
 test('proxy exposes API metadata on /api/info', async (t) => {
-  const response = await invokeApp(loadServer(), '/api/info')
+  const { app } = loadServer()
+  const response = await invokeApp(app, '/api/info')
   const body = response.json()
 
   assert.equal(response.statusCode, 200)
@@ -160,7 +167,7 @@ test('proxy exposes API metadata on /api/info', async (t) => {
 })
 
 test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {
-  const app = loadServer()
+  const { app } = loadServer()
   const docsResponse = await invokeApp(app, '/docs')
   const openApiResponse = await invokeApp(app, '/openapi.json')
   const openApiBody = openApiResponse.json()
@@ -178,7 +185,7 @@ test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {
 })
 
 test('proxy serves operator dashboard aliases', async (t) => {
-  const app = loadServer()
+  const { app } = loadServer()
   const dashboardResponse = await invokeApp(app, '/dashboard')
   const settingsResponse = await invokeApp(app, '/settings')
   const statsResponse = await invokeApp(app, '/stats')
@@ -196,4 +203,27 @@ test('proxy serves operator dashboard aliases', async (t) => {
 
   assert.equal(loginResponse.statusCode, 200)
   assert.match(loginResponse.text, /Melodarr Proxy/)
+})
+
+test('proxy mounts legacy /artist/search compatibility route', async (t) => {
+  const { app } = loadServer()
+  const response = await invokeApp(app, '/artist/search?term=radiohead&apikey=mp_secret')
+  const body = response.json()
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(body[0].artistName, 'Public Artist')
+})
+
+test('proxy logs unmatched route details without sensitive query keys', async (t) => {
+  const { app, logRecords } = loadServer()
+  const response = await invokeApp(app, '/missing/path?term=radiohead&apikey=mp_secret&token=hidden')
+  const body = response.json()
+  const routeLog = logRecords.find(record => record.level === 'warn' && record.message === 'Route not found')
+
+  assert.equal(response.statusCode, 404)
+  assert.equal(body.error, 'API route not found')
+  assert.ok(routeLog)
+  assert.equal(routeLog.meta.method, 'GET')
+  assert.equal(routeLog.meta.path, '/missing/path')
+  assert.deepEqual(routeLog.meta.queryKeys, ['term'])
 })

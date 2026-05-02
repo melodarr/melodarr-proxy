@@ -24,6 +24,7 @@ function makeResponse () {
 function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   const controllerPath = require.resolve('./proxy.controller')
   const providersPath = require.resolve('../providers')
+  const musicbrainzProviderPath = require.resolve('../providers/musicbrainz.provider')
   const cachePath = require.resolve('../cache')
   const metricsPath = require.resolve('../metrics')
   const tracerPath = require.resolve('../tracer')
@@ -37,6 +38,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
 
   delete require.cache[controllerPath]
   delete require.cache[providersPath]
+  delete require.cache[musicbrainzProviderPath]
   delete require.cache[cachePath]
   delete require.cache[metricsPath]
   delete require.cache[tracerPath]
@@ -81,6 +83,17 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     exports: {
       aggregateArtist: aggregateArtist || (async () => {
         throw new Error('aggregateArtist stub was not configured')
+      })
+    }
+  }
+
+  require.cache[musicbrainzProviderPath] = {
+    id: musicbrainzProviderPath,
+    filename: musicbrainzProviderPath,
+    loaded: true,
+    exports: {
+      lookupArtistById: arguments[0]?.lookupArtistById || (async () => {
+        throw new Error('lookupArtistById stub was not configured')
       })
     }
   }
@@ -320,6 +333,53 @@ test('artist lookup returns partial error response when all providers fail', asy
   assert.deepEqual(res.body[0].albums, [])
   assert.equal(res.body[0].partial, true)
   assert.equal(res.body[0].warning, 'All metadata providers failed')
+})
+
+test('artist by id returns full artist payload for Lidarr path-segment lookup', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'Radiohead',
+      id,
+      disambiguation: '',
+      overview: '',
+      images: [],
+      albums: [{
+        name: 'OK Computer',
+        releaseDate: '1997-05-21',
+        imageUrl: 'https://example.test/ok.jpg',
+        provider: 'musicbrainz',
+        ids: { musicbrainzReleaseGroupId: 'rg-ok' }
+      }],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 1 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'a74b1b7f' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.artistName, 'Radiohead')
+  assert.equal(res.body.id, 'a74b1b7f')
+  assert.equal(res.body.foreignArtistId, 'a74b1b7f')
+  assert.equal(res.body.status, 'continuing')
+  assert.deepEqual(res.body.links, [])
+  assert.equal(res.body.albums[0].id, 'rg-ok')
+  assert.equal(res.body.albums[0].firstReleaseDate, '1997-05-21T00:00:00Z')
+})
+
+test('recent feed returns empty array for unsupported update feed', async () => {
+  const { controller } = loadController()
+  const res = makeResponse()
+
+  await controller.handleRecentFeed({}, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
 })
 
 // handleSearch tests

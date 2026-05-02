@@ -61,4 +61,28 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.artistName, 'not found')
     assert.strictEqual(result.albums.length, 0)
   })
+
+  await t.test('lookupArtistById - returns artist and albums by MBID', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path, params) => {
+      if (path === '/artist/a74b1b7f') {
+        return { id: 'a74b1b7f', name: 'Radiohead', disambiguation: 'test artist' }
+      }
+      if (path === '/release-group') {
+        assert.strictEqual(params.artist, 'a74b1b7f')
+        return {
+          'release-groups': [
+            { id: 'rg1', title: 'OK Computer', 'primary-type': 'Album', 'first-release-date': '1997-05-21' }
+          ]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('a74b1b7f')
+    assert.strictEqual(result.artistName, 'Radiohead')
+    assert.strictEqual(result.id, 'a74b1b7f')
+    assert.strictEqual(result.albums.length, 1)
+    assert.strictEqual(result.albums[0].provider, 'musicbrainz')
+    assert.strictEqual(result.providers[0].name, 'musicbrainz')
+  })
 })

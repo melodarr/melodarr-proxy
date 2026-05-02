@@ -28,6 +28,7 @@ const metricsMiddleware = require('./middleware/metrics.middleware')
 const requestIdMiddleware = require('./middleware/requestId.middleware')
 const apiRoutes = require('./routes/api.routes')
 const debugRoutes = require('./routes/debug.routes')
+const publicRoutes = require('./routes/public.routes')
 const openApiDocument = require('./openapi')
 
 function createApp () {
@@ -101,12 +102,23 @@ function createApp () {
   })
 
   app.use(express.static(path.join(__dirname, '../public')))
+  // Legacy/public metadata compatibility routes, e.g. /artist/search.
+  app.use('/', publicRoutes)
   // API Routes
   app.use('/api', apiRoutes)
   app.use('/debug', debugRoutes)
 
   // Fallback for unmatched routes
   app.use((req, res) => {
+    const queryKeys = Object.keys(req.query || {}).filter(key => !/api[_-]?key|apikey|token|secret/i.test(key))
+    logger.warn('Route not found', {
+      requestId: req.requestId,
+      method: req.method,
+      originalUrl: req.originalUrl,
+      path: req.path,
+      queryKeys,
+      userAgent: req.headers?.['user-agent']
+    })
     res.status(404).json({
       error: 'API route not found'
     })

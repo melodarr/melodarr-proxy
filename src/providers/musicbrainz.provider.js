@@ -74,6 +74,61 @@ class MusicBrainzProvider {
       albums
     }
   }
+
+  async lookupArtistById (artistId) {
+    const artist = await upstreamService.musicBrainzGet(`/artist/${encodeURIComponent(artistId)}`, {})
+
+    if (!artist?.id) {
+      const err = new Error('MusicBrainz artist not found')
+      err.code = 'ARTIST_NOT_FOUND'
+      throw err
+    }
+
+    const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
+      artist: artist.id,
+      type: 'album|ep',
+      limit: 100,
+      offset: 0
+    })
+    const releaseGroups = releaseGroupResult?.['release-groups'] || []
+
+    const albums = releaseGroups
+      .filter((group) => {
+        const primaryType = String(group['primary-type'] || '').toLowerCase()
+        const secondaryTypes = group['secondary-types'] || []
+        return ['album', 'ep'].includes(primaryType) && secondaryTypes.length === 0
+      })
+      .map(group => {
+        const rawDate = group['first-release-date'] || ''
+        const yearMatch = rawDate.match(/^(\d{4})/)
+        return {
+          name: group.title || '',
+          year: yearMatch ? parseInt(yearMatch[1], 10) : null,
+          releaseDate: rawDate || null,
+          imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
+          ids: {
+            musicbrainzReleaseGroupId: group.id || ''
+          },
+          provider: 'musicbrainz'
+        }
+      }).filter(a => a.name)
+
+    return {
+      schemaVersion: 'skyhook-v1',
+      artistName: artist.name || artist['sort-name'] || '',
+      id: artist.id || '',
+      disambiguation: artist.disambiguation || '',
+      overview: artist.disambiguation || '',
+      images: [],
+      albums,
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: albums.length }],
+      providerErrors: [],
+      confidence: 100
+    }
+  }
 }
 
 module.exports = new MusicBrainzProvider()

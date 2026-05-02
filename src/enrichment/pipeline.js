@@ -1,5 +1,4 @@
 const axios = require('axios')
-const dns = require('dns')
 const https = require('https')
 const cache = require('../cache')
 const { getConfigValue } = require('../settings/store')
@@ -7,10 +6,7 @@ const logger = require('../utils/logger')
 const metrics = require('../metrics')
 
 const httpsAgent = new https.Agent({
-  keepAlive: true,
-  lookup (hostname, options, callback) {
-    return dns.lookup(hostname, { ...options, family: 4 }, callback)
-  }
+  keepAlive: true
 })
 
 async function enrichArtistData (artistName) {

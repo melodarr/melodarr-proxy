@@ -1,4 +1,4 @@
-const crypto = require('crypto')
+
 const metrics = require('../metrics')
 const tracer = require('../tracer')
 const cache = require('../cache')
@@ -348,7 +348,7 @@ async function handleArtistLookup (req, res) {
     return res.status(502).json([{
       artistName: term,
       id: '',
-      foreignArtistId: crypto.randomUUID(),
+      foreignArtistId: '',
       status: 'continuing',
       links: [],
       albums: [],
@@ -402,7 +402,7 @@ async function handleArtistLookup (req, res) {
     return res.status(502).json([{
       artistName: term,
       id: '',
-      foreignArtistId: crypto.randomUUID(),
+      foreignArtistId: '',
       status: 'continuing',
       links: [],
       albums: [],

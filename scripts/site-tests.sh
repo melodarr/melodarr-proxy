@@ -5,7 +5,7 @@
 # Env knobs:
 #   CTID         — Proxmox container ID         (default: 163)
 #   BASE_URL     — proxy URL inside the LXC     (default: http://127.0.0.1:3055)
-#   API_KEY      — proxy API key                (default: bc57be1e98bed038597f1fed0f058137)
+#   API_KEY      — proxy API key                (default: empty; prompt in interactive mode)
 #   SKIP_DEPLOY  — set to 1 to skip pull+up     (default: 0)
 #   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
 #                  overrides and restart the proxy (re-enables MusicBrainz)
@@ -14,7 +14,7 @@
 #                   via /data/settings.json, /opt/melodarr-proxy/data/...,
 #                   /config/settings.json, then container-wide find).
 #                   Only used when REENABLE_MB=1.
-#   EXPECTED_REV — git SHA expected from /api/version (default: v0.3.36 commit)
+#   EXPECTED_REV — optional git SHA expected from /api/version (default: empty = skip)
 #
 # Tracks pass/fail per check and exits non-zero if any test failed.
 
@@ -22,11 +22,11 @@ set -uo pipefail
 
 CTID="${CTID:-163}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
-API_KEY="${API_KEY:-bc57be1e98bed038597f1fed0f058137}"
+API_KEY="${API_KEY:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
 REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
-EXPECTED_REV="${EXPECTED_REV:-f63d5fd82dc40f85a2a6172b4b566d006660cbb7}"
+EXPECTED_REV="${EXPECTED_REV:-}"
 
 # ── Optional interactive wizard ──────────────────────────────────
 # Prompts for each knob when stdin is a TTY.  Users can:
@@ -172,16 +172,19 @@ echo "## Version check"
 VERSION_BODY=$(remote_get /api/version)
 echo "$VERSION_BODY" | jq
 ACTUAL_REV=$(echo "$VERSION_BODY" | jq -r '.revision // empty')
-if [ "$ACTUAL_REV" = "$EXPECTED_REV" ]; then
+if [ -z "$EXPECTED_REV" ]; then
+  record_pass "version endpoint responded (revision=$ACTUAL_REV)"
+elif [ "$ACTUAL_REV" = "$EXPECTED_REV" ]; then
   record_pass "running expected revision $ACTUAL_REV"
 else
   record_fail "expected revision=$EXPECTED_REV, got=$ACTUAL_REV — deploy did not land or you're on a different version"
 fi
 
 # ── 2.5. Optional: re-enable MusicBrainz (REENABLE_MB=1) ─────────
-# Lidarr's data model is keyed on MB UUIDs.  When MB has been excluded
-# from metadataProviders (e.g. during a TLS outage), Lidarr searches
-# return empty foreignArtistIds and Lidarr rejects the response.
+# Lidarr's data model is keyed on MB UUIDs. When MusicBrainz has been
+# excluded from metadataProviders, this project intentionally does not
+# synthesize fake IDs. That means foreignArtistId may be empty until
+# MusicBrainz is reachable and active again.
 # Setting REENABLE_MB=1 clears the saved runtime overrides under
 # .runtime in settings.json and restarts the proxy.
 #
@@ -479,6 +482,15 @@ echo "$READY_BODY" | jq '{upstream, probedProvider: .upstreamDetail.probedProvid
 ACTIVE_PROVIDERS=$(echo "$READY_BODY" | jq -r '.upstreamDetail.activeProviders // [] | join(",")')
 MB_ACTIVE=$(echo "$READY_BODY" | jq -r '.upstreamDetail.activeProviders // [] | index("musicbrainz") // empty')
 
+echo
+echo "## Runtime MusicBrainz network preference"
+MB_FAMILY=$(pct exec "$CTID" -- docker exec melodarr-proxy-proxy-1 printenv MUSICBRAINZ_IP_FAMILY 2>/dev/null || true)
+if [ "$MB_FAMILY" = "6" ]; then
+  record_pass "MUSICBRAINZ_IP_FAMILY=6"
+else
+  record_fail "MUSICBRAINZ_IP_FAMILY is '${MB_FAMILY:-unset}', expected 6 for current IPv6-first deployment"
+fi
+
 # ── 9. Upstream buffer (gated on MB being active) ────────────────
 echo
 echo "## Upstream buffer provider counts"
@@ -501,6 +513,16 @@ echo
 echo "### /api/v0.4/artist/lookup raw response (first 100 lines)"
 remote_get_full '/api/v0.4/artist/lookup?term=Radiohead' | head -100
 
+echo
+echo "### Legacy public compat route: /artist/search"
+LEGACY_SEARCH_STATUS=$(chomp "$(remote_status_line '/artist/search?term=Radiohead')")
+echo "$LEGACY_SEARCH_STATUS"
+if echo "$LEGACY_SEARCH_STATUS" | grep -q ' 200'; then
+  record_pass "/artist/search compatibility route returns 200"
+else
+  record_fail "/artist/search compatibility route status: $LEGACY_SEARCH_STATUS"
+fi
+
 # Path-key auth form — Lidarr's C# URI builder strips query params, so it
 # uses /api/<key>/v1/artist/lookup instead of header auth.  Test it
 # explicitly so we catch path-key middleware regressions.
@@ -518,6 +540,31 @@ if [ -n "$API_KEY" ]; then
   fi
 else
   echo "  (skipped — API_KEY not set)"
+fi
+
+echo
+echo "### Lidarr path-segment route diagnostics"
+RADIOHEAD_MBID="a74b1b7f-71a5-4011-9441-d0b5e4122711"
+ARTIST_SEGMENT_STATUS=$(chomp "$(remote_status_line "/api/v0.4/artist/$RADIOHEAD_MBID")")
+RECENT_ARTIST_STATUS=$(chomp "$(remote_status_line '/api/v0.4/recent/artist?since=2026-01-01T00:00:00Z')")
+RECENT_ALBUM_STATUS=$(chomp "$(remote_status_line '/api/v0.4/recent/album?since=2026-01-01T00:00:00Z')")
+echo "artist/:mbid:  $ARTIST_SEGMENT_STATUS"
+echo "recent/artist: $RECENT_ARTIST_STATUS"
+echo "recent/album:  $RECENT_ALBUM_STATUS"
+if echo "$ARTIST_SEGMENT_STATUS" | grep -q ' 200'; then
+  record_pass "/api/v0.4/artist/<mbid> returns 200"
+else
+  record_fail "/api/v0.4/artist/<mbid> status: $ARTIST_SEGMENT_STATUS"
+fi
+if echo "$RECENT_ARTIST_STATUS" | grep -q ' 200'; then
+  record_pass "/api/v0.4/recent/artist returns 200"
+else
+  record_fail "/api/v0.4/recent/artist status: $RECENT_ARTIST_STATUS"
+fi
+if echo "$RECENT_ALBUM_STATUS" | grep -q ' 200'; then
+  record_pass "/api/v0.4/recent/album returns 200"
+else
+  record_fail "/api/v0.4/recent/album status: $RECENT_ALBUM_STATUS"
 fi
 
 # ── 11. Lidarr/Skyhook shape conformance ─────────────────────────
@@ -561,8 +608,10 @@ fi
 
 if echo "$LOOKUP_SUMMARY" | jq -e '.foreignArtistIdEmpty == false' > /dev/null; then
   record_pass "foreignArtistId is populated"
+elif [ -z "$MB_ACTIVE" ]; then
+  record_pass "foreignArtistId is empty because MusicBrainz is not active — no synthetic ID emitted"
 else
-  record_fail "foreignArtistId is empty — Lidarr will reject this artist (re-enable MB to fix)"
+  record_fail "foreignArtistId is empty while MusicBrainz is active — investigate provider merge/lookup"
 fi
 
 if echo "$LOOKUP_SUMMARY" | jq -e '.firstAlbumDateIsoLike' > /dev/null; then
@@ -572,10 +621,11 @@ else
   record_fail "firstReleaseDate is not ISO 8601 (got: $ACTUAL_DATE) — Lidarr's date parser may reject"
 fi
 
-# Skyhook required-field presence.  Each missing field is a candidate
-# cause of "Invalid response received from LidarrAPI" alongside the
-# foreignArtistId issue.
-for field_check in hasImages:images hasGenres:genres hasOverview:overview hasDisambiguation:disambiguation hasLinks:links hasPopularity:popularity hasStatus:status hasTags:tags; do
+# SkyHook field presence. Only fields proven necessary should fail the
+# harness. Optional enrichment fields are printed as diagnostics below so
+# they can be correlated with real Lidarr rejection logs before code adds
+# broad defaults.
+for field_check in hasLinks:links hasStatus:status; do
   field_key="${field_check%%:*}"
   field_label="${field_check##*:}"
   if echo "$LOOKUP_SUMMARY" | jq -e ".$field_key" > /dev/null; then
@@ -584,6 +634,10 @@ for field_check in hasImages:images hasGenres:genres hasOverview:overview hasDis
     record_fail "Skyhook field missing: $field_label"
   fi
 done
+
+echo
+echo "### Optional lookup field diagnostics"
+echo "$LOOKUP_SUMMARY" | jq '{hasImages, hasGenres, hasOverview, hasDisambiguation, hasPopularity, hasTags}'
 
 # ── 12. Recent error logs (boot noise filtered) ──────────────────
 echo

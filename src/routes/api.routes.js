@@ -3,7 +3,7 @@ const router = express.Router()
 
 const { getLiveness, getReadiness } = require('../controllers/health.controller')
 const { getStats, getHistory } = require('../controllers/stats.controller')
-const { handleArtistDiscover, handleArtistLookup, handleSearch, handleSongAlbums } = require('../controllers/proxy.controller')
+const { handleArtistById, handleArtistDiscover, handleArtistLookup, handleRecentFeed, handleSearch, handleSongAlbums } = require('../controllers/proxy.controller')
 const { startProxy, stopProxy, clearCache, triggerSync } = require('../controllers/control.controller')
 const { applyUpdate, getUpdateStatus } = require('../controllers/update.controller')
 const { generateKey, getAllKeys, revokeKey } = require('../controllers/admin.controller')
@@ -59,11 +59,20 @@ router.get('/v1/artist/discover', proxyRateLimiter, proxyAuthMiddleware, proxySt
 router.get('/v1/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/v0.4/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/v1/song/albums', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
+router.get('/artist/:foreignArtistId', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistById)
+router.get('/v1/artist/:foreignArtistId', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistById)
+router.get('/v0.4/artist/:foreignArtistId', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistById)
+router.get('/recent/artist', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/recent/album', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/v1/recent/artist', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/v1/recent/album', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/v0.4/recent/artist', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/v0.4/recent/album', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
 
 // Path-based API key routes for Lidarr compatibility
 // Lidarr's C# URI builder strips query parameters from base URLs, so we must allow the key in the path
 const pathAuthMiddleware = (req, res, next) => {
-  if (req.params.apiKey && req.params.apiKey.startsWith('mp_')) {
+  if (req.params.apiKey) {
     req.query.api_key = req.params.apiKey
     return next()
   }
@@ -75,6 +84,15 @@ router.get('/:apiKey/v1/artist/discover', pathAuthMiddleware, proxyRateLimiter, 
 router.get('/:apiKey/v1/artist/lookup', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/:apiKey/v0.4/artist/lookup', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
 router.get('/:apiKey/v1/song/albums', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSongAlbums)
+router.get('/:apiKey/artist/:foreignArtistId', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistById)
+router.get('/:apiKey/v1/artist/:foreignArtistId', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistById)
+router.get('/:apiKey/v0.4/artist/:foreignArtistId', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistById)
+router.get('/:apiKey/recent/artist', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/:apiKey/recent/album', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/:apiKey/v1/recent/artist', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/:apiKey/v1/recent/album', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/:apiKey/v0.4/recent/artist', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
+router.get('/:apiKey/v0.4/recent/album', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
 
 // Control routes
 router.post('/proxy/start', startProxy)
@@ -83,3 +101,4 @@ router.post('/cache/clear', clearCache)
 router.post('/sync/trigger', triggerSync)
 
 module.exports = router
+module.exports.pathAuthMiddleware = pathAuthMiddleware

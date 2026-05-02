@@ -11,7 +11,7 @@
     "reset-password": "node src/server.js --reset-password",
     "lint": "XDG_CACHE_HOME=.cache standard",
     "test": "node --test src/**/*.test.js",
-    "test:unit": "find src -name '*.test.js' -not -path 'src/e2e/*' -print0 | xargs -0 node --test",
+    "test:unit": "find src -name '*.test.js' -not -path 'src/e2e/*' -print0 | xargs -0 node --test --test-force-exit",
     "test:contracts": "node --test src/contracts/**/*.test.js",
     "test:e2e": "node --test src/e2e/**/*.e2e.test.js",
     "test:e2e:real": "E2E_REAL_HTTP=true node --test src/e2e/**/*.e2e.test.js",
