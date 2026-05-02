@@ -9,6 +9,8 @@ COPY . .
 
 FROM dev AS test
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+FROM test AS checks
 RUN yarn lint
 RUN yarn test
 

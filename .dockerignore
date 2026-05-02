@@ -9,5 +9,11 @@ coverage
 data
 debug.log
 npm-debug.log*
+package-lock.json
+server.log
+server.pid
+test-lorde.js
+test-uuid.js
+test_*.js
 yarn-debug.log*
 yarn-error.log*

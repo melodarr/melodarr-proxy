@@ -39,6 +39,9 @@
   "standard": {
     "ignore": [
       "test-mock*.js",
+      "test-lorde.js",
+      "test-uuid.js",
+      "test_*.js",
       "tmp/",
       "*.scratch.js"
     ]
