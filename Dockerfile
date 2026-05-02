@@ -8,6 +8,7 @@ RUN yarn install
 COPY . .
 
 FROM dev AS test
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN yarn lint
 RUN yarn test
 
