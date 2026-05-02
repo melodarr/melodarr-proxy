@@ -227,21 +227,23 @@ async function aggregateArtist (term) {
   const scoredImages = imageCandidates.map(candidate => {
     let score = 0
     // Type bonus
-    if (candidate.type === 'artist') score += 100
+    if (candidate.type === 'artist') score += 1000
     else if (candidate.type === 'album') score += 10
 
     // Self-titled bonus
     if (candidate.type === 'album' && candidate.isSelfTitled) score += 50
 
-    // Resolution bonus (cap at 600x600 = 360,000)
+    // Resolution bonus
     let width = 0
     let height = 0
     if (candidate.imageSource === 'audiodb') { width = 1000; height = 1000 }
     else if (candidate.imageSource === 'itunes') { width = 600; height = 600 }
     else if (candidate.imageSource === 'coverartarchive') { width = 500; height = 500 }
     
-    const resolution = Math.min(width * height, 600 * 600)
-    score += Math.floor(resolution / 10000)
+    const resolution = width * height
+    if (resolution > 0) {
+      score += Math.floor(Math.sqrt(resolution) / 10)
+    }
 
     // Source weight
     if (candidate.imageSource === 'audiodb') score += 30
@@ -250,6 +252,11 @@ async function aggregateArtist (term) {
 
     // HTTPS bonus
     if (candidate.url && candidate.url.startsWith('https://')) score += 5
+
+    // Adaptive health multiplier
+    const metricsData = providerMetrics.get(candidate.imageSource)
+    const healthScore = providerMetrics.computeScore(metricsData) || 0.5
+    score = Math.floor(score * healthScore)
 
     return { ...candidate, score }
   })
@@ -276,7 +283,7 @@ async function aggregateArtist (term) {
     }]
   }
 
-  const imageDebug = uniqueScored.map(img => ({ url: img.url, score: img.score, source: img.imageSource, type: img.type }))
+  const imageDebug = uniqueScored.slice(0, 5).map(img => ({ url: img.url, score: img.score, source: img.imageSource, type: img.type }))
 
   if (successfulProviders === 0) {
     throw new Error(`All metadata providers failed. Errors: ${warningMessages.join(' | ')}`)
