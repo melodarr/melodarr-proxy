@@ -34,6 +34,7 @@ function compareVersions (a, b) {
 function requestJson (url) {
   return new Promise((resolve, reject) => {
     const request = https.get(url, {
+      family: 4,
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': `Melodarr-Proxy/${getCurrentVersion()}`
@@ -67,10 +68,30 @@ function requestJson (url) {
 
 async function getLatestRelease () {
   const repository = process.env.UPDATE_REPOSITORY || DEFAULT_REPOSITORY
-  const release = await requestJson(`https://api.github.com/repos/${repository}/releases/latest`)
+  let release = null
+
+  try {
+    const releases = await requestJson(`https://api.github.com/repos/${repository}/releases?per_page=10`)
+    if (Array.isArray(releases)) {
+      release = releases.find(r => !r.draft && !r.prerelease && r.tag_name && r.tag_name !== 'latest')
+    }
+  } catch (error) {
+    // Fallback if the releases endpoint fails
+  }
+
+  if (!release) {
+    release = await requestJson(`https://api.github.com/repos/${repository}/releases/latest`)
+  }
+
+  let version = normalizeVersion(release.tag_name || release.name)
+  if (version === 'latest' && release.name) {
+    const match = release.name.match(/v?(\d+\.\d+\.\d+)/)
+    if (match) version = match[1]
+  }
+
   return {
     repository,
-    version: normalizeVersion(release.tag_name || release.name),
+    version,
     tagName: release.tag_name || '',
     name: release.name || release.tag_name || '',
     publishedAt: release.published_at || '',
