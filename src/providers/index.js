@@ -236,10 +236,17 @@ async function aggregateArtist (term) {
     // Resolution bonus
     let width = 0
     let height = 0
-    if (candidate.imageSource === 'audiodb') { width = 1000; height = 1000 }
-    else if (candidate.imageSource === 'itunes') { width = 600; height = 600 }
-    else if (candidate.imageSource === 'coverartarchive') { width = 500; height = 500 }
-    
+    if (candidate.imageSource === 'audiodb') {
+      width = 1000
+      height = 1000
+    } else if (candidate.imageSource === 'itunes') {
+      width = 600
+      height = 600
+    } else if (candidate.imageSource === 'coverartarchive') {
+      width = 500
+      height = 500
+    }
+
     const resolution = width * height
     if (resolution > 0) {
       score += Math.floor(Math.sqrt(resolution) / 10)
