@@ -4,11 +4,11 @@
 // Three response shapes to handle:
 //   - SkyHook-wrapped artist:  { artist: { artistName, ... } }
 //   - SkyHook-wrapped album:   { album:  { title, ... } }
-//   - Lookup unwrapped artist: { artistName, foreignArtistId, ... }
+//   - Lookup unwrapped artist: { artistName, id, ... }
 //
 // An item is valid iff its shape-appropriate display field
 // (artistName/title) is a non-empty trimmed string. We intentionally do
-// NOT validate foreignArtistId — empty is a legitimate signal that no
+// NOT validate id — empty is a legitimate signal that no
 // canonical MBID exists, and Lidarr's search UI displays such results
 // (it just can't add them as new artists). Synthesizing fake MBIDs
 // to pass this check is explicitly forbidden — see the v0.3.42
@@ -34,6 +34,11 @@ function isValidArtist (item) {
   // Unwrapped lookup-shape artist (the /api/v1/artist/lookup contract).
   if ('artistName' in item) {
     return nonEmptyString(item.artistName)
+  }
+
+  // Unwrapped lookup-shape album.
+  if ('title' in item) {
+    return nonEmptyString(item.title)
   }
 
   return false

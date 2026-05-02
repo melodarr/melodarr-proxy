@@ -233,7 +233,7 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.headers['X-Upstream-Calls'], '1')
   assert.equal(res.headers['X-Providers'], 'musicbrainz')
   assert.equal(res.body[0].artistName, 'TEST ARTIST')
-  assert.equal(res.body[0].foreignArtistId, '')
+  assert.equal(res.body[0].id, '')
   assert.equal(res.body[0].albums[0].title, 'First Album')
   assert.equal(res.body[0].albums[0].id, 'rg-1')
   // v0.3.36: year-only is now padded to ISO 8601 (Skyhook-compatible).
@@ -278,7 +278,7 @@ test('artist lookup returns cached response without debug data by default', asyn
     ['artist:cached artist', {
       data: {
         artistName: 'Cached Artist',
-        foreignArtistId: '',
+        id: '',
         providers: [{ name: 'itunes', albumCount: 1 }],
         albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020' }],
         debug: { ranking: true }
@@ -315,7 +315,7 @@ test('artist lookup returns partial error response when all providers fail', asy
 
   assert.equal(res.statusCode, 502)
   assert.equal(res.body[0].artistName, 'Broken Artist')
-  assert.equal(res.body[0].foreignArtistId, '')
+  assert.equal(res.body[0].id, '')
   assert.deepEqual(res.body[0].albums, [])
   assert.equal(res.body[0].partial, true)
   assert.equal(res.body[0].warning, 'All metadata providers failed')
@@ -345,7 +345,7 @@ test('handleSearch returns cached response in SkyHook shape', async () => {
   // SkyHook discriminated-union: each item must be wrapped in {artist:{...}}.
   assert.ok(Array.isArray(res.body))
   assert.ok(res.body[0].artist)
-  assert.equal(res.body[0].artist.foreignArtistId, 'mb-cache-1')
+  assert.equal(res.body[0].artist.id, 'mb-cache-1')
 })
 
 test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candidates', async () => {
@@ -357,7 +357,7 @@ test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candida
         artistName: 'Test Artist',
         type: 'artist',
         source: 'musicbrainz',
-        foreignArtistId: 'mb-fresh-1',
+        id: 'mb-fresh-1',
         ids: { musicbrainzArtistId: 'mb-fresh-1' }
       }]
     }
@@ -370,7 +370,7 @@ test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candida
   assert.ok(Array.isArray(res.body))
   assert.ok(res.body[0].artist, 'must be wrapped under "artist"')
   assert.equal(res.body[0].artist.artistName, 'Test Artist')
-  assert.equal(res.body[0].artist.foreignArtistId, 'mb-fresh-1')
+  assert.equal(res.body[0].artist.id, 'mb-fresh-1')
   // Cache stores the raw candidates (transformation happens at response time).
   assert.ok(cacheStore.has('search:test song'))
 })
@@ -558,7 +558,7 @@ test('handleArtistDiscover returns SkyHook-wrapped candidates inside envelope', 
       artistName: query,
       type: type || 'artist',
       source: 'musicbrainz',
-      foreignArtistId: 'mb-discover-1',
+      id: 'mb-discover-1',
       ids: { musicbrainzArtistId: 'mb-discover-1' }
     }]
   })
@@ -570,7 +570,7 @@ test('handleArtistDiscover returns SkyHook-wrapped candidates inside envelope', 
   assert.equal(res.body.query, 'test')
   assert.ok(res.body.candidates[0].artist)
   assert.equal(res.body.candidates[0].artist.artistName, 'test')
-  assert.equal(res.body.candidates[0].artist.foreignArtistId, 'mb-discover-1')
+  assert.equal(res.body.candidates[0].artist.id, 'mb-discover-1')
 })
 
 test('handleArtistDiscover handles errors', async () => {

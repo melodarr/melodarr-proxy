@@ -53,6 +53,10 @@ function setupMocks ({ providers = 'musicbrainz,itunes,theaudiodb,discogs' } = {
       searchArtist: async (term) => {
         theAudioDbCalls++
         return theAudioDbMock(term)
+      },
+      searchArtistProfile: async (term) => {
+        theAudioDbCalls++
+        return theAudioDbMock(term)
       }
     }
   }
@@ -80,7 +84,7 @@ function setupMocks ({ providers = 'musicbrainz,itunes,theaudiodb,discogs' } = {
 
 test('Artist Discovery Provider', async (t) => {
   await t.test('discoverArtists - artist', async () => {
-    const { discovery, setMbMock } = setupMocks()
+    const { discovery, setMbMock } = setupMocks({ providers: 'musicbrainz' })
     setMbMock(async (path, params) => {
       assert.strictEqual(path, '/artist')
       return {
@@ -95,6 +99,30 @@ test('Artist Discovery Provider', async (t) => {
     assert.strictEqual(result.length, 2)
     assert.strictEqual(result[0].artistName, 'Test Artist')
     assert.strictEqual(result[1].artistName, 'Test Sort')
+  })
+
+  await t.test('discoverArtists - artist enriches MB candidates with exact provider images', async () => {
+    const { discovery, setMbMock, setTheAudioDbMock } = setupMocks({ providers: 'musicbrainz,theaudiodb' })
+    setMbMock(async () => ({
+      artists: [
+        { name: 'Lorde', id: 'mb-lorde', score: '100' },
+        { name: 'Other Lorde', id: 'mb-other', score: '70' }
+      ]
+    }))
+    setTheAudioDbMock(async () => ({
+      artistName: 'Lorde',
+      images: [{ coverType: 'poster', url: 'https://example.test/lorde.jpg', remoteUrl: 'https://example.test/lorde.jpg' }],
+      ids: { theAudioDbArtistId: '123' }
+    }))
+
+    const result = await discovery.discoverArtists({ query: 'Lorde', type: 'artist' })
+    assert.strictEqual(result.length, 2)
+    assert.strictEqual(result[0].artistName, 'Lorde')
+    assert.strictEqual(result[0].imageUrl, 'https://example.test/lorde.jpg')
+    assert.deepStrictEqual(result[0].images, [{ coverType: 'poster', url: 'https://example.test/lorde.jpg', remoteUrl: 'https://example.test/lorde.jpg' }])
+    assert.strictEqual(result[0].ids.musicbrainzArtistId, 'mb-lorde')
+    assert.strictEqual(result[0].ids.theAudioDbArtistId, '123')
+    assert.strictEqual(result[1].imageUrl, undefined)
   })
 
   await t.test('discoverArtists - song', async () => {

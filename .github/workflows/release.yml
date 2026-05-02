@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write
 
 jobs:
   validate-and-publish:
@@ -51,6 +52,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4
+
       # 1. GHCR Authentication
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4
@@ -79,6 +83,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push version tags
+        id: build-proxy
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -87,6 +92,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
           build-args: |
             APP_VERSION=${{ steps.vars.outputs.VERSION }}
             APP_REVISION=${{ github.sha }}
@@ -95,6 +102,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Melodash version tags
+        id: build-melodash
         uses: docker/build-push-action@v7
         with:
           context: ./melodash
@@ -102,8 +110,18 @@ jobs:
           push: true
           tags: ${{ steps.meta-melodash.outputs.tags }}
           labels: ${{ steps.meta-melodash.outputs.labels }}
+          provenance: mode=max
+          sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Sign version images with Cosign
+        env:
+          PROXY_DIGEST: ${{ steps.build-proxy.outputs.digest }}
+          MELODASH_DIGEST: ${{ steps.build-melodash.outputs.digest }}
+        run: |
+          cosign sign --yes "ghcr.io/melodarr/melodarr-proxy@${PROXY_DIGEST}"
+          cosign sign --yes "ghcr.io/melodarr/melodarr-proxy-melodash@${MELODASH_DIGEST}"
 
       # 5. Verification Robustness
       - name: Verify Image Availability in GHCR
@@ -136,24 +154,47 @@ jobs:
           fi
 
       # 3. SBOM Generation
-      - name: Generate SBOM
+      - name: Generate proxy SBOM
         uses: anchore/sbom-action@v0
         with:
           image: ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}
-          artifact-name: sbom.spdx.json
-          output-file: ./sbom.spdx.json
+          artifact-name: proxy-sbom.spdx.json
+          output-file: ./proxy-sbom.spdx.json
+
+      - name: Generate Melodash SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}
+          artifact-name: melodash-sbom.spdx.json
+          output-file: ./melodash-sbom.spdx.json
 
       - name: Upload SBOM Artifact
         uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: ./sbom.spdx.json
+          path: |
+            ./proxy-sbom.spdx.json
+            ./melodash-sbom.spdx.json
 
       # 4. Vulnerability Scanning
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy vulnerability scanner for proxy
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_DISABLE_VEX_NOTICE: true
         with:
           image-ref: 'ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy vulnerability scanner for Melodash
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_DISABLE_VEX_NOTICE: true
+        with:
+          image-ref: 'ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}'
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
@@ -167,12 +208,22 @@ jobs:
           docker logout ghcr.io
           
           IMAGE="ghcr.io/melodarr/melodarr-proxy:${{ steps.vars.outputs.VERSION }}"
+          MELODASH_IMAGE="ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.vars.outputs.VERSION }}"
           echo "Attempting unauthenticated pull of $IMAGE..."
           
           if ! docker pull "$IMAGE"; then
             echo "=========================================================="
             echo "❌ ERROR: Unauthenticated pull failed!"
             echo "This means the package is not Public in GHCR."
+            echo "Please go to the GitHub Package settings and change visibility to Public."
+            echo "=========================================================="
+            exit 1
+          fi
+          echo "Attempting unauthenticated pull of $MELODASH_IMAGE..."
+          if ! docker pull "$MELODASH_IMAGE"; then
+            echo "=========================================================="
+            echo "❌ ERROR: Unauthenticated Melodash pull failed!"
+            echo "This means the Melodash package is not Public in GHCR."
             echo "Please go to the GitHub Package settings and change visibility to Public."
             echo "=========================================================="
             exit 1
@@ -254,6 +305,11 @@ jobs:
           echo "Publishing $MELODASH_LATEST..."
           docker buildx imagetools create -t "$MELODASH_LATEST" "$MELODASH_VERSION"
 
+      - name: Sign latest images with Cosign
+        run: |
+          cosign sign --yes "ghcr.io/melodarr/melodarr-proxy:latest"
+          cosign sign --yes "ghcr.io/melodarr/melodarr-proxy-melodash:latest"
+
       # 5. Optional Release Step
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -262,6 +318,8 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
-          files: ./sbom.spdx.json
+          files: |
+            ./proxy-sbom.spdx.json
+            ./melodash-sbom.spdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

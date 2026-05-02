@@ -398,7 +398,7 @@ async function handleDebugSearch (req, res) {
     const responseForCache = rankedResults[0]
       ? {
           artistName: rankedResults[0].artistName,
-          foreignArtistId: '',
+          id: '',
           providers: data.providers,
           albums: rankedResults[0].albums,
           partial: data.partial,
@@ -406,7 +406,7 @@ async function handleDebugSearch (req, res) {
         }
       : {
           artistName: data.artistName,
-          foreignArtistId: '',
+          id: '',
           providers: data.providers,
           albums: [],
           partial: data.partial,

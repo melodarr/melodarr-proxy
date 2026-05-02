@@ -14,9 +14,32 @@ What problem should this solve?
 
 What would you like to happen?
 
+## Area
+
+Check the area this feature affects:
+
+- [ ] Proxy API
+- [ ] Melodash UI
+- [ ] Provider support
+- [ ] Custom providers
+- [ ] Lidarr compatibility
+- [ ] Docker/Proxmox deployment
+- [ ] Release/update workflow
+- [ ] Documentation
+
 ## Alternatives
 
 What alternatives have you considered?
+
+## Environment
+
+If this request depends on your setup:
+
+- Install type: Docker Compose / Proxmox LXC / source / other
+- Melodarr Proxy version, image tag, or commit:
+- Melodash version, image tag, or commit:
+- Enabled providers:
+- Client: Lidarr / browser / script / other
 
 ## Notes
 

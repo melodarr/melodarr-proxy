@@ -77,6 +77,14 @@ class DiscogsProvider {
 
       return {
         artistName: exactMatch.title || term,
+        images: [
+          exactMatch.cover_image,
+          exactMatch.thumb
+        ].filter(Boolean).map(url => ({
+          coverType: 'poster',
+          url,
+          remoteUrl: url
+        })),
         albums
       }
     } catch (error) {

@@ -68,7 +68,7 @@ const openApiDocument = {
         type: 'object',
         properties: {
           artistName: { type: 'string', example: 'Radiohead' },
-          foreignArtistId: { type: 'string' },
+          id: { type: 'string' },
           providers: {
             type: 'array',
             items: { $ref: '#/components/schemas/ProviderSummary' }

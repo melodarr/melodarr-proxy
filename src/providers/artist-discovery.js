@@ -45,6 +45,45 @@ function mergeSongAlbums (preferredAlbums, fallbackAlbums) {
   return albums
 }
 
+function hasImages (candidate) {
+  return Boolean(candidate?.imageUrl) || (Array.isArray(candidate?.images) && candidate.images.length > 0)
+}
+
+function mergeCandidateImages (candidates, imageCandidates) {
+  if (!Array.isArray(candidates) || !Array.isArray(imageCandidates) || imageCandidates.length === 0) {
+    return candidates
+  }
+
+  const imageByArtist = new Map()
+  for (const candidate of imageCandidates) {
+    const key = normalizeKey(candidate.artistName)
+    if (key && hasImages(candidate)) {
+      imageByArtist.set(key, candidate)
+    }
+  }
+
+  if (imageByArtist.size === 0) {
+    return candidates
+  }
+
+  return candidates.map(candidate => {
+    if (hasImages(candidate)) return candidate
+    const imageCandidate = imageByArtist.get(normalizeKey(candidate.artistName))
+    if (!imageCandidate) return candidate
+
+    return {
+      ...candidate,
+      imageUrl: imageCandidate.imageUrl || imageCandidate.images?.[0]?.url || '',
+      images: imageCandidate.images || [],
+      overview: candidate.overview || imageCandidate.overview || '',
+      ids: {
+        ...(candidate.ids || {}),
+        ...(imageCandidate.ids || {})
+      }
+    }
+  })
+}
+
 function scoreExact (value, query, exactScore, fallbackScore) {
   return normalizeText(value).toLowerCase() === normalizeText(query).toLowerCase() ? exactScore : fallbackScore
 }
@@ -81,7 +120,11 @@ async function tryProvidersInOrder (kind, query, attempts) {
       // null = circuit breaker open → skip silently and try next provider.
       if (result === null) continue
       if (Array.isArray(result) && result.length > 0) {
-        return result
+        if (kind !== 'artist' || name !== 'musicbrainz' || result.some(hasImages)) {
+          return result
+        }
+
+        return enrichArtistImages(result, query, enabled, attempts, name)
       }
     } catch (err) {
       errors.push({ provider: name, message: err.message, code: err.code })
@@ -101,6 +144,29 @@ async function tryProvidersInOrder (kind, query, attempts) {
   return []
 }
 
+async function enrichArtistImages (candidates, query, enabled, attempts, primaryProvider) {
+  let enriched = candidates
+  for (const name of ['theaudiodb', 'discogs', 'itunes']) {
+    if (name === primaryProvider || !enabled.has(name) || !attempts[name] || enriched.every(hasImages)) {
+      continue
+    }
+
+    try {
+      const imageCandidates = await attempts[name]()
+      enriched = mergeCandidateImages(enriched, imageCandidates)
+    } catch (err) {
+      logger.warn('Artist image enrichment provider failed', {
+        query,
+        provider: name,
+        error: err.message,
+        code: err.code
+      })
+    }
+  }
+
+  return enriched
+}
+
 async function discoverArtistByMb (query) {
   const result = await upstreamService.musicBrainzGet('/artist', {
     query: `artist:"${String(query).replace(/"/g, '\\"')}"`,
@@ -109,7 +175,7 @@ async function discoverArtistByMb (query) {
 
   return (result?.artists || []).map((artist) => ({
     artistName: artist.name || artist['sort-name'] || '',
-    foreignArtistId: artist.id || '',
+    id: artist.id || '',
     type: 'artist',
     source: 'musicbrainz',
     match: artist.name || '',
@@ -203,6 +269,7 @@ async function discoverByITunes (query, type) {
       type: type || 'artist',
       source: 'itunes',
       match: matchField || item.artistName || '',
+      imageUrl: item.artworkUrl100 || '',
       score: scoreExact(matchField || item.artistName, query, 95, 60),
       ids: {
         itunesArtistId: item.artistId ? String(item.artistId) : '',
@@ -216,15 +283,20 @@ async function discoverByITunes (query, type) {
 // Lightweight artist-only adapter over theaudiodb.searchArtist. We only need
 // the artist-name candidate for discover; the album payload is discarded.
 async function discoverArtistByTheAudioDb (query) {
-  const data = await theaudiodbProvider.searchArtist(query)
+  const data = typeof theaudiodbProvider.searchArtistProfile === 'function'
+    ? await theaudiodbProvider.searchArtistProfile(query)
+    : await theaudiodbProvider.searchArtist(query)
   if (!data?.artistName) return []
   return [{
     artistName: data.artistName,
     type: 'artist',
     source: 'theaudiodb',
     match: data.artistName,
+    overview: data.overview || '',
+    images: data.images || [],
+    imageUrl: data.imageUrl || data.images?.[0]?.url || '',
     score: scoreExact(data.artistName, query, 90, 55),
-    ids: {}
+    ids: data.ids || {}
   }]
 }
 
@@ -236,6 +308,8 @@ async function discoverArtistByDiscogs (query) {
     type: 'artist',
     source: 'discogs',
     match: data.artistName,
+    images: data.images || [],
+    imageUrl: data.imageUrl || data.images?.[0]?.url || '',
     score: scoreExact(data.artistName, query, 90, 55),
     ids: {}
   }]

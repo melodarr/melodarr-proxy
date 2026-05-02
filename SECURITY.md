@@ -2,7 +2,9 @@
 
 ## Supported Versions
 
-Melodarr Proxy is pre-1.0. Security fixes are handled on the `main` branch until versioned releases are established.
+Melodarr Proxy is pre-1.0. Supported versions and fix windows are documented in [docs/release-support.md](docs/release-support.md).
+
+Supply-chain release artifacts, SBOMs, provenance, Cosign signatures, Trivy policy, and VEX policy are documented in [docs/supply-chain-security.md](docs/supply-chain-security.md).
 
 ## Reporting a Vulnerability
 

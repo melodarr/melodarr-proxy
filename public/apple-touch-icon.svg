@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Melodarr Proxy">
+  <rect width="180" height="180" rx="40" fill="#08090b"/>
+  <circle cx="90" cy="90" r="50" fill="#3b82f6"/>
+  <circle cx="90" cy="90" r="29" fill="#60a5fa" opacity=".28"/>
+  <path d="M90 42a48 48 0 0 1 48 48" fill="none" stroke="#93c5fd" stroke-width="12" stroke-linecap="round"/>
+  <path d="M90 138a48 48 0 0 1-48-48" fill="none" stroke="#1d4ed8" stroke-width="12" stroke-linecap="round" opacity=".9"/>
+</svg>

@@ -35,11 +35,11 @@ test('isValidArtist — wrapped artist with null artistName → false', () => {
   assert.equal(isValidArtist({ artist: { artistName: null } }), false)
 })
 
-test('isValidArtist — wrapped artist with empty foreignArtistId still valid', () => {
-  // foreignArtistId is intentionally NOT validated — empty MBID is a
+test('isValidArtist — wrapped artist with empty id still valid', () => {
+  // id is intentionally NOT validated — empty MBID is a
   // legitimate signal that no canonical id exists. Lidarr's search UI
   // displays these; the add path is what fails downstream.
-  assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: '' } }), true)
+  assert.equal(isValidArtist({ artist: { artistName: 'X', id: '' } }), true)
 })
 
 // ── SkyHook wrapped album ─────────────────────────────────────────
@@ -56,7 +56,7 @@ test('isValidArtist — wrapped album with empty title → false', () => {
 })
 
 test('isValidArtist — wrapped album with no title → false', () => {
-  assert.equal(isValidArtist({ album: { foreignAlbumId: 'mb-1' } }), false)
+  assert.equal(isValidArtist({ album: { id: 'mb-1' } }), false)
 })
 
 // ── Unwrapped lookup-shape artist ─────────────────────────────────

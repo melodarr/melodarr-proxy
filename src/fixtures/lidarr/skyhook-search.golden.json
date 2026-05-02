@@ -1,0 +1,31 @@
+[
+  {
+    "artist": {
+      "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "artistName": "Radiohead",
+      "disambiguation": "",
+      "overview": "",
+      "type": "Group",
+      "status": "active",
+      "links": [],
+      "images": [],
+      "albums": []
+    }
+  },
+  {
+    "album": {
+      "id": "b1392450-e666-3926-a536-22c65f834433",
+      "title": "OK Computer",
+      "releaseDate": "",
+      "images": [],
+      "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "artists": [
+        {
+          "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "artistName": "Radiohead",
+          "disambiguation": ""
+        }
+      ]
+    }
+  }
+]

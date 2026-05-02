@@ -1,5 +1,6 @@
 import { services } from "@/lib/services";
 import { ServiceCard } from "@/components/ServiceCard";
+import MBConnectivityPanel from "@/components/MBConnectivityPanel";
 
 export default function DashboardPage() {
   return (
@@ -10,7 +11,11 @@ export default function DashboardPage() {
           <p className="text-gray-400 mt-2">Service status, observability, and runtime controls.</p>
         </div>
       </div>
-      
+
+      <div className="mb-6">
+        <MBConnectivityPanel />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {services.map((service) => (
           <ServiceCard key={service.name} service={service} />

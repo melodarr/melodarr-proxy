@@ -5,7 +5,7 @@
 # Env knobs:
 #   CTID         — Proxmox container ID         (default: 163)
 #   BASE_URL     — proxy URL inside the LXC     (default: http://127.0.0.1:3055)
-#   API_KEY      — proxy API key                (default: empty → unauthenticated requests)
+#   API_KEY      — proxy API key                (default: bc57be1e98bed038597f1fed0f058137)
 #   SKIP_DEPLOY  — set to 1 to skip pull+up     (default: 0)
 #   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
 #                  overrides and restart the proxy (re-enables MusicBrainz)
@@ -22,7 +22,7 @@ set -uo pipefail
 
 CTID="${CTID:-163}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
-API_KEY="${API_KEY:-}"
+API_KEY="${API_KEY:-bc57be1e98bed038597f1fed0f058137}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
 REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
@@ -54,7 +54,7 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
   echo
   ask    CTID         "Proxmox CTID"                          "$CTID"
   ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
-  ask    API_KEY      "Proxy API key (blank = unauthed)"      "$API_KEY"
+  ask    API_KEY      "Proxy API key"                         "$API_KEY"
   ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
   ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
   if [ "$REENABLE_MB" = "1" ]; then

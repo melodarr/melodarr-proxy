@@ -64,6 +64,53 @@ test('TheAudioDb Provider', async (t) => {
     assert.strictEqual(album.ids.theAudioDbAlbumId, '12345')
   })
 
+  await t.test('searchArtistProfile - returns artist images', async () => {
+    const { theAudioDbProvider, setAxiosMock } = setupMocks()
+    setAxiosMock(async (url, config) => {
+      assert.ok(url.includes('theaudiodb.com/api/v1/json/test-key/search.php'))
+      assert.deepStrictEqual(config.params, { s: 'Lorde' })
+      return {
+        data: {
+          artists: [
+            {
+              idArtist: '111239',
+              strArtist: 'Lorde',
+              strBiographyEN: 'New Zealand artist.',
+              strArtistThumb: 'https://example.test/lorde-thumb.jpg',
+              strArtistFanart: 'https://example.test/lorde-fanart.jpg',
+              strArtistLogo: ''
+            }
+          ]
+        }
+      }
+    })
+
+    const result = await theAudioDbProvider.searchArtistProfile('Lorde')
+    assert.strictEqual(result.artistName, 'Lorde')
+    assert.strictEqual(result.overview, 'New Zealand artist.')
+    assert.strictEqual(result.ids.theAudioDbArtistId, '111239')
+    assert.deepStrictEqual(result.images, [
+      {
+        coverType: 'poster',
+        url: 'https://example.test/lorde-thumb.jpg',
+        remoteUrl: 'https://example.test/lorde-thumb.jpg'
+      },
+      {
+        coverType: 'poster',
+        url: 'https://example.test/lorde-fanart.jpg',
+        remoteUrl: 'https://example.test/lorde-fanart.jpg'
+      }
+    ])
+  })
+
+  await t.test('searchArtistProfile - returns null if no artist found', async () => {
+    const { theAudioDbProvider, setAxiosMock } = setupMocks()
+    setAxiosMock(async () => ({ data: { artists: null } }))
+
+    const result = await theAudioDbProvider.searchArtistProfile('missing')
+    assert.strictEqual(result, null)
+  })
+
   await t.test('searchArtist - throws if no API key configured', async () => {
     const { theAudioDbProvider, setConfigMock } = setupMocks()
     setConfigMock(() => null)

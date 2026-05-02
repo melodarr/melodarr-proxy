@@ -1,0 +1,45 @@
+# Default owner for all files.
+* @jcwalker3
+
+# Proxy API, provider aggregation, cache, auth, health, diagnostics.
+/src/ @jcwalker3
+/public/ @jcwalker3
+/Dockerfile @jcwalker3
+/package.json @jcwalker3
+/yarn.lock @jcwalker3
+
+# Melodash operator dashboard.
+/melodash/ @jcwalker3
+
+# Documentation and project policy.
+/README.md @jcwalker3
+/CHANGELOG.md @jcwalker3
+/ROADMAP.md @jcwalker3
+/CONTRIBUTING.md @jcwalker3
+/GOVERNANCE.md @jcwalker3
+/MAINTAINERS.md @jcwalker3
+/SECURITY.md @jcwalker3
+/SUPPORT.md @jcwalker3
+/CODE_OF_CONDUCT.md @jcwalker3
+/docs/ @jcwalker3
+
+# Branding assets.
+/public/logo.svg @jcwalker3
+/public/favicon.svg @jcwalker3
+/public/apple-touch-icon.svg @jcwalker3
+/melodash/app/icon.svg @jcwalker3
+/melodash/app/apple-icon.svg @jcwalker3
+
+# Release workflows and GitHub automation.
+/.github/workflows/release.yml @jcwalker3
+/.github/workflows/ci.yml @jcwalker3
+/.github/dependabot.yml @jcwalker3
+/.github/pull_request_template.md @jcwalker3
+/.github/ISSUE_TEMPLATE/ @jcwalker3
+
+# Deployment, install, upgrade, and recovery scripts.
+/scripts/ @jcwalker3
+/manage.sh @jcwalker3
+/docker-compose.yml @jcwalker3
+/docker-compose.e2e.yml @jcwalker3
+/.env.example @jcwalker3

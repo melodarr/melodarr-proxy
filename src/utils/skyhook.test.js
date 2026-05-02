@@ -18,10 +18,11 @@ test('toSkyhookSearchShape — empty array stays empty', () => {
 test('toSkyhookSearchShape — artist candidate is wrapped under "artist" key', () => {
   const out = toSkyhookSearchShape([{
     artistName: 'Radiohead',
-    foreignArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+    id: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
     type: 'artist',
     source: 'musicbrainz',
     disambiguation: '',
+    imageUrl: 'https://example.test/radiohead.jpg',
     ids: { musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711' }
   }])
 
@@ -30,19 +31,23 @@ test('toSkyhookSearchShape — artist candidate is wrapped under "artist" key', 
   assert.equal(out[0].album, undefined, 'must not also have "album" key')
 
   const a = out[0].artist
-  assert.equal(a.foreignArtistId, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
+  assert.equal(a.id, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
   assert.equal(a.artistName, 'Radiohead')
   assert.equal(a.disambiguation, '')
   assert.equal(a.overview, '')
   assert.equal(a.type, 'Group')
   assert.equal(a.status, 'active')
   assert.deepEqual(a.links, [])
-  assert.deepEqual(a.images, [])
+  assert.deepEqual(a.images, [{
+    coverType: 'poster',
+    url: 'https://example.test/radiohead.jpg',
+    remoteUrl: 'https://example.test/radiohead.jpg'
+  }])
   assert.deepEqual(a.albums, [])
 })
 
-test('toSkyhookSearchShape — artist falls back to ids.musicbrainzArtistId when foreignArtistId absent', () => {
-  // MB candidates set foreignArtistId; iTunes/Discogs candidates only have
+test('toSkyhookSearchShape — artist falls back to ids.musicbrainzArtistId when id absent', () => {
+  // MB candidates set id; iTunes/Discogs candidates only have
   // a per-source id under candidate.ids. The mapper should still find an MBID
   // there if present.
   const out = toSkyhookSearchShape([{
@@ -52,10 +57,10 @@ test('toSkyhookSearchShape — artist falls back to ids.musicbrainzArtistId when
     ids: { musicbrainzArtistId: 'mb-id-here' }
   }])
 
-  assert.equal(out[0].artist.foreignArtistId, 'mb-id-here')
+  assert.equal(out[0].artist.id, 'mb-id-here')
 })
 
-test('toSkyhookSearchShape — non-MB artist candidates emit empty foreignArtistId (no synthesis)', () => {
+test('toSkyhookSearchShape — non-MB artist candidates emit empty id (no synthesis)', () => {
   // iTunes/Discogs/TheAudioDB do not carry MBIDs. The mapper must NOT
   // synthesize a fake UUID — empty string preserves the truthful signal that
   // Lidarr cannot use this entry to add an artist.
@@ -66,7 +71,7 @@ test('toSkyhookSearchShape — non-MB artist candidates emit empty foreignArtist
     ids: { itunesArtistId: '510227' }
   }])
 
-  assert.equal(out[0].artist.foreignArtistId, '')
+  assert.equal(out[0].artist.id, '')
   assert.equal(out[0].artist.artistName, 'Radiohead')
 })
 
@@ -76,6 +81,7 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
     match: 'OK Computer',
     type: 'album',
     source: 'musicbrainz',
+    images: [{ coverType: 'cover', url: 'https://example.test/ok.jpg' }],
     ids: {
       musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
       musicbrainzReleaseGroupId: 'b1392450-e666-3926-a536-22c65f834433'
@@ -87,12 +93,22 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   assert.equal(out[0].artist, undefined)
 
   const al = out[0].album
-  assert.equal(al.foreignAlbumId, 'b1392450-e666-3926-a536-22c65f834433')
+  assert.equal(al.id, 'b1392450-e666-3926-a536-22c65f834433')
   assert.equal(al.title, 'OK Computer')
   assert.equal(al.releaseDate, '')
-  assert.deepEqual(al.images, [])
-  assert.equal(al.artist.foreignArtistId, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
-  assert.equal(al.artist.artistName, 'Radiohead')
+  assert.deepEqual(al.images, [{
+    coverType: 'cover',
+    url: 'https://example.test/ok.jpg',
+    remoteUrl: 'https://example.test/ok.jpg'
+  }])
+  assert.equal(al.artistId, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
+  assert.equal(al.artists[0].id, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
+  assert.equal(al.artists[0].artistName, 'Radiohead')
+})
+
+test('toSkyhookSearchShape — artist images default to [] when candidate has none', () => {
+  const out = toSkyhookSearchShape([{ artistName: 'No Image', type: 'artist', ids: {} }])
+  assert.deepEqual(out[0].artist.images, [])
 })
 
 test('toSkyhookSearchShape — song candidates are filtered out (not in SkyHook search contract)', () => {
@@ -128,11 +144,11 @@ test('toSkyhookSearchShape — output has stable required Lidarr fields (deseria
   // SkyHook deserializer requires every artist entry to have these exact
   // keys; missing keys break the JSON contract even if every value is empty.
   const REQUIRED_ARTIST_KEYS = [
-    'foreignArtistId', 'artistName', 'disambiguation', 'overview',
+    'id', 'artistName', 'disambiguation', 'overview',
     'type', 'status', 'links', 'images', 'albums'
   ]
   const REQUIRED_ALBUM_KEYS = [
-    'foreignAlbumId', 'title', 'releaseDate', 'images', 'artist'
+    'id', 'title', 'releaseDate', 'images', 'artistId', 'artists'
   ]
 
   const out = toSkyhookSearchShape([

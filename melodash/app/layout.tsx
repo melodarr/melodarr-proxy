@@ -5,6 +5,10 @@ import { HeaderNav } from "@/components/HeaderNav";
 export const metadata: Metadata = {
   title: "Melodarr Proxy | Control Plane",
   description: "Melodarr Proxy control plane",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.svg",
+  },
 };
 
 export default function RootLayout({

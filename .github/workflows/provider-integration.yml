@@ -1,0 +1,49 @@
+name: Real Provider Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: 'Comma-separated providers to test'
+        required: false
+        default: 'musicbrainz,itunes'
+      artist:
+        description: 'Artist query used by the live provider tests'
+        required: false
+        default: 'Radiohead'
+      aggregate:
+        description: 'Also run live aggregateArtist validation'
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '23 8 * * *'
+
+jobs:
+  real-provider-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run live provider integration tests
+        env:
+          REAL_PROVIDER_INTEGRATION: 'true'
+          REAL_PROVIDER_PROVIDERS: ${{ github.event_name == 'workflow_dispatch' && inputs.providers || 'musicbrainz,itunes' }}
+          REAL_PROVIDER_ARTIST: ${{ github.event_name == 'workflow_dispatch' && inputs.artist || 'Radiohead' }}
+          REAL_PROVIDER_AGGREGATE: ${{ github.event_name == 'workflow_dispatch' && inputs.aggregate || 'false' }}
+          MUSICBRAINZ_API_KEY: ${{ secrets.MUSICBRAINZ_API_KEY }}
+          THEAUDIODB_API_KEY: ${{ secrets.THEAUDIODB_API_KEY }}
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+        run: node --test src/integration/**/*.test.js

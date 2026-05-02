@@ -6,11 +6,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR" || exit 1
 
 HOST_PORT="${HOST_PORT:-3055}"
+MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-melodarr-ipv6}"
 DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
 compose_cmd() {
-  HOST_PORT="$HOST_PORT" docker compose "$@"
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" docker compose "$@"
 }
 
 run_proxy_lint() {
@@ -33,6 +34,11 @@ run_melodash_lint() {
 
 run_all_checks() {
   run_proxy_lint && run_proxy_tests && run_melodash_lint
+}
+
+run_compose_smoke() {
+  echo "Running Docker Compose smoke test..."
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" "$ROOT_DIR/scripts/docker-compose-smoke.sh"
 }
 
 ensure_network() {
@@ -90,10 +96,11 @@ Active Endpoints:
 10) Run Melodash typecheck in container
 11) Run all checks in containers
 12) Run proxy diagnostics
+13) Run Docker Compose smoke test
 0) Exit
 =====================================================
 MENU
-  printf "Select an option [0-12]: "
+  printf "Select an option [0-13]: "
 }
 
 while true; do
@@ -171,6 +178,10 @@ while true; do
       ;;
     12)
       "$ROOT_DIR/scripts/proxy-diag.sh" all || true
+      pause
+      ;;
+    13)
+      run_compose_smoke
       pause
       ;;
     0|"")

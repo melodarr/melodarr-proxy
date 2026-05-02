@@ -39,6 +39,34 @@ When you are creating an enhancement suggestion, please include as many details 
 * Document new code
 * End all files with a newline
 
+## Contribution Decision Process
+
+Most changes are handled through normal pull request review. Maintainers look for:
+
+* preserved Lidarr/SkyHook response compatibility
+* focused scope
+* tests proportional to risk
+* clear docs when behavior, install steps, or operator workflows change
+* no avoidable instability in provider aggregation, cache behavior, or circuit breaker recovery
+
+Larger changes should start as an issue before implementation, especially when they affect public API shape, Docker/Proxmox installs, provider aggregation, Melodash navigation, release automation, or security posture.
+
+See [GOVERNANCE.md](GOVERNANCE.md) for project decision-making and [MAINTAINERS.md](MAINTAINERS.md) for ownership.
+
+## Breaking Changes
+
+Breaking changes require an issue, migration notes, changelog entry, and updated docs before release.
+
+Examples include:
+
+* changing Lidarr/SkyHook response shape
+* removing or renaming public endpoints
+* changing default ports, images, volumes, or required services
+* changing persistent data format in `/data`
+* removing environment variables without a replacement
+
+When possible, deprecate first and keep compatibility aliases until removal is necessary.
+
 ## Setup Local Environment
 
 1. Fork the repository

@@ -12,8 +12,12 @@
     "lint": "XDG_CACHE_HOME=.cache standard",
     "test": "node --test src/**/*.test.js",
     "test:unit": "find src -name '*.test.js' -not -path 'src/e2e/*' -print0 | xargs -0 node --test",
+    "test:contracts": "node --test src/contracts/**/*.test.js",
     "test:e2e": "node --test src/e2e/**/*.e2e.test.js",
     "test:e2e:real": "E2E_REAL_HTTP=true node --test src/e2e/**/*.e2e.test.js",
+    "test:providers:real": "REAL_PROVIDER_INTEGRATION=true node --test src/integration/**/*.test.js",
+    "test:compose": "bash scripts/docker-compose-smoke.sh",
+    "test:melodash-routes": "bash scripts/melodash-route-smoke.sh",
     "docker:lint": "docker compose run --rm --entrypoint \"yarn lint\" proxy",
     "docker:test": "docker compose run --rm --entrypoint \"yarn test && yarn test:e2e\" proxy",
     "prepare": "husky"

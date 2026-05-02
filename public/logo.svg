@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Melodarr Proxy logo</title>
+  <desc id="desc">Blue circular signal mark for Melodarr Proxy.</desc>
+  <rect width="128" height="128" rx="28" fill="#08090b"/>
+  <circle cx="64" cy="64" r="34" fill="#3b82f6"/>
+  <circle cx="64" cy="64" r="19" fill="#60a5fa" opacity=".28"/>
+  <path d="M64 32a32 32 0 0 1 32 32" fill="none" stroke="#93c5fd" stroke-width="8" stroke-linecap="round" opacity=".9"/>
+  <path d="M64 96a32 32 0 0 1-32-32" fill="none" stroke="#1d4ed8" stroke-width="8" stroke-linecap="round" opacity=".85"/>
+</svg>

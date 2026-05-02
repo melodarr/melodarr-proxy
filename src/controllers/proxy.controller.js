@@ -25,6 +25,7 @@ async function handleSearch (req, res) {
   if (!q) {
     return res.status(400).json({ error: 'Missing query parameter "q" or "query"' })
   }
+  const type = req.query.type || 'all'
 
   const normalizedQ = String(q).trim().toLowerCase().replace(/\s+/g, ' ')
   const cacheKey = `search:${normalizedQ}`
@@ -38,7 +39,7 @@ async function handleSearch (req, res) {
     metrics.recordCache(true)
     await tracer.finalizeTrace(trace, { cacheHit: true })
     res.set('X-Cache-Generated-At', cached.generatedAt)
-    return res.json(toSkyhookSearchShape(cached.data).filter(isValidArtist))
+    return res.json(toSkyhookSearchShape(cached.data, type).filter(isValidArtist))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -66,7 +67,7 @@ async function handleSearch (req, res) {
     if (cachedData) {
       await tracer.finalizeTrace(trace, { cacheHit: true })
       res.set('X-Cache-Generated-At', cachedData.generatedAt)
-      return res.json(toSkyhookSearchShape(cachedData.data).filter(isValidArtist))
+      return res.json(toSkyhookSearchShape(cachedData.data, type).filter(isValidArtist))
     }
   }
 
@@ -78,7 +79,6 @@ async function handleSearch (req, res) {
 
   try {
     const startAgg = Date.now()
-    const type = req.query.type || 'artist'
     const data = await withTimeout(discoverArtists({ query: q, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startAgg, 'success')
 
@@ -93,7 +93,7 @@ async function handleSearch (req, res) {
     await saveSnapshot(`search:${normalizedQ}`, data)
 
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json(toSkyhookSearchShape(data).filter(isValidArtist))
+    return res.json(toSkyhookSearchShape(data, type).filter(isValidArtist))
   } catch (err) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Upstream error in handleSearch', {
@@ -176,7 +176,7 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
 
   const response = {
     artistName: enrichedTopResult.artistName,
-    foreignArtistId: data.foreignArtistId || '',
+    id: data.id || '',
     disambiguation: data.disambiguation || '',
     overview: data.overview || '',
     images: data.images || [],
@@ -330,7 +330,7 @@ async function handleArtistLookup (req, res) {
     tracer.addStep(trace, 'error', 0, 'timeout')
     metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 502, error: 'Lock timeout' })
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json([{ artistName: term, foreignArtistId: '', albums: [], partial: true, warning: 'Upstream request failed during coalescing (lock timeout)' }])
+    return res.status(502).json([{ artistName: term, id: '', albums: [], partial: true, warning: 'Upstream request failed during coalescing (lock timeout)' }])
   }
 
   try {
@@ -377,7 +377,7 @@ async function handleArtistLookup (req, res) {
 
     return res.status(502).json([{
       artistName: term,
-      foreignArtistId: '',
+      id: '',
       albums: [],
       partial: true,
       warning: error.message,
@@ -411,7 +411,7 @@ async function handleArtistDiscover (req, res) {
       providersUsed: providersTried
     })
 
-    const wrappedCandidates = toSkyhookSearchShape(candidates).filter(isValidArtist)
+    const wrappedCandidates = toSkyhookSearchShape(candidates, type).filter(isValidArtist)
     return res.json({
       query,
       type,

@@ -7,6 +7,44 @@ class TheAudioDbProvider {
     this.name = 'theaudiodb'
   }
 
+  async searchArtistProfile (term) {
+    const apiKey = getConfigValue('theAudioDbApiKey')
+    if (!apiKey) {
+      throw new Error('TheAudioDB API key not configured')
+    }
+
+    const response = await axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/search.php`, {
+      params: { s: term },
+      httpsAgent,
+      timeout: getConfigValue('upstreamTimeoutMs') || 10000
+    })
+
+    const artistData = response.data?.artists || []
+    const artistsArray = Array.isArray(artistData) ? artistData : [artistData]
+    const artist = artistsArray.find(item => String(item?.strArtist || '').toLowerCase() === String(term).toLowerCase()) || artistsArray[0]
+
+    if (!artist) {
+      return null
+    }
+
+    return {
+      artistName: artist.strArtist || term,
+      overview: artist.strBiographyEN || '',
+      images: [
+        artist.strArtistThumb,
+        artist.strArtistFanart,
+        artist.strArtistLogo
+      ].filter(Boolean).map(url => ({
+        coverType: 'poster',
+        url,
+        remoteUrl: url
+      })),
+      ids: {
+        theAudioDbArtistId: artist.idArtist || ''
+      }
+    }
+  }
+
   async searchArtist (term) {
     const apiKey = getConfigValue('theAudioDbApiKey')
     if (!apiKey) {

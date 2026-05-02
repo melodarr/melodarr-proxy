@@ -83,7 +83,7 @@ async function aggregateArtist (term) {
   )
 
   let mergedArtistName = term
-  let foreignArtistId = ''
+  let id = ''
   let disambiguation = ''
   let overview = ''
   let images = []
@@ -129,8 +129,8 @@ async function aggregateArtist (term) {
     if (data.artistName && mergedArtistName === term) {
       mergedArtistName = data.artistName
     }
-    if (data.foreignArtistId && !foreignArtistId) {
-      foreignArtistId = data.foreignArtistId
+    if (data.id && !id) {
+      id = data.id
     }
     if (data.disambiguation && !disambiguation) {
       disambiguation = data.disambiguation
@@ -193,7 +193,7 @@ async function aggregateArtist (term) {
 
   return {
     artistName: mergedArtistName,
-    foreignArtistId,
+    id,
     disambiguation,
     overview,
     images,

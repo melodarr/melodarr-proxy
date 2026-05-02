@@ -67,7 +67,7 @@ class MusicBrainzProvider {
     return {
       schemaVersion: 'skyhook-v1',
       artistName: artist.name || artist['sort-name'] || '',
-      foreignArtistId: artist.id || '',
+      id: artist.id || '',
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
       images: [],
