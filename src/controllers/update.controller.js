@@ -8,8 +8,10 @@ const execFileAsync = promisify(execFile)
 const DEFAULT_REPOSITORY = 'melodarr/melodarr-proxy'
 const UPDATE_TIMEOUT_MS = 10 * 60 * 1000
 
+const { getAppVersion } = require('../utils/version')
+
 function getCurrentVersion () {
-  return process.env.APP_VERSION || require('../../package.json').version
+  return getAppVersion()
 }
 
 function normalizeVersion (version) {

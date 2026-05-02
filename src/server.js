@@ -9,6 +9,7 @@ if (!process.env.INSTANCE_ID) {
 const logger = require('./utils/logger')
 const cacheLayer = require('./cache')
 const upstreamMonitor = require('./monitors/upstream.monitor')
+const { getAppVersion } = require('./utils/version')
 
 // ── CLI Commands (run before server boots) ───────────────────────
 if (process.argv.includes('--reset-password')) {
@@ -59,7 +60,7 @@ function createApp () {
   app.get('/api/version', (req, res) => {
     res.json({
       app: process.env.APP_NAME || 'Melodarr Proxy',
-      version: process.env.APP_VERSION || '0.3.18',
+      version: getAppVersion(),
       revision: process.env.APP_REVISION || 'unknown',
       created: process.env.APP_CREATED || 'unknown',
       environment: process.env.NODE_ENV || 'development'
@@ -93,7 +94,7 @@ function createApp () {
   app.get('/api/info', (req, res) => {
     res.json({
       app: process.env.APP_NAME || 'Melodarr Proxy',
-      version: process.env.APP_VERSION || '0.3.18',
+      version: getAppVersion(),
       role: 'api',
       docs: '/docs',
       openapi: '/openapi.json',

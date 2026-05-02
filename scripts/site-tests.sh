@@ -587,6 +587,7 @@ LOOKUP_SUMMARY=$(echo "$LOOKUP_BODY" | jq '
       hasGenres: (.[0] | has("genres")),
       hasOverview: (.[0] | has("overview")),
       hasDisambiguation: (.[0] | has("disambiguation")),
+      hasAliases: (.[0] | has("aliases")),
       hasLinks: (.[0] | has("links")),
       hasPopularity: (.[0] | has("popularity")),
       hasStatus: (.[0] | has("status")),
@@ -607,11 +608,9 @@ else
 fi
 
 if echo "$LOOKUP_SUMMARY" | jq -e '.foreignArtistIdEmpty == false' > /dev/null; then
-  record_pass "foreignArtistId is populated"
-elif [ -z "$MB_ACTIVE" ]; then
-  record_pass "foreignArtistId is empty because MusicBrainz is not active — no synthetic ID emitted"
+  record_pass "foreignArtistId is populated (MBID)"
 else
-  record_fail "foreignArtistId is empty while MusicBrainz is active — investigate provider merge/lookup"
+  record_fail "foreignArtistId is unexpectedly empty — Lidarr will reject this artist"
 fi
 
 if echo "$LOOKUP_SUMMARY" | jq -e '.firstAlbumDateIsoLike' > /dev/null; then
@@ -625,7 +624,7 @@ fi
 # harness. Optional enrichment fields are printed as diagnostics below so
 # they can be correlated with real Lidarr rejection logs before code adds
 # broad defaults.
-for field_check in hasLinks:links hasStatus:status; do
+for field_check in hasAliases:aliases hasLinks:links hasStatus:status; do
   field_key="${field_check%%:*}"
   field_label="${field_check##*:}"
   if echo "$LOOKUP_SUMMARY" | jq -e ".$field_key" > /dev/null; then

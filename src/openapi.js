@@ -1,10 +1,10 @@
-const version = process.env.APP_VERSION || '0.3.18'
+const { getAppVersion } = require('./utils/version')
 
 const openApiDocument = {
   openapi: '3.1.0',
   info: {
     title: 'Melodarr Proxy API',
-    version,
+    version: getAppVersion(),
     description: 'Operator, debug, and Lidarr-style metadata endpoints for Melodarr Proxy.'
   },
   servers: [
@@ -131,7 +131,7 @@ const openApiDocument = {
                   type: 'object',
                   properties: {
                     app: { type: 'string', example: 'Melodarr Proxy' },
-                    version: { type: 'string', example: version },
+                    version: { type: 'string', example: getAppVersion() },
                     environment: { type: 'string', example: 'production' }
                   }
                 }

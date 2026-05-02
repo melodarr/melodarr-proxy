@@ -2,6 +2,7 @@ const metrics = require('../metrics')
 const cache = require('../cache')
 const upstreamMonitor = require('../monitors/upstream.monitor')
 const { getProviderScore } = require('../providers/scoring')
+const { getAppVersion } = require('../utils/version')
 
 const DEGRADED_UPSTREAM = new Set(['degraded', 'rate_limited', 'timeout'])
 
@@ -13,7 +14,7 @@ function buildLivenessPayload () {
   return {
     status: memoryStatus === 'critical' ? 'down' : 'ok',
     service: process.env.APP_NAME || 'melodarr-proxy',
-    version: process.env.APP_VERSION || 'unknown',
+    version: getAppVersion(),
     instanceId: process.env.INSTANCE_ID,
     proxy: metrics.state.isRunning ? 'running' : 'stopped',
     memory: { status: memoryStatus, usageMb: memoryMb },
@@ -52,7 +53,7 @@ function buildHealthPayload () {
   return {
     status,
     service: process.env.APP_NAME || 'melodarr-proxy',
-    version: process.env.APP_VERSION || 'unknown',
+    version: getAppVersion(),
     instanceId: process.env.INSTANCE_ID,
     proxy: proxyStatus,
     upstream: upstream.status,
