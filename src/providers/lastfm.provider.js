@@ -19,19 +19,38 @@ class LastFmProvider {
     }
 
     try {
-      const response = await axios.get('https://ws.audioscrobbler.com/2.0/', {
-        params: {
-          method: 'artist.gettopalbums',
-          artist: term,
-          api_key: apiKey,
-          format: 'json',
-          limit: 50
-        },
-        httpsAgent,
-        timeout: getConfigValue('upstreamTimeoutMs') || 10000
-      })
+      const [infoResponse, albumsResponse] = await Promise.allSettled([
+        axios.get('https://ws.audioscrobbler.com/2.0/', {
+          params: {
+            method: 'artist.getinfo',
+            artist: term,
+            api_key: apiKey,
+            format: 'json'
+          },
+          httpsAgent,
+          timeout: getConfigValue('upstreamTimeoutMs') || 10000
+        }),
+        axios.get('https://ws.audioscrobbler.com/2.0/', {
+          params: {
+            method: 'artist.gettopalbums',
+            artist: term,
+            api_key: apiKey,
+            format: 'json',
+            limit: 50
+          },
+          httpsAgent,
+          timeout: getConfigValue('upstreamTimeoutMs') || 10000
+        })
+      ])
 
-      const albumsData = response.data?.topalbums?.album || []
+      if (albumsResponse.status === 'rejected') {
+        if (albumsResponse.reason.response?.status === 404) {
+          return { artistName: term, albums: [] }
+        }
+        throw albumsResponse.reason
+      }
+
+      const albumsData = albumsResponse.value.data?.topalbums?.album || []
       const albumsArray = Array.isArray(albumsData) ? albumsData : [albumsData]
 
       const albums = albumsArray.map(album => {
@@ -45,9 +64,13 @@ class LastFmProvider {
         }
       }).filter(a => a.name && a.name !== '(null)')
 
+      const mbid = infoResponse.status === 'fulfilled' ? infoResponse.value.data?.artist?.mbid : ''
+
       return {
-        artistName: response.data?.topalbums?.['@attr']?.artist || term,
-        albums
+        artistName: albumsResponse.value.data?.topalbums?.['@attr']?.artist || term,
+        albums,
+        id: mbid || '',
+        ids: mbid ? { musicbrainzArtistId: mbid } : undefined
       }
     } catch (error) {
       if (error.response?.status === 404) {

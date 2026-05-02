@@ -40,7 +40,8 @@ class TheAudioDbProvider {
         remoteUrl: url
       })),
       ids: {
-        theAudioDbArtistId: artist.idArtist || ''
+        theAudioDbArtistId: artist.idArtist || '',
+        musicbrainzArtistId: artist.strMusicBrainzID || ''
       }
     }
   }
@@ -81,11 +82,13 @@ class TheAudioDbProvider {
       .filter((album) => album.name)
 
     const images = profile.status === 'fulfilled' && profile.value ? profile.value.images : []
+    const ids = profile.status === 'fulfilled' && profile.value ? profile.value.ids : undefined
 
     return {
       artistName: albumsArray[0]?.strArtist || term,
       images,
-      albums
+      albums,
+      ...(ids && { ids, id: ids.musicbrainzArtistId || '' })
     }
   }
 }
