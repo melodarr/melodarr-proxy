@@ -47,7 +47,7 @@ jobs:
           echo "CREATED=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -169,7 +169,7 @@ jobs:
           output-file: ./melodash-sbom.spdx.json
 
       - name: Upload SBOM Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sbom
           path: |
@@ -312,7 +312,7 @@ jobs:
 
       # 5. Optional Release Step
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Release v${{ steps.vars.outputs.VERSION }}
           generate_release_notes: true
