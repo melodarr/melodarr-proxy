@@ -223,6 +223,8 @@ test('artist lookup normalizes provider data and caches the response', async () 
       upstreamCalls++
       return {
         artistName: term.toUpperCase(),
+        id: 'mock-mbid',
+        foreignArtistId: 'mock-mbid',
         albums: [
           {
             name: 'First Album',
@@ -251,7 +253,7 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.headers['X-Upstream-Calls'], '1')
   assert.equal(res.headers['X-Providers'], 'musicbrainz')
   assert.equal(res.body[0].artistName, 'TEST ARTIST')
-  assert.equal(res.body[0].id, '')
+  assert.equal(res.body[0].id, 'mock-mbid')
   assert.deepEqual(res.body[0].aliases, [])
   assert.equal(res.body[0].albums[0].title, 'First Album')
   assert.equal(res.body[0].albums[0].id, 'rg-1')
@@ -275,6 +277,8 @@ test('artist lookup preserves ISO 8601 firstReleaseDate from provider (v0.3.36)'
   const { controller } = loadController({
     aggregateArtist: async (term) => ({
       artistName: term,
+      id: 'mock-mbid',
+      foreignArtistId: 'mock-mbid',
       albums: [{
         name: 'OK Computer',
         year: 1997,
@@ -304,6 +308,7 @@ test('artist lookup returns cached response without debug data by default', asyn
       data: {
         artistName: 'Cached Artist',
         id: '',
+        foreignArtistId: 'mock-foreign-id',
         providers: [{ name: 'itunes', albumCount: 1 }],
         albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020' }],
         debug: { ranking: true }
@@ -600,7 +605,8 @@ test('artist lookup coalescing returns cached data', async () => {
       if (attempts > 1) {
         // v0.3.42: cached payload must include artistName so the
         // validateArtist filter doesn't drop it as malformed.
-        return { data: { artistName: 'Coalesce', albums: [] }, generatedAt: '2026-04-28' }
+        // We also now require foreignArtistId.
+        return { data: { artistName: 'Coalesce', foreignArtistId: 'mock-id', albums: [] }, generatedAt: '2026-04-28' }
       }
     }
     return originalGet.call(cacheStore, key)
@@ -623,7 +629,8 @@ test('artist lookup coalescing returns cached data with debug', async () => {
       attempts++
       if (attempts > 1) {
         // v0.3.42: include artistName for validateArtist to pass.
-        return { data: { artistName: 'Coalesce', albums: [], debug: true }, generatedAt: '2026-04-28' }
+        // Also require foreignArtistId.
+        return { data: { artistName: 'Coalesce', foreignArtistId: 'mock-id', albums: [], debug: true }, generatedAt: '2026-04-28' }
       }
     }
     return originalGet.call(cacheStore, key)
