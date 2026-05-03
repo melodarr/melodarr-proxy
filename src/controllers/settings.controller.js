@@ -330,8 +330,8 @@ async function updateSettings (req, res) {
     await flushSettingsWrites()
 
     // Check health after config change
-    const { getHealthStatus } = require('./health.controller')
-    const health = await getHealthStatus()
+    const { buildHealthPayload } = require('./health.controller')
+    const health = await buildHealthPayload()
 
     if (health.status !== 'ok') {
       logger.warn('validation_failed', { reason: 'health check degraded', health })
