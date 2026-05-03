@@ -75,6 +75,8 @@ const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
 // Settings-auth protected version metadata
 router.get('/settings/version', requireSettingsAuth, getCurrentVersionMeta)
 
+router.use(lidarrArtistResponseMiddleware)
+
 // Standard routes (Header or Query string API key)
 router.get('/search', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
 router.get('/v1/artist/discover', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
