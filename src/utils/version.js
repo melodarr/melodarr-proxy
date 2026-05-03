@@ -2,9 +2,11 @@ function getAppVersion () {
   const envVersion = process.env.APP_VERSION
   if (envVersion) {
     const trimmedEnvVersion = envVersion.trim()
-    const normalizedForCheck = trimmedEnvVersion.replace(/^v/i, '').toLowerCase()
-    if (normalizedForCheck !== 'latest' && normalizedForCheck !== 'unknown') {
-      return trimmedEnvVersion
+    if (trimmedEnvVersion) {
+      const normalizedForCheck = trimmedEnvVersion.replace(/^v/i, '').toLowerCase()
+      if (normalizedForCheck !== 'latest' && normalizedForCheck !== 'unknown') {
+        return trimmedEnvVersion
+      }
     }
   }
   try {
