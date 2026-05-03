@@ -1,15 +1,16 @@
 // Final validation gate — drop malformed artist/album items before they
 // reach Lidarr.
 //
-// Three response shapes to handle:
-//   - SkyHook-wrapped artist:  { artist: { artistName, ... } }
-//   - SkyHook-wrapped album:   { album:  { title, ... } }
-//   - Lookup unwrapped artist: { artistName, id, ... }
+// Four response shapes to handle:
+//   - SkyHook-wrapped artist:  { artist: { artistName, foreignArtistId, ... } }
+//   - SkyHook-wrapped album:   { album:  { title, artistId, ... } }
+//   - Lookup unwrapped artist: { artistName, foreignArtistId, ... }
+//   - Lookup unwrapped album:  { title, ... }
 //
 // An item is valid iff its shape-appropriate display field
 // (artistName/title) is a non-empty trimmed string, AND the upstream
-// identifier (foreignArtistId / artistId) is present. Lidarr explicitly
-// rejects items with an empty ForeignArtistId.
+// identifier (foreignArtistId / artistId) is present where required.
+// Lidarr explicitly rejects items with an empty ForeignArtistId.
 
 function nonEmptyString (v) {
   return typeof v === 'string' && v.trim().length > 0
