@@ -95,10 +95,10 @@ router.get('/:apiKey/v0.4/recent/artist', pathAuthMiddleware, proxyRateLimiter, 
 router.get('/:apiKey/v0.4/recent/album', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
 
 // Control routes
-router.post('/proxy/start', startProxy)
-router.post('/proxy/stop', stopProxy)
-router.post('/cache/clear', clearCache)
-router.post('/sync/trigger', triggerSync)
+router.post('/proxy/start', proxyRateLimiter, proxyAuthMiddleware, startProxy)
+router.post('/proxy/stop', proxyRateLimiter, proxyAuthMiddleware, stopProxy)
+router.post('/cache/clear', proxyRateLimiter, proxyAuthMiddleware, clearCache)
+router.post('/sync/trigger', proxyRateLimiter, proxyAuthMiddleware, triggerSync)
 
 module.exports = router
 module.exports.pathAuthMiddleware = pathAuthMiddleware
