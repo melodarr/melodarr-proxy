@@ -23,7 +23,16 @@ test('MusicBrainz Provider', async (t) => {
       if (path === '/artist') {
         return {
           artists: [
-            { id: '123', name: 'exact match', 'sort-name': 'exact match' }
+            {
+              id: '123',
+              name: 'exact match',
+              'sort-name': 'exact match',
+              aliases: [
+                { name: ' Exact Alias ' },
+                { 'sort-name': 'Sort Alias' },
+                { name: '' }
+              ]
+            }
           ]
         }
       }
@@ -49,6 +58,7 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums[1].name, 'Album 2')
     assert.strictEqual(result.albums[1].year, null)
     assert.strictEqual(result.albums[1].releaseDate, null)
+    assert.deepStrictEqual(result.aliases, ['Exact Alias', 'Sort Alias'])
   })
 
   await t.test('searchArtist - returns empty if no artist found', async () => {
@@ -66,7 +76,15 @@ test('MusicBrainz Provider', async (t) => {
     const { musicbrainzProvider, setMock } = setupMocks()
     setMock(async (path, params) => {
       if (path === '/artist/a74b1b7f') {
-        return { id: 'a74b1b7f', name: 'Radiohead', disambiguation: 'test artist' }
+        assert.strictEqual(params.inc, 'aliases')
+        return {
+          id: 'a74b1b7f',
+          name: 'Radiohead',
+          disambiguation: 'test artist',
+          aliases: [
+            { name: 'On a Friday' }
+          ]
+        }
       }
       if (path === '/release-group') {
         assert.strictEqual(params.artist, 'a74b1b7f')
@@ -84,5 +102,6 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums.length, 1)
     assert.strictEqual(result.albums[0].provider, 'musicbrainz')
     assert.strictEqual(result.providers[0].name, 'musicbrainz')
+    assert.deepStrictEqual(result.aliases, ['On a Friday'])
   })
 })

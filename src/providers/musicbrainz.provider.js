@@ -23,6 +23,12 @@ class MusicBrainzProvider {
     return exactMatch || artists[0]
   }
 
+  extractAliases (artist = {}) {
+    return (artist.aliases || [])
+      .map(alias => String(alias?.name || alias?.['sort-name'] || '').trim())
+      .filter(Boolean)
+  }
+
   async searchArtist (term) {
     const artistSearch = await upstreamService.musicBrainzGet('/artist', {
       query: `artist:"${this.mbQueryValue(term)}"`,
@@ -70,13 +76,16 @@ class MusicBrainzProvider {
       id: artist.id || '',
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
+      aliases: this.extractAliases(artist),
       images: [],
       albums
     }
   }
 
   async lookupArtistById (artistId) {
-    const artist = await upstreamService.musicBrainzGet(`/artist/${encodeURIComponent(artistId)}`, {})
+    const artist = await upstreamService.musicBrainzGet(`/artist/${encodeURIComponent(artistId)}`, {
+      inc: 'aliases'
+    })
 
     if (!artist?.id) {
       const err = new Error('MusicBrainz artist not found')
@@ -119,6 +128,7 @@ class MusicBrainzProvider {
       id: artist.id || '',
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
+      aliases: this.extractAliases(artist),
       images: [],
       albums,
       partial: false,
