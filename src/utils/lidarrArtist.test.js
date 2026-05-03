@@ -109,6 +109,46 @@ test('normalizeLidarrArtistResponse injects aliases into artist-shaped responses
   assert.deepEqual(response.addOptions, { monitor: 'all', searchForMissingAlbums: false })
 })
 
+test('normalizeLidarrArtistResponse injects aliases into Lidarr add payload with no albums', () => {
+  const response = normalizeLidarrArtistResponse({
+    status: 'continuing',
+    ended: false,
+    artistName: '*NSYNC',
+    foreignArtistId: '603ba565-3967-4be1-931e-9cb945394e86',
+    tadbId: 0,
+    discogsId: 0,
+    overview: '',
+    disambiguation: 'US boy band',
+    links: [],
+    nextAlbum: null,
+    lastAlbum: null,
+    images: [
+      {
+        url: 'https://r2.theaudiodb.com/images/media/artist/thumb/wptpuu1359562857.jpg',
+        coverType: 'poster',
+        extension: '.jpg'
+      }
+    ],
+    remotePoster: 'https://r2.theaudiodb.com/images/media/artist/thumb/wptpuu1359562857.jpg',
+    qualityProfileId: 1,
+    metadataProfileId: 1,
+    monitored: true,
+    monitorNewItems: 'all',
+    folder: '-NSYNC',
+    genres: [],
+    tags: [],
+    added: '0001-01-01T04:57:00Z',
+    ratings: { votes: 0, value: 0 },
+    addOptions: { monitor: 'all', searchForMissingAlbums: false },
+    rootFolderPath: '/mnt/shared/Music'
+  })
+
+  assert.ok(Object.prototype.hasOwnProperty.call(response, 'aliases'))
+  assert.deepEqual(response.aliases, [])
+  assert.equal(response.artistName, '*NSYNC')
+  assert.equal(response.folder, '-NSYNC')
+})
+
 test('normalizeLidarrArtistResponse injects aliases into nested SkyHook artists', () => {
   const response = normalizeLidarrArtistResponse([{ artist: { artistName: 'Radiohead', foreignArtistId: 'mb-1' } }])
   assert.deepEqual(response[0].artist.aliases, [])
