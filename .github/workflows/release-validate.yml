@@ -1,0 +1,88 @@
+name: release-validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate-release:
+    name: release-validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      # -------------------------
+      # Proxy validation
+      # -------------------------
+      - name: Install deps (proxy)
+        run: yarn install --immutable
+
+      - name: Lint + unit tests (proxy)
+        run: |
+          yarn lint
+          yarn test:unit
+
+      - name: Build docker (proxy)
+        run: docker build --target production -t test/proxy .
+
+      # -------------------------
+      # Melodash validation
+      # -------------------------
+      - name: Install deps (melodash)
+        working-directory: ./melodash
+        run: yarn install --immutable
+
+      - name: Lint (melodash)
+        working-directory: ./melodash
+        run: yarn lint
+
+      - name: Typecheck (melodash)
+        working-directory: ./melodash
+        run: yarn typecheck
+
+      - name: Build docker (melodash)
+        run: docker build --target production -t test/melodash ./melodash
+
+      # -------------------------
+      # Contract validation (CRITICAL)
+      # -------------------------
+      - name: Start proxy container
+        env:
+          HOST_PORT: 3055
+          REQUIRE_API_KEY: "false"
+          MUSICBRAINZ_IP_FAMILY: 4
+        run: docker compose up -d proxy
+
+      - name: Wait for service
+        run: |
+          set -euo pipefail
+          for i in {1..10}; do
+            if curl -sf http://localhost:3055/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs proxy
+          exit 1
+
+      - name: Validate SkyHook contract
+        run: |
+          set -euo pipefail
+          curl -s "http://localhost:3055/api/v1/artist/lookup?term=Radiohead" \
+          | jq '.[0] |
+              (has("foreignArtistId") and
+               has("status") and
+               has("links") and
+               has("aliases"))' \
+          | grep true

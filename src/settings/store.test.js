@@ -12,6 +12,42 @@ fs.writeFileSync(path.join(testDataDir, 'settings.json'), '{ invalid json')
 
 const store = require('./store')
 
+function loadFreshStore ({ maxVersions } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'melodarr-version-test-'))
+  const storePath = require.resolve('./store')
+  const previousDataDir = process.env.DATA_DIR
+  const previousMaxVersions = process.env.SETTINGS_VERSION_MAX
+
+  delete require.cache[storePath]
+  process.env.DATA_DIR = dir
+  if (maxVersions !== undefined) {
+    process.env.SETTINGS_VERSION_MAX = String(maxVersions)
+  } else {
+    delete process.env.SETTINGS_VERSION_MAX
+  }
+
+  const freshStore = require('./store')
+
+  return {
+    dir,
+    store: freshStore,
+    cleanup () {
+      delete require.cache[storePath]
+      if (previousDataDir === undefined) {
+        delete process.env.DATA_DIR
+      } else {
+        process.env.DATA_DIR = previousDataDir
+      }
+      if (previousMaxVersions === undefined) {
+        delete process.env.SETTINGS_VERSION_MAX
+      } else {
+        process.env.SETTINGS_VERSION_MAX = previousMaxVersions
+      }
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }
+}
+
 test('Store Module', async (t) => {
   t.after(() => {
     fs.rmSync(testDataDir, { recursive: true, force: true })
@@ -213,4 +249,148 @@ test('Store Module', async (t) => {
     store.clearRuntimeOverride('appVersion')
     await store.flushSettingsWrites()
   })
+  await t.test('Settings versioning and rollback', async () => {
+    store.updateRuntimeConfig({ appVersion: 'v1' })
+    await store.flushSettingsWrites()
+    const v1Id = await store.getCurrentSettingsVersion()
+
+    store.updateRuntimeConfig({ appVersion: 'v2' })
+    await store.flushSettingsWrites()
+    const v2Id = await store.getCurrentSettingsVersion()
+
+    assert.notStrictEqual(v1Id, v2Id)
+
+    const rb1 = await store.rollbackSettings(v1Id, true) // dry run
+    assert.strictEqual(rb1.ok, true)
+    assert.strictEqual(rb1.dryRun, true)
+    assert.strictEqual(rb1.previousVersion, v2Id)
+
+    const rb2 = await store.rollbackSettings(v1Id)
+    assert.strictEqual(rb2.ok, true)
+    assert.strictEqual(rb2.rolledBackTo, v1Id)
+    assert.strictEqual(rb2.previousVersion, v2Id)
+
+    assert.strictEqual(store.getConfigValue('appVersion'), 'v1')
+  })
+})
+
+test('settings version snapshots include metadata and track current version', async (t) => {
+  const fresh = loadFreshStore()
+  t.after(fresh.cleanup)
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'snapshot-v1' })
+  await fresh.store.flushSettingsWrites()
+  const firstVersion = await fresh.store.getCurrentSettingsVersion()
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'snapshot-v2' })
+  await fresh.store.flushSettingsWrites()
+  const secondVersion = await fresh.store.getCurrentSettingsVersion()
+
+  assert.match(firstVersion, /^\d{13}-[a-f0-9]{16}$/)
+  assert.match(secondVersion, /^\d{13}-[a-f0-9]{16}$/)
+  assert.notEqual(firstVersion, secondVersion)
+
+  const index = await fresh.store.getSettingsVersions()
+  assert.equal(index.current, secondVersion)
+  assert.equal(index.lastKnownGood, firstVersion)
+  assert.equal(index.versions.length, 2)
+
+  const secondMeta = index.versions.find((version) => version.id === secondVersion)
+  assert.equal(secondMeta.reason, 'auto')
+  assert.equal(secondMeta.actor, 'system')
+  assert.equal(typeof secondMeta.hash, 'string')
+  assert.ok(secondMeta.size > 0)
+  assert.equal(new Date(secondMeta.timestamp).toISOString(), secondMeta.timestamp)
+
+  const versionFile = path.join(fresh.dir, 'settings.versions', `${secondVersion}.json`)
+  assert.equal(fs.existsSync(versionFile), true)
+})
+
+test('settings version retention keeps at most 50 versions', async (t) => {
+  const fresh = loadFreshStore({ maxVersions: 50 })
+  t.after(fresh.cleanup)
+
+  for (let i = 0; i < 55; i++) {
+    fresh.store.updateRuntimeConfig({ appVersion: `retained-${i}` })
+    await fresh.store.flushSettingsWrites()
+  }
+
+  const index = await fresh.store.getSettingsVersions()
+  assert.equal(index.versions.length, 50)
+  assert.equal(index.versions.some((version) => version.id === index.current), true)
+  assert.equal(index.versions.some((version) => version.id === index.lastKnownGood), true)
+})
+
+test('settings rollback supports dry-run and records a new current version on success', async (t) => {
+  const fresh = loadFreshStore()
+  t.after(fresh.cleanup)
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'rollback-v1' })
+  await fresh.store.flushSettingsWrites()
+  const v1 = await fresh.store.getCurrentSettingsVersion()
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'rollback-v2' })
+  await fresh.store.flushSettingsWrites()
+  const v2 = await fresh.store.getCurrentSettingsVersion()
+
+  const dryRun = await fresh.store.rollbackSettings(v1, true, 'test')
+  assert.equal(dryRun.ok, true)
+  assert.equal(dryRun.dryRun, true)
+  assert.equal(dryRun.previousVersion, v2)
+  assert.equal(fresh.store.getConfigValue('appVersion'), 'rollback-v2')
+  assert.equal(await fresh.store.getCurrentSettingsVersion(), v2)
+
+  const rollback = await fresh.store.rollbackSettings(v1, false, 'test')
+  assert.equal(rollback.ok, true)
+  assert.equal(rollback.rolledBackTo, v1)
+  assert.equal(rollback.previousVersion, v2)
+  assert.equal(fresh.store.getConfigValue('appVersion'), 'rollback-v1')
+
+  const current = await fresh.store.getCurrentSettingsVersion()
+  assert.notEqual(current, v1)
+  assert.notEqual(current, v2)
+
+  const index = await fresh.store.getSettingsVersions()
+  const currentMeta = index.versions.find((version) => version.id === current)
+  assert.equal(currentMeta.reason, `rollback to ${v1}`)
+  assert.equal(currentMeta.actor, 'test')
+})
+
+test('settings rollback rejects malformed, missing, and invalid stored versions', async (t) => {
+  const fresh = loadFreshStore()
+  t.after(fresh.cleanup)
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'safe-before-invalid' })
+  await fresh.store.flushSettingsWrites()
+
+  await assert.rejects(
+    fresh.store.rollbackSettings('../settings.json'),
+    /Invalid versionId/
+  )
+
+  await assert.rejects(
+    fresh.store.rollbackSettings('1700000000000-1234567890abcdef'),
+    /Version 1700000000000-1234567890abcdef not found/
+  )
+
+  const badId = '1700000000001-1234567890abcdef'
+  const versionsDir = path.join(fresh.dir, 'settings.versions')
+  fs.mkdirSync(versionsDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(versionsDir, `${badId}.json`),
+    JSON.stringify({ runtime: { definitelyNotASetting: true } })
+  )
+  fs.writeFileSync(
+    path.join(versionsDir, 'index.json'),
+    JSON.stringify({
+      current: badId,
+      lastKnownGood: badId,
+      versions: [{ id: badId, timestamp: new Date().toISOString(), hash: 'x', size: 1, reason: 'test', actor: 'test' }]
+    })
+  )
+
+  await assert.rejects(
+    fresh.store.rollbackSettings(badId),
+    /Unknown setting key: definitelyNotASetting/
+  )
 })

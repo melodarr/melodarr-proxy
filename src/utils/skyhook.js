@@ -62,6 +62,7 @@ function normalizeImages (candidate, coverType) {
 function buildNestedArtist (candidate, artistId) {
   return withSkyhookArtistDefaults({
     id: artistId,
+    foreignArtistId: artistId,
     artistName: asString(candidate.artistName),
     disambiguation: asString(candidate.disambiguation),
     overview: '',
@@ -73,6 +74,7 @@ function wrapArtist (candidate) {
   return {
     artist: withSkyhookArtistDefaults({
       id: pickArtistMbid(candidate),
+      foreignArtistId: pickArtistMbid(candidate),
       artistName: asString(candidate.artistName || candidate.match),
       disambiguation: asString(candidate.disambiguation),
       overview: '',

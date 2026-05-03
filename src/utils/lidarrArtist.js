@@ -26,6 +26,7 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
 
 const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
   'id',
+  'foreignArtistId',
   'artistName',
   'disambiguation',
   'overview',
@@ -69,6 +70,7 @@ function withSkyhookArtistDefaults (artist = {}) {
   return {
     ...artist,
     id: asString(artist.id),
+    foreignArtistId: asString(artist.foreignArtistId || artist.id),
     artistName: asString(artist.artistName),
     disambiguation: asString(artist.disambiguation),
     overview: asString(artist.overview),

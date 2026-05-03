@@ -32,7 +32,7 @@ function assertArtistContract (artist) {
   }
   assert.ok(Array.isArray(artist.albums))
 
-  assert.equal(artist.foreignArtistId, undefined, 'Lidarr expects id, not foreignArtistId')
+  assert.equal(typeof artist.foreignArtistId, 'string')
 }
 
 function assertAlbumContract (album) {

@@ -23,22 +23,252 @@ function reloadSettings () {
   return settings
 }
 
+const versionsDir = path.join(dataDir, 'settings.versions')
+const indexFile = path.join(versionsDir, 'index.json')
+const MAX_VERSIONS = Number(process.env.SETTINGS_VERSION_MAX) || 50
+const VERSION_ID_RE = /^\d{13}-[a-f0-9]{8,32}$/
+
 let writePromise = Promise.resolve()
 
-function saveSettingsFile (nextSettings) {
+function createVersionId () {
+  return `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`
+}
+
+function isValidSettingsVersionId (versionId) {
+  return typeof versionId === 'string' && VERSION_ID_RE.test(versionId)
+}
+
+function assertValidSettingsVersionId (versionId) {
+  if (!isValidSettingsVersionId(versionId)) {
+    throw new Error('Invalid versionId')
+  }
+}
+
+function getVersionPath (versionId) {
+  assertValidSettingsVersionId(versionId)
+  const base = path.resolve(versionsDir) + path.sep
+  const resolved = path.resolve(versionsDir, `${versionId}.json`)
+  if (!resolved.startsWith(base)) {
+    throw new Error('Invalid versionId')
+  }
+  return resolved
+}
+
+async function writeAtomic (filePath, data) {
+  const tmpPath = `${filePath}.tmp.${crypto.randomBytes(4).toString('hex')}`
+  let fh
+  let renamed = false
+
+  try {
+    fh = await fs.promises.open(tmpPath, 'w', 0o600)
+    try {
+      await fh.writeFile(data)
+      await fh.sync()
+    } finally {
+      if (fh) {
+        await fh.close()
+      }
+    }
+
+    await fs.promises.rename(tmpPath, filePath)
+    renamed = true
+  } finally {
+    if (!renamed) {
+      try {
+        await fs.promises.unlink(tmpPath)
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          const logger = require('../utils/logger')
+          logger.warn('Failed to remove temp settings file', { tmpPath, error: err.message })
+        }
+      }
+    }
+  }
+
+  try {
+    const dirPath = path.dirname(filePath)
+    const dirFh = await fs.promises.open(dirPath, 'r')
+    try {
+      await dirFh.sync()
+    } finally {
+      await dirFh.close()
+    }
+  } catch (err) {
+    // Ignore error if directory cannot be opened for syncing (e.g. windows)
+  }
+}
+
+function createEmptySettingsVersionsIndex () {
+  return { current: null, lastKnownGood: null, versions: [] }
+}
+
+function normalizeSettingsVersionsIndex (index) {
+  if (!index || typeof index !== 'object' || Array.isArray(index)) {
+    return null
+  }
+
+  if (!Array.isArray(index.versions)) {
+    return null
+  }
+
+  return {
+    current: typeof index.current === 'string' ? index.current : null,
+    lastKnownGood: typeof index.lastKnownGood === 'string' ? index.lastKnownGood : null,
+    versions: index.versions
+  }
+}
+
+async function getSettingsVersions () {
+  try {
+    const data = await fs.promises.readFile(indexFile, 'utf8')
+    const parsed = JSON.parse(data)
+    const normalized = normalizeSettingsVersionsIndex(parsed)
+
+    if (!normalized) {
+      const logger = require('../utils/logger')
+      logger.error('Settings index corrupted or unreadable. Starting fresh history to recover.', { error: 'Invalid settings index shape' })
+      return createEmptySettingsVersionsIndex()
+    }
+
+    return normalized
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      const logger = require('../utils/logger')
+      logger.error('Settings index corrupted or unreadable. Starting fresh history to recover.', { error: err.message })
+    }
+    return createEmptySettingsVersionsIndex()
+  }
+}
+
+function validateSettings (config) {
+  if (!config || typeof config !== 'object') {
+    throw new Error('Settings must be an object')
+  }
+  if (config.runtime) {
+    for (const [key, value] of Object.entries(config.runtime)) {
+      const spec = EDITABLE_KEYS[key]
+      if (!spec) {
+        throw new Error(`Unknown setting key: ${key}`)
+      }
+      if (spec.type === 'number') {
+        const coerced = Number(value)
+        if (Number.isNaN(coerced) || coerced <= 0) {
+          throw new Error(`Invalid number for ${key}: ${value}`)
+        }
+      }
+    }
+  }
+}
+
+async function commitSettingsVersion (nextSettings, reason = 'auto', actor = 'system') {
+  validateSettings(nextSettings)
+  await fs.promises.mkdir(versionsDir, { recursive: true })
+
+  const id = createVersionId()
+  const versionPath = getVersionPath(id)
+  const data = JSON.stringify(nextSettings, null, 2)
+  const hash = crypto.createHash('sha256').update(data).digest('hex')
+  const size = Buffer.byteLength(data, 'utf8')
+
+  await writeAtomic(versionPath, data)
+
+  const index = await getSettingsVersions()
+  const newEntry = {
+    id,
+    timestamp: new Date(Number(id.split('-')[0])).toISOString(),
+    hash,
+    size,
+    reason,
+    actor
+  }
+
+  index.versions.push(newEntry)
+  index.current = id
+  if (!index.lastKnownGood) {
+    index.lastKnownGood = id
+  }
+
+  while (index.versions.length > MAX_VERSIONS) {
+    const removableIndex = index.versions.findIndex((v) => v.id !== index.current && v.id !== index.lastKnownGood)
+    const indexToRemove = removableIndex === -1
+      ? index.versions.findIndex((v) => v.id !== index.current)
+      : removableIndex
+
+    if (indexToRemove === -1) break
+
+    const [removed] = index.versions.splice(indexToRemove, 1)
+    if (removed.id === index.lastKnownGood) {
+      index.lastKnownGood = index.current
+    }
+    if (isValidSettingsVersionId(removed.id)) {
+      fs.promises.unlink(getVersionPath(removed.id)).catch(() => {})
+    }
+  }
+
+  await writeAtomic(indexFile, JSON.stringify(index, null, 2))
+  return id
+}
+
+async function getSettingsVersion (versionId) {
+  assertValidSettingsVersionId(versionId)
+  const index = await getSettingsVersions()
+  const meta = index.versions.find(v => v.id === versionId)
+
+  if (!meta) {
+    throw new Error(`Version ${versionId} not found`)
+  }
+
+  let data
+  try {
+    data = await fs.promises.readFile(getVersionPath(versionId), 'utf8')
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new Error(`Version ${versionId} not found`)
+    }
+    throw err
+  }
+  const versionSettings = JSON.parse(data)
+  validateSettings(versionSettings)
+  return { meta, settings: versionSettings }
+}
+
+function computeDiff (current, target) {
+  const diff = { changedKeys: [], added: [], removed: [] }
+  const currentFlat = flattenConfig(current)
+  const targetFlat = flattenConfig(target)
+
+  const allKeys = new Set([...Object.keys(currentFlat), ...Object.keys(targetFlat)])
+  for (const key of allKeys) {
+    if (!(key in currentFlat)) diff.added.push(key)
+    else if (!(key in targetFlat)) diff.removed.push(key)
+    else if (JSON.stringify(currentFlat[key]) !== JSON.stringify(targetFlat[key])) diff.changedKeys.push(key)
+  }
+  return diff
+}
+
+function flattenConfig (obj, prefix = '') {
+  return Object.keys(obj || {}).reduce((acc, k) => {
+    const pre = prefix.length ? prefix + '.' : ''
+    if (typeof obj[k] === 'object' && obj[k] !== null && !Array.isArray(obj[k])) {
+      Object.assign(acc, flattenConfig(obj[k], pre + k))
+    } else {
+      acc[pre + k] = obj[k]
+    }
+    return acc
+  }, {})
+}
+
+function saveSettingsFile (nextSettings, reason = 'auto', actor = 'system', { skipVersioning = false } = {}) {
   writePromise = writePromise.then(async () => {
     try {
       if (metrics.recordSettingsWrite) metrics.recordSettingsWrite()
       await fs.promises.mkdir(dataDir, { recursive: true })
-      const tmpPath = `${settingsPath}.tmp.${crypto.randomBytes(4).toString('hex')}`
+
       const data = `${JSON.stringify(nextSettings, null, 2)}\n`
-
-      const fh = await fs.promises.open(tmpPath, 'w', 0o600)
-      await fh.writeFile(data)
-      await fh.sync()
-      await fh.close()
-
-      await fs.promises.rename(tmpPath, settingsPath)
+      await writeAtomic(settingsPath, data)
+      if (!skipVersioning) {
+        await commitSettingsVersion(nextSettings, reason, actor)
+      }
     } catch (err) {
       const logger = require('../utils/logger')
       logger.error('Failed to save settings file', { error: err.message })
@@ -47,19 +277,94 @@ function saveSettingsFile (nextSettings) {
   return writePromise
 }
 
+function markLastKnownGood () {
+  writePromise = writePromise.then(async () => {
+    try {
+      const index = await getSettingsVersions()
+      if (index.current && index.lastKnownGood !== index.current) {
+        index.lastKnownGood = index.current
+        await writeAtomic(indexFile, JSON.stringify(index, null, 2))
+      }
+    } catch (err) {
+      // Ignore
+    }
+  })
+  return writePromise
+}
+
+async function rollbackSettings (versionId, dryRun = false, actor = 'operator') {
+  assertValidSettingsVersionId(versionId)
+  // We need to pause normal writes while doing rollback.
+  // Wait for any pending writes to complete, then execute our block.
+  return new Promise((resolve, reject) => {
+    writePromise = writePromise.then(async () => {
+      const cancelDebouncedSave = () => {
+        if (saveTimeout) {
+          clearTimeout(saveTimeout)
+          saveTimeout = null
+        }
+      }
+      try {
+        cancelDebouncedSave()
+
+        const index = await getSettingsVersions()
+        const targetVersion = index.versions.find(v => v.id === versionId)
+        if (!targetVersion) {
+          throw new Error(`Version ${versionId} not found`)
+        }
+
+        const { settings: targetSettings } = await getSettingsVersion(versionId)
+
+        const diff = computeDiff(settings, targetSettings)
+
+        const previousVersion = index.current
+
+        if (dryRun) {
+          return resolve({ ok: true, dryRun: true, diff, previousVersion })
+        }
+
+        cancelDebouncedSave()
+        settings = targetSettings
+        if (metrics.recordSettingsWrite) metrics.recordSettingsWrite()
+        await fs.promises.mkdir(dataDir, { recursive: true })
+        await writeAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+
+        await commitSettingsVersion(settings, `rollback to ${versionId}`, actor)
+        cancelDebouncedSave()
+
+        resolve({ ok: true, dryRun: false, diff, rolledBackTo: versionId, previousVersion })
+      } catch (err) {
+        reject(err)
+      }
+    }).catch(reject) // Catching any top-level errors in the promise chain
+  })
+}
+
+async function getCurrentSettingsVersion () {
+  const index = await getSettingsVersions()
+  return index.current
+}
+
 function saveSettings (nextSettings) {
   settings = nextSettings
   return saveSettingsFile(settings)
 }
 
 let saveTimeout = null
-function saveSettingsDebounced (nextSettings) {
+let pendingSkipVersioning = false
+function saveSettingsDebounced (nextSettings, { skipVersioning = false } = {}) {
   settings = nextSettings
   if (metrics.recordSettingsDebounce) metrics.recordSettingsDebounce()
+  // Update the pending skip flag: only skip versioning when every queued call
+  // has opted out. If any call wants a version snapshot, honor it.
+  // AND semantics: false (do version) wins over true (skip versioning).
+  pendingSkipVersioning = saveTimeout ? (pendingSkipVersioning && skipVersioning) : skipVersioning
   if (!saveTimeout) {
     saveTimeout = setTimeout(() => {
+      const skip = pendingSkipVersioning
       saveTimeout = null
-      saveSettingsFile(settings)
+      pendingSkipVersioning = false
+      saveSettingsFile(settings, 'auto', 'system', { skipVersioning: skip })
     }, 2000)
     if (saveTimeout.unref) saveTimeout.unref()
   }
@@ -68,8 +373,10 @@ function saveSettingsDebounced (nextSettings) {
 async function flushSettingsWrites () {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
+    const skip = pendingSkipVersioning
     saveTimeout = null
-    await saveSettingsFile(settings)
+    pendingSkipVersioning = false
+    await saveSettingsFile(settings, 'auto', 'system', { skipVersioning: skip })
   }
   return writePromise
 }
@@ -233,7 +540,43 @@ function deleteApiKey (id) {
   return true
 }
 
+const INTERNAL_VALIDATOR_KEY_TTL_MS = 15 * 60 * 1000
+const internalValidatorKeys = new Map()
+
+function pruneExpiredInternalValidatorKeys (now = Date.now()) {
+  for (const [key, expiresAt] of internalValidatorKeys.entries()) {
+    if (expiresAt <= now) {
+      internalValidatorKeys.delete(key)
+    }
+  }
+}
+
+function setInternalValidatorKey (key) {
+  if (key === null || key === undefined || key === '') {
+    return
+  }
+  const now = Date.now()
+  pruneExpiredInternalValidatorKeys(now)
+  internalValidatorKeys.set(key, now + INTERNAL_VALIDATOR_KEY_TTL_MS)
+}
+
+function clearInternalValidatorKey (key) {
+  if (key) {
+    internalValidatorKeys.delete(key)
+  }
+}
+
+function isInternalValidatorKey (apiKey) {
+  const now = Date.now()
+  pruneExpiredInternalValidatorKeys(now)
+
+  return internalValidatorKeys.has(apiKey)
+}
+
 function checkApiKey (apiKey) {
+  if (isInternalValidatorKey(apiKey)) {
+    return { valid: true, id: 'internal', name: 'validator' }
+  }
   // Omit reloadSettings() on the hot path to prevent synchronous disk reads
   const keys = settings.apiKeys || []
   const index = keys.findIndex((key) => verifyHash(apiKey, key.hash))
@@ -263,7 +606,7 @@ function checkApiKey (apiKey) {
   saveSettingsDebounced({
     ...settings,
     apiKeys: nextKeys
-  })
+  }, { skipVersioning: true })
 
   return {
     valid: true,
@@ -471,6 +814,38 @@ function getEnvShadowedKeys () {
   return out
 }
 
+async function validateConfigInMemory (updates, validatorFn) {
+  const applied = {}
+  for (const [key, value] of Object.entries(updates)) {
+    const spec = EDITABLE_KEYS[key]
+    if (!spec) continue
+    if (value === null) {
+      applied[key] = null
+    } else {
+      const coerced = spec.type === 'number' ? Number(value) : String(value)
+      if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) continue
+      applied[key] = coerced
+    }
+  }
+
+  const nextRuntime = { ...settings.runtime }
+  for (const [key, value] of Object.entries(applied)) {
+    if (value === null) delete nextRuntime[key]
+    else nextRuntime[key] = value
+  }
+
+  const previousSettings = settings
+  const nextSettings = { ...settings, runtime: nextRuntime }
+  const diff = computeDiff(previousSettings, nextSettings)
+
+  // Validate against the proposed settings object without mutating the
+  // module-global `settings`. This keeps uncommitted config isolated from
+  // concurrent production traffic while still allowing the validator to
+  // inspect the exact candidate settings and computed diff.
+  const result = await validatorFn(nextSettings, diff)
+  return { ...result, diff }
+}
+
 module.exports = {
   bootstrapAdminPassword,
   canBootstrapAdmin,
@@ -488,5 +863,16 @@ module.exports = {
   listApiKeys,
   resetPassword,
   updateRuntimeConfig,
-  verifyPassword
+  verifyPassword,
+  getSettingsVersions,
+  getSettingsVersion,
+  getCurrentSettingsVersion,
+  rollbackSettings,
+  markLastKnownGood,
+  computeDiff,
+  isValidSettingsVersionId,
+  setInternalValidatorKey,
+  clearInternalValidatorKey,
+  validateConfigInMemory,
+  validateSettings
 }

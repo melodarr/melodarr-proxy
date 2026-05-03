@@ -20,7 +20,12 @@ const {
   requireSettingsCsrfIfSession,
   setupSettings,
   testSettingsProvider,
-  updateSettings
+  updateSettings,
+  listVersions,
+  getVersion,
+  applyRollback,
+  getCurrentVersionMeta,
+  validateSettingsEndpoint
 } = require('../controllers/settings.controller')
 
 const proxyStateMiddleware = require('../middleware/proxy.middleware')
@@ -46,6 +51,11 @@ router.post('/settings/providers/test', requireSettingsAuth, requireSettingsCsrf
 router.get('/settings/name-history', requireSettingsAuth, getNameHistory)
 router.post('/update/apply', requireSettingsAuth, requireSettingsCsrf, applyUpdate)
 
+router.get('/settings/versions', requireSettingsAuth, listVersions)
+router.get('/settings/versions/:id', requireSettingsAuth, getVersion)
+router.post('/settings/rollback', requireSettingsAuth, requireSettingsCsrf, applyRollback)
+router.post('/settings/validate', requireSettingsAuth, requireSettingsCsrf, validateSettingsEndpoint)
+
 // API Key Administration
 router.post('/admin/keys/create', requireSettingsAuth, requireSettingsCsrf, generateKey)
 router.get('/admin/keys', requireSettingsAuth, getAllKeys)
@@ -54,6 +64,9 @@ router.delete('/admin/keys/:key', requireSettingsAuth, requireSettingsCsrf, revo
 // Main proxy route (requires proxy to be running)
 const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 })
 const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
+
+// Settings-auth protected version metadata
+router.get('/settings/version', requireSettingsAuth, getCurrentVersionMeta)
 
 // Standard routes (Header or Query string API key)
 router.get('/search', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
