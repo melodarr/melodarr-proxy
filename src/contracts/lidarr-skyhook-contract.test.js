@@ -4,18 +4,58 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { toSkyhookSearchShape } = require('../utils/skyhook')
-const { LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS } = require('../utils/lidarrArtist')
 
 const fixturesDir = path.join(__dirname, '../fixtures/lidarr')
+
+const SKYHOOK_ENTITY_KEYS = ['album', 'artist', 'score']
+const SKYHOOK_ARTIST_KEYS = [
+  'albums',
+  'aristUrl',
+  'artistAliases',
+  'artistName',
+  'disambiguation',
+  'genres',
+  'id',
+  'images',
+  'links',
+  'oldIds',
+  'overview',
+  'rating',
+  'status',
+  'type'
+]
+const SKYHOOK_ALBUM_KEYS = [
+  'artistId',
+  'artists',
+  'disambiguation',
+  'genres',
+  'id',
+  'images',
+  'links',
+  'oldIds',
+  'overview',
+  'rating',
+  'releaseDate',
+  'releaseStatuses',
+  'releases',
+  'secondaryTypes',
+  'title',
+  'type'
+]
+const SKYHOOK_IMAGE_KEYS = ['coverType', 'height', 'url', 'width']
+const SKYHOOK_LINK_KEYS = ['target', 'type']
+const SKYHOOK_RATING_KEYS = ['count', 'value']
 
 function readFixture (name) {
   return JSON.parse(fs.readFileSync(path.join(fixturesDir, name), 'utf8'))
 }
 
+function assertExactKeys (value, keys, label) {
+  assert.deepEqual(Object.keys(value).sort(), [...keys].sort(), `${label} keys drifted from Lidarr source`)
+}
+
 function assertArtistContract (artist) {
-  for (const key of LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS) {
-    assert.ok(Object.prototype.hasOwnProperty.call(artist, key), `artist missing ${key}`)
-  }
+  assertExactKeys(artist, SKYHOOK_ARTIST_KEYS, 'SkyHook ArtistResource')
 
   assert.equal(typeof artist.id, 'string')
   assert.equal(typeof artist.artistName, 'string')
@@ -24,55 +64,31 @@ function assertArtistContract (artist) {
   assert.equal(typeof artist.type, 'string')
   assert.equal(typeof artist.status, 'string')
   assert.ok(Array.isArray(artist.oldIds))
-  assert.ok(Array.isArray(artist.aliases))
   assert.ok(Array.isArray(artist.artistAliases))
   assert.ok(Array.isArray(artist.links))
+  for (const link of artist.links) {
+    assertExactKeys(link, SKYHOOK_LINK_KEYS, 'SkyHook LinkResource')
+    assert.equal(typeof link.target, 'string')
+    assert.equal(typeof link.type, 'string')
+  }
   assert.ok(Array.isArray(artist.images))
   for (const image of artist.images) {
+    assertExactKeys(image, SKYHOOK_IMAGE_KEYS, 'SkyHook ImageResource')
     assert.equal(typeof image.coverType, 'string', 'artist image missing coverType')
     assert.equal(typeof image.url, 'string', 'artist image missing url')
+    assert.equal(typeof image.height, 'number', 'artist image missing height')
+    assert.equal(typeof image.width, 'number', 'artist image missing width')
   }
   assert.ok(Array.isArray(artist.albums))
-
-  assert.equal(typeof artist.foreignArtistId, 'string')
+  assertExactKeys(artist.rating, SKYHOOK_RATING_KEYS, 'SkyHook RatingResource')
+  assert.equal(typeof artist.rating.count, 'number')
+  assert.equal(typeof artist.rating.value, 'number')
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, 'foreignArtistId'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, 'aliases'), false)
 }
 
 function assertAlbumContract (album) {
-  const required = [
-    'id',
-    'oldIds',
-    'title',
-    'disambiguation',
-    'overview',
-    'artistId',
-    'monitored',
-    'anyReleaseOk',
-    'profileId',
-    'duration',
-    'albumType',
-    'type',
-    'secondaryTypes',
-    'releaseStatuses',
-    'mediumCount',
-    'rating',
-    'ratings',
-    'releaseDate',
-    'releases',
-    'genres',
-    'media',
-    'artist',
-    'images',
-    'links',
-    'lastSearchTime',
-    'statistics',
-    'addOptions',
-    'remoteCover',
-    'artists'
-  ]
-
-  for (const key of required) {
-    assert.ok(Object.prototype.hasOwnProperty.call(album, key), `album missing ${key}`)
-  }
+  assertExactKeys(album, SKYHOOK_ALBUM_KEYS, 'SkyHook AlbumResource')
 
   assert.equal(typeof album.id, 'string')
   assert.ok(Array.isArray(album.oldIds))
@@ -80,38 +96,24 @@ function assertAlbumContract (album) {
   assert.equal(typeof album.disambiguation, 'string')
   assert.equal(typeof album.overview, 'string')
   assert.equal(typeof album.artistId, 'string')
-  assert.equal(typeof album.monitored, 'boolean')
-  assert.equal(typeof album.anyReleaseOk, 'boolean')
-  assert.equal(typeof album.profileId, 'number')
-  assert.equal(typeof album.duration, 'number')
-  assert.equal(typeof album.albumType, 'string')
   assert.equal(typeof album.type, 'string')
   assert.ok(Array.isArray(album.secondaryTypes))
   assert.ok(Array.isArray(album.releaseStatuses))
-  assert.equal(typeof album.mediumCount, 'number')
   assert.equal(typeof album.rating, 'object')
-  assert.equal(typeof album.ratings, 'object')
+  assertExactKeys(album.rating, SKYHOOK_RATING_KEYS, 'SkyHook RatingResource')
   assert.ok(typeof album.releaseDate === 'string' || album.releaseDate === null)
   assert.ok(Array.isArray(album.releases))
   assert.ok(Array.isArray(album.genres))
-  assert.ok(Array.isArray(album.media))
-  assert.equal(typeof album.artist, 'object')
-  assert.ok(Array.isArray(album.artist.aliases))
-  assert.ok(Array.isArray(album.artist.artistAliases))
-  assert.ok(Array.isArray(album.artist.oldIds))
   assert.ok(Array.isArray(album.images))
   for (const image of album.images) {
+    assertExactKeys(image, SKYHOOK_IMAGE_KEYS, 'SkyHook ImageResource')
     assert.equal(typeof image.coverType, 'string', 'album image missing coverType')
     assert.equal(typeof image.url, 'string', 'album image missing url')
+    assert.equal(typeof image.height, 'number', 'album image missing height')
+    assert.equal(typeof image.width, 'number', 'album image missing width')
   }
   assert.ok(Array.isArray(album.links))
-  assert.equal(album.lastSearchTime, null)
-  assert.equal(typeof album.statistics, 'object')
-  assert.equal(typeof album.addOptions, 'object')
-  assert.equal(typeof album.remoteCover, 'string')
   assert.ok(Array.isArray(album.artists))
-  assert.equal(typeof album.artist.id, 'string')
-  assert.equal(typeof album.artist.artistName, 'string')
   assert.equal(typeof album.artists[0].id, 'string')
   assert.equal(typeof album.artists[0].artistName, 'string')
   assert.equal(typeof album.artists[0].disambiguation, 'string')
@@ -121,9 +123,10 @@ function assertAlbumContract (album) {
   assert.ok(Array.isArray(album.artists[0].links))
 
   assert.equal(album.foreignAlbumId, undefined, 'Lidarr expects id, not foreignAlbumId')
+  assert.equal(album.firstReleaseDate, undefined, 'SkyHook AlbumResource expects releaseDate, not firstReleaseDate')
 }
 
-test('Lidarr/SkyHook search contract matches golden fixture', () => {
+test('Lidarr/SkyHook type=all search contract matches golden EntityResource fixture', () => {
   const candidates = [
     {
       artistName: 'Radiohead',
@@ -152,7 +155,7 @@ test('Lidarr/SkyHook search contract matches golden fixture', () => {
   assert.deepEqual(actual, expected)
 })
 
-test('Lidarr/SkyHook search contract rejects flat response items', () => {
+test('Lidarr/SkyHook type=all search contract rejects flat response items', () => {
   const flat = [{ artistName: 'Radiohead', id: 'a74b1b7f-71a5-4011-9441-d0b5e4122711' }]
 
   for (const item of flat) {
@@ -160,15 +163,56 @@ test('Lidarr/SkyHook search contract rejects flat response items', () => {
   }
 })
 
-test('Lidarr/SkyHook search golden fixture satisfies union contracts', () => {
+test('Lidarr/SkyHook type=all search golden fixture satisfies EntityResource contracts', () => {
   const fixture = readFixture('skyhook-search.golden.json')
 
   for (const item of fixture) {
+    assertExactKeys(item, SKYHOOK_ENTITY_KEYS, 'SkyHook EntityResource')
+    assert.equal(typeof item.score, 'number')
     const branches = [item.artist, item.album].filter(Boolean)
     assert.equal(branches.length, 1, 'each item must have exactly one union branch')
     if (item.artist) assertArtistContract(item.artist)
     if (item.album) assertAlbumContract(item.album)
   }
+})
+
+test('Lidarr/SkyHook type=artist search returns ArtistResource[] from source contract', () => {
+  // Source of truth:
+  // SkyHookProxy.SearchForNewArtist() calls route=search&type=artist and
+  // deserializes it as List<NzbDrone.Core.MetadataSource.SkyHook.Resource.ArtistResource>.
+  const out = toSkyhookSearchShape([{
+    artistName: 'Radiohead',
+    id: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+    type: 'artist',
+    ids: { musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711' }
+  }], 'artist')
+
+  assert.equal(out.length, 1)
+  assertArtistContract(out[0])
+  assert.equal(Object.prototype.hasOwnProperty.call(out[0], 'artist'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(out[0], 'album'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(out[0], 'score'), false)
+})
+
+test('Lidarr/SkyHook type=album search returns AlbumResource[] from source contract', () => {
+  // Source of truth:
+  // SkyHookProxy.SearchForNewAlbum() calls route=search&type=album and
+  // deserializes it as List<NzbDrone.Core.MetadataSource.SkyHook.Resource.AlbumResource>.
+  const out = toSkyhookSearchShape([{
+    artistName: 'Radiohead',
+    match: 'OK Computer',
+    type: 'album',
+    ids: {
+      musicbrainzArtistId: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+      musicbrainzReleaseGroupId: 'b1392450-e666-3926-a536-22c65f834433'
+    }
+  }], 'album')
+
+  assert.equal(out.length, 1)
+  assertAlbumContract(out[0])
+  assert.equal(Object.prototype.hasOwnProperty.call(out[0], 'artist'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(out[0], 'album'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(out[0], 'score'), false)
 })
 
 test('artist lookup golden fixture keeps Lidarr-safe fields stable', () => {
@@ -214,7 +258,6 @@ test('Lidarr add-artist SkyHook metadata contract never maps required DB lists t
   const lookupFixture = readFixture('artist-lookup.golden.json')
   const skyhookArtistResources = [
     searchFixture[0].artist,
-    searchFixture[1].album.artist,
     searchFixture[1].album.artists[0],
     lookupFixture[0]
   ]

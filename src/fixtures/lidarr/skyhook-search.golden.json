@@ -1,106 +1,85 @@
 [
   {
+    "score": 0,
     "artist": {
-      "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-      "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-      "artistName": "Radiohead",
-      "disambiguation": "",
+      "genres": [],
+      "aristUrl": "",
       "overview": "",
+      "type": "Group",
+      "disambiguation": "",
+      "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "oldIds": [],
       "images": [
         {
           "coverType": "poster",
           "url": "https://example.com/radiohead.jpg",
-          "remoteUrl": "https://example.com/radiohead.jpg"
+          "height": 0,
+          "width": 0
         }
       ],
-      "aliases": [],
-      "type": "Group",
-      "status": "active",
-      "oldIds": [],
-      "artistAliases": [],
       "links": [],
-      "albums": []
-    }
-  },
-  {
-    "album": {
-      "id": "b1392450-e666-3926-a536-22c65f834433",
-      "oldIds": [],
-      "title": "OK Computer",
-      "disambiguation": "",
-      "overview": "",
-      "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-      "monitored": false,
-      "anyReleaseOk": false,
-      "profileId": 0,
-      "duration": 0,
-      "type": "Album",
-      "albumType": "Album",
-      "secondaryTypes": [],
-      "releaseStatuses": [
-        "Official"
-      ],
-      "mediumCount": 0,
+      "artistName": "Radiohead",
+      "artistAliases": [],
+      "albums": [],
+      "status": "active",
       "rating": {
         "count": 0,
         "value": 0
-      },
-      "ratings": {
-        "votes": 0,
-        "value": 0
-      },
-      "releaseDate": null,
-      "releases": [],
-      "genres": [],
-      "media": [],
-      "artist": {
-        "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-        "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-        "artistName": "Radiohead",
-        "disambiguation": "",
-        "overview": "",
-        "aliases": [],
-        "type": "Group",
-        "status": "active",
-        "oldIds": [],
-        "artistAliases": [],
-        "links": [],
-        "images": [],
-        "albums": []
-      },
+      }
+    },
+    "album": null
+  },
+  {
+    "score": 0,
+    "artist": null,
+    "album": {
+      "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "artists": [
+        {
+          "genres": [],
+          "aristUrl": "",
+          "overview": "",
+          "type": "Group",
+          "disambiguation": "",
+          "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "oldIds": [],
+          "images": [],
+          "links": [],
+          "artistName": "Radiohead",
+          "artistAliases": [],
+          "albums": [],
+          "status": "active",
+          "rating": {
+            "count": 0,
+            "value": 0
+          }
+        }
+      ],
+      "disambiguation": "",
+      "overview": "",
+      "id": "b1392450-e666-3926-a536-22c65f834433",
+      "oldIds": [],
       "images": [
         {
           "coverType": "cover",
           "url": "https://example.com/ok-computer.jpg",
-          "remoteUrl": "https://example.com/ok-computer.jpg"
+          "height": 0,
+          "width": 0
         }
       ],
       "links": [],
-      "lastSearchTime": null,
-      "statistics": {
-        "albumCount": 0,
-        "songCount": 0,
-        "sizeOnDisk": 0,
-        "percentOfSongs": 0
+      "genres": [],
+      "rating": {
+        "count": 0,
+        "value": 0
       },
-      "addOptions": {},
-      "remoteCover": "https://example.com/ok-computer.jpg",
-      "artists": [
-        {
-          "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-          "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-          "artistName": "Radiohead",
-          "disambiguation": "",
-          "overview": "",
-          "aliases": [],
-          "type": "Group",
-          "status": "active",
-          "oldIds": [],
-          "artistAliases": [],
-          "links": [],
-          "images": [],
-          "albums": []
-        }
+      "releaseDate": null,
+      "releases": [],
+      "secondaryTypes": [],
+      "title": "OK Computer",
+      "type": "Album",
+      "releaseStatuses": [
+        "Official"
       ]
     }
   }
