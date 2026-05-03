@@ -65,8 +65,10 @@ router.delete('/admin/keys/:key', requireSettingsAuth, requireSettingsCsrf, revo
 const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 })
 const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
 
+// Settings-auth protected version metadata
+router.get('/settings/version', requireSettingsAuth, getCurrentVersionMeta)
+
 // Standard routes (Header or Query string API key)
-router.get('/settings/version', proxyRateLimiter, proxyAuthMiddleware, getCurrentVersionMeta)
 router.get('/search', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleSearch)
 router.get('/v1/artist/discover', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistDiscover)
 router.get('/v1/artist/lookup', proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleArtistLookup)
