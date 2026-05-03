@@ -11,11 +11,18 @@
 #   LIST_BRANCHES — set to 1 to print deployable remote branches before checks
 #   BRANCH_LIST_ONLY — set to 1 with LIST_BRANCHES=1 to list branches and exit
 #   BRANCH_LIMIT — max branches to print         (default: 80)
+#   LXC_REPO_PATH — source git checkout inside the LXC for branch deploys.
+#                  Empty auto-detects /opt/melodarr-proxy/src, then
+#                  /opt/melodarr-proxy. Branch listing uses the host checkout
+#                  that runs this script first, then falls back to this path.
+#   LXC_BRANCH_SOURCE_PATH — scratch source path used for host-branch archive
+#                  deploys when the LXC has no source git checkout
+#                  (default: /opt/melodarr-proxy/src-branch-build)
 #   DEPLOY_BRANCH — branch/ref to deploy before verification.
 #                  Empty keeps the old pull+recreate deployment behavior.
-#                  When set, the script fetches the remote, switches to the
-#                  branch/ref in /opt/melodarr-proxy, builds proxy from source,
-#                  and verifies /api/version against that checked-out revision.
+#                  When set, the script switches the LXC source checkout,
+#                  builds proxy from source, and verifies /api/version against
+#                  that checked-out revision.
 #   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
 #                  overrides and restart the proxy (re-enables MusicBrainz)
 #                  (default: 0 — verify-only, never mutate)
@@ -37,17 +44,75 @@ BRANCH_REMOTE="${BRANCH_REMOTE:-origin}"
 LIST_BRANCHES="${LIST_BRANCHES:-0}"
 BRANCH_LIST_ONLY="${BRANCH_LIST_ONLY:-0}"
 BRANCH_LIMIT="${BRANCH_LIMIT:-80}"
+LXC_REPO_PATH="${LXC_REPO_PATH:-}"
+LXC_BRANCH_SOURCE_PATH="${LXC_BRANCH_SOURCE_PATH:-/opt/melodarr-proxy/src-branch-build}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-}"
 REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
 EXPECTED_REV="${EXPECTED_REV:-}"
 BRANCHES_LISTED=0
+BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Branch listing/deploy helpers ────────────────────────────────
+host_git_available () {
+  git -C "$BASE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+resolve_host_deploy_ref () {
+  local ref="$DEPLOY_BRANCH" remote_branch="$DEPLOY_BRANCH"
+  case "$ref" in
+    "$BRANCH_REMOTE"/*) remote_branch="${ref#"$BRANCH_REMOTE"/}" ;;
+  esac
+
+  git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null
+  if git -C "$BASE_DIR" show-ref --verify --quiet "refs/remotes/$BRANCH_REMOTE/$remote_branch"; then
+    git -C "$BASE_DIR" rev-parse "$BRANCH_REMOTE/$remote_branch^{commit}"
+  else
+    git -C "$BASE_DIR" rev-parse "$ref^{commit}"
+  fi
+}
+
+resolve_lxc_repo_path () {
+  if [ -n "$LXC_REPO_PATH" ]; then
+    pct exec "$CTID" -- env LXC_REPO_PATH="$LXC_REPO_PATH" bash -lc '
+      [ -d "$LXC_REPO_PATH/.git" ] && printf "%s" "$LXC_REPO_PATH"
+    ' 2>/dev/null || true
+    return
+  fi
+
+  pct exec "$CTID" -- bash -lc '
+    for path in /opt/melodarr-proxy/src /opt/melodarr-proxy; do
+      if [ -d "$path/.git" ]; then
+        printf "%s" "$path"
+        exit 0
+      fi
+    done
+  ' 2>/dev/null || true
+}
+
 list_remote_branches () {
-  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" BRANCH_LIMIT="$BRANCH_LIMIT" bash -lc '
+  if host_git_available; then
+    git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null
+    git -C "$BASE_DIR" for-each-ref \
+      --sort=-committerdate \
+      --format="%(refname:short)  %(committerdate:short)  %(subject)" \
+      "refs/remotes/$BRANCH_REMOTE" \
+      | awk -v head="$BRANCH_REMOTE/HEAD" '$1 != head { print }' \
+      | sed -n "1,${BRANCH_LIMIT}p"
+    return
+  fi
+
+  local lxc_repo_path
+  lxc_repo_path="$(resolve_lxc_repo_path)"
+  if [ -z "$lxc_repo_path" ]; then
+    echo "ERROR: no git checkout found on the host or inside CTID=$CTID."
+    echo "Run this script from the Proxmox-host repo checkout, or set LXC_REPO_PATH to an in-LXC source checkout."
+    return 1
+  fi
+
+  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" BRANCH_LIMIT="$BRANCH_LIMIT" LXC_REPO_PATH="$lxc_repo_path" bash -lc '
     set -euo pipefail
-    cd /opt/melodarr-proxy
+    cd "$LXC_REPO_PATH"
     git fetch --prune "$BRANCH_REMOTE" >/dev/null
     git for-each-ref \
       --sort=-committerdate \
@@ -62,19 +127,89 @@ show_remote_branches () {
   echo
   echo "## Available deploy branches ($BRANCH_REMOTE, newest first)"
   if ! list_remote_branches; then
-    echo "ERROR: unable to list branches from /opt/melodarr-proxy in CTID=$CTID"
+    echo "ERROR: unable to list branches."
     exit 1
   fi
   BRANCHES_LISTED=1
 }
 
-deploy_branch_ref () {
-  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" DEPLOY_BRANCH="$DEPLOY_BRANCH" bash -lc '
+deploy_branch_from_host_archive () {
+  if ! host_git_available; then
+    return 1
+  fi
+
+  local resolved_ref archive rc
+  if ! resolved_ref="$(resolve_host_deploy_ref)"; then
+    echo "ERROR: unable to resolve DEPLOY_BRANCH=$DEPLOY_BRANCH from host repo $BASE_DIR"
+    return 1
+  fi
+
+  archive="$(mktemp "${TMPDIR:-/tmp}/melodarr-site-test-source.XXXXXX.tar")" || return 1
+  if ! git -C "$BASE_DIR" archive --format=tar "$resolved_ref" > "$archive"; then
+    rm -f "$archive"
+    return 1
+  fi
+
+  pct exec "$CTID" -- mkdir -p /opt/melodarr-proxy || {
+    rm -f "$archive"
+    return 1
+  }
+  pct push "$CTID" "$archive" /tmp/melodarr-site-test-source.tar >/dev/null || {
+    rm -f "$archive"
+    return 1
+  }
+  rm -f "$archive"
+
+  pct exec "$CTID" -- env DEPLOY_REV="$resolved_ref" LXC_BRANCH_SOURCE_PATH="$LXC_BRANCH_SOURCE_PATH" bash -lc '
     set -euo pipefail
     cd /opt/melodarr-proxy
+    compose_file="compose.yml"
+    if [ ! -f "$compose_file" ]; then
+      compose_file="docker-compose.yml"
+    fi
+    if [ ! -f "$compose_file" ]; then
+      echo "ERROR: no compose.yml or docker-compose.yml found in /opt/melodarr-proxy"
+      exit 1
+    fi
+
+    rm -rf "$LXC_BRANCH_SOURCE_PATH"
+    mkdir -p "$LXC_BRANCH_SOURCE_PATH"
+    tar -xf /tmp/melodarr-site-test-source.tar -C "$LXC_BRANCH_SOURCE_PATH"
+
+    docker build \
+      -t melodarr-proxy:branch \
+      --target production \
+      --build-arg APP_REVISION="$DEPLOY_REV" \
+      --build-arg APP_CREATED="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+      "$LXC_BRANCH_SOURCE_PATH"
+
+    cat > compose.site-test-branch.yml <<COMPOSE
+services:
+  proxy:
+    image: melodarr-proxy:branch
+COMPOSE
+
+    docker compose -f "$compose_file" -f compose.site-test-branch.yml up -d --force-recreate proxy
+    printf "%s" "$DEPLOY_REV" > /opt/melodarr-proxy/.site-test-deployed-revision
+    rm -f /tmp/melodarr-site-test-source.tar
+  '
+}
+
+deploy_branch_ref () {
+  local lxc_repo_path
+  lxc_repo_path="$(resolve_lxc_repo_path)"
+  if [ -z "$lxc_repo_path" ]; then
+    echo "No source git checkout found inside CTID=$CTID; deploying DEPLOY_BRANCH from host repo archive instead."
+    deploy_branch_from_host_archive
+    return
+  fi
+
+  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" DEPLOY_BRANCH="$DEPLOY_BRANCH" LXC_REPO_PATH="$lxc_repo_path" bash -lc '
+    set -euo pipefail
+    cd "$LXC_REPO_PATH"
 
     if [ -n "$(git status --porcelain)" ]; then
-      echo "ERROR: /opt/melodarr-proxy has uncommitted changes; refusing to switch branches."
+      echo "ERROR: $LXC_REPO_PATH has uncommitted changes; refusing to switch branches."
       echo "Commit, stash, or clean that deployment checkout before using DEPLOY_BRANCH."
       git status --short
       exit 2
@@ -94,12 +229,32 @@ deploy_branch_ref () {
       git switch --detach "$ref"
     fi
 
-    docker compose up -d --build --force-recreate proxy
+    deploy_rev="$(git rev-parse HEAD)"
+    if [ "$(basename "$LXC_REPO_PATH")" = "src" ] && [ -f "$(dirname "$LXC_REPO_PATH")/compose.yml" ]; then
+      cd "$(dirname "$LXC_REPO_PATH")"
+      docker build \
+        -t melodarr-proxy:local \
+        --target production \
+        --build-arg APP_REVISION="$deploy_rev" \
+        --build-arg APP_CREATED="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+        src/
+      docker compose up -d --force-recreate proxy
+      printf "%s" "$deploy_rev" > /opt/melodarr-proxy/.site-test-deployed-revision
+    else
+      docker compose up -d --build --force-recreate proxy
+      printf "%s" "$deploy_rev" > "$LXC_REPO_PATH/.site-test-deployed-revision"
+    fi
   '
 }
 
 current_deploy_revision () {
-  pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && git rev-parse HEAD' 2>/dev/null || true
+  local lxc_repo_path
+  lxc_repo_path="$(resolve_lxc_repo_path)"
+  if [ -n "$lxc_repo_path" ]; then
+    pct exec "$CTID" -- env LXC_REPO_PATH="$lxc_repo_path" bash -lc 'cd "$LXC_REPO_PATH" && git rev-parse HEAD' 2>/dev/null || true
+  else
+    pct exec "$CTID" -- cat /opt/melodarr-proxy/.site-test-deployed-revision 2>/dev/null || true
+  fi
 }
 
 # ── Optional interactive wizard ──────────────────────────────────
@@ -131,6 +286,7 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
   ask    API_KEY      "Proxy API key"                         "$API_KEY"
   ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
   ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
+  ask    LXC_REPO_PATH "LXC source repo path for branch deploys (blank = auto)" "$LXC_REPO_PATH"
   ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
   if [ "$LIST_BRANCHES" = "1" ]; then
     ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
