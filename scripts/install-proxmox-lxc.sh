@@ -369,6 +369,7 @@ services:
       DATA_DIR: /data
       APP_NAME: melodarr-proxy
       APP_CONTACT: ${APP_CONTACT}
+      APP_VERSION: ${APP_VERSION:-0.3.0}
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
       MUSICBRAINZ_BASE_URL: https://musicbrainz.org/ws/2
