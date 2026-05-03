@@ -184,7 +184,15 @@ async function getSettingsVersion (versionId) {
     throw new Error(`Version ${versionId} not found`)
   }
 
-  const data = await fs.promises.readFile(getVersionPath(versionId), 'utf8')
+  let data
+  try {
+    data = await fs.promises.readFile(getVersionPath(versionId), 'utf8')
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new Error(`Version ${versionId} not found`)
+    }
+    throw err
+  }
   const versionSettings = JSON.parse(data)
   validateSettings(versionSettings)
   return { meta, settings: versionSettings }
