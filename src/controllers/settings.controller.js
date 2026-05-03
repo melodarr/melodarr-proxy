@@ -388,13 +388,30 @@ async function listVersions (req, res) {
   })
 }
 
+function getVersionErrorStatus (err) {
+  if (err.message === 'Invalid versionId') {
+    return 400
+  }
+
+  if (
+    err.code === 'ENOENT' ||
+    err.status === 404 ||
+    err.statusCode === 404 ||
+    /not found/i.test(err.message)
+  ) {
+    return 404
+  }
+
+  return 500
+}
+
 async function getVersion (req, res) {
   const { id } = req.params
   try {
     const version = await getSettingsVersion(id)
     res.json(version)
   } catch (err) {
-    const status = err.message === 'Invalid versionId' ? 400 : 404
+    const status = getVersionErrorStatus(err)
     res.status(status).json({ error: err.message })
   }
 }
