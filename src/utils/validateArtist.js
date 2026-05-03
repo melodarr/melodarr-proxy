@@ -9,8 +9,10 @@
 //
 // An item is valid iff its shape-appropriate display field
 // (artistName/title) is a non-empty trimmed string, AND the upstream
-// identifier (foreignArtistId / artistId) is present where required.
-// Lidarr explicitly rejects items with an empty ForeignArtistId.
+// identifier (foreignArtistId / artistId) is present where required:
+//   - Lidarr explicitly rejects artists with an empty ForeignArtistId.
+//   - Albums without an artistId have no upstream artist linkage and
+//     would be orphaned inside Lidarr, so they are rejected here too.
 
 function nonEmptyString (v) {
   return typeof v === 'string' && v.trim().length > 0
