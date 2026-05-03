@@ -587,6 +587,7 @@ LOOKUP_SUMMARY=$(echo "$LOOKUP_BODY" | jq '
       hasGenres: (.[0] | has("genres")),
       hasOverview: (.[0] | has("overview")),
       hasDisambiguation: (.[0] | has("disambiguation")),
+      hasOldIds: (.[0] | has("oldIds")),
       hasAliases: (.[0] | has("aliases")),
       hasArtistAliases: (.[0] | has("artistAliases")),
       hasLinks: (.[0] | has("links")),
@@ -625,7 +626,7 @@ fi
 # harness. Optional enrichment fields are printed as diagnostics below so
 # they can be correlated with real Lidarr rejection logs before code adds
 # broad defaults.
-for field_check in hasAliases:aliases hasArtistAliases:artistAliases hasLinks:links hasStatus:status; do
+for field_check in hasOldIds:oldIds hasAliases:aliases hasArtistAliases:artistAliases hasLinks:links hasStatus:status; do
   field_key="${field_check%%:*}"
   field_label="${field_check##*:}"
   if echo "$LOOKUP_SUMMARY" | jq -e ".$field_key" > /dev/null; then

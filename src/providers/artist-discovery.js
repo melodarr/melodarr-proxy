@@ -7,6 +7,7 @@ const theaudiodbProvider = require('./theaudiodb.provider')
 const discogsProvider = require('./discogs.provider')
 const { safeProviderCall } = require('./safeProviderCall')
 const metrics = require('../metrics')
+const { normalizeStringArray } = require('../utils/lidarrArtist')
 
 const FALLBACK_ORDER = ['musicbrainz', 'itunes', 'theaudiodb', 'discogs']
 
@@ -48,6 +49,10 @@ function mergeSongAlbums (preferredAlbums, fallbackAlbums) {
 
 function hasImages (candidate) {
   return Boolean(candidate?.imageUrl) || (Array.isArray(candidate?.images) && candidate.images.length > 0)
+}
+
+function extractMusicBrainzAliases (artist = {}) {
+  return normalizeStringArray((artist.aliases || []).map(alias => alias?.name || alias?.['sort-name']))
 }
 
 function mergeCandidateImages (candidates, imageCandidates) {
@@ -179,6 +184,7 @@ async function enrichArtistImages (candidates, query, enabled, attempts, primary
 async function discoverArtistByMb (query) {
   const result = await upstreamService.musicBrainzGet('/artist', {
     query: `artist:"${String(query).replace(/"/g, '\\"')}"`,
+    inc: 'aliases',
     limit: 10
   })
 
@@ -189,6 +195,9 @@ async function discoverArtistByMb (query) {
     source: 'musicbrainz',
     match: artist.name || '',
     disambiguation: artist.disambiguation || '',
+    oldIds: [],
+    aliases: extractMusicBrainzAliases(artist),
+    artistAliases: extractMusicBrainzAliases(artist),
     score: Number(artist.score || scoreExact(artist.name, query, 100, 70)),
     ids: {
       musicbrainzArtistId: artist.id || ''

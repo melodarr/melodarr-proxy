@@ -1,5 +1,6 @@
 const LIDARR_LOOKUP_ARTIST_DEFAULTS = Object.freeze({
   status: 'continuing',
+  oldIds: Object.freeze([]),
   aliases: Object.freeze([]),
   artistAliases: Object.freeze([]),
   links: Object.freeze([])
@@ -8,6 +9,7 @@ const LIDARR_LOOKUP_ARTIST_DEFAULTS = Object.freeze({
 const LIDARR_SKYHOOK_ARTIST_DEFAULTS = Object.freeze({
   type: 'Group',
   status: 'active',
+  oldIds: Object.freeze([]),
   aliases: Object.freeze([]),
   artistAliases: Object.freeze([]),
   links: Object.freeze([]),
@@ -20,6 +22,7 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'id',
   'foreignArtistId',
   'status',
+  'oldIds',
   'aliases',
   'artistAliases',
   'links',
@@ -35,6 +38,7 @@ const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
   'overview',
   'type',
   'status',
+  'oldIds',
   'aliases',
   'artistAliases',
   'links',
@@ -97,6 +101,7 @@ function normalizeLidarrArtistResponse (value) {
 
   if (isArtistLike(normalized)) {
     const aliases = normalizeAliases(normalized)
+    normalized.oldIds = normalizeStringArray(normalized.oldIds || normalized.OldIds)
     normalized.aliases = aliases
     normalized.artistAliases = aliases
   }
@@ -111,6 +116,7 @@ function withArtistLookupDefaults (artist = {}) {
     id: asString(artist.id),
     foreignArtistId: asString(artist.foreignArtistId || artist.id),
     status: asString(artist.status || LIDARR_LOOKUP_ARTIST_DEFAULTS.status),
+    oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
     aliases: normalizeAliases(artist),
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
@@ -129,6 +135,7 @@ function withSkyhookArtistDefaults (artist = {}) {
     overview: asString(artist.overview),
     type: asString(artist.type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     status: asString(artist.status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
+    oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
     aliases: normalizeAliases(artist),
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),

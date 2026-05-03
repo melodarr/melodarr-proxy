@@ -37,6 +37,7 @@ test('toSkyhookSearchShape — artist candidate is wrapped under "artist" key', 
   assert.equal(a.overview, '')
   assert.equal(a.type, 'Group')
   assert.equal(a.status, 'active')
+  assert.deepEqual(a.oldIds, [])
   assert.deepEqual(a.aliases, [])
   assert.deepEqual(a.artistAliases, [])
   assert.deepEqual(a.links, [])
@@ -119,6 +120,7 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   assert.equal(al.artist.artistName, 'Radiohead')
   assert.deepEqual(al.artist.aliases, [])
   assert.deepEqual(al.artist.artistAliases, [])
+  assert.deepEqual(al.artist.oldIds, [])
   assert.deepEqual(al.links, [])
   assert.equal(al.lastSearchTime, null)
   assert.deepEqual(al.statistics, {
@@ -138,6 +140,7 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   assert.equal(al.artists[0].artistName, 'Radiohead')
   assert.deepEqual(al.artists[0].aliases, [])
   assert.deepEqual(al.artists[0].artistAliases, [])
+  assert.deepEqual(al.artists[0].oldIds, [])
 })
 
 test('toSkyhookSearchShape — artist images default to [] when candidate has none', () => {
@@ -179,7 +182,7 @@ test('toSkyhookSearchShape — output has stable required Lidarr fields (deseria
   // keys; missing keys break the JSON contract even if every value is empty.
   const REQUIRED_ARTIST_KEYS = [
     'id', 'artistName', 'disambiguation', 'overview',
-    'type', 'status', 'aliases', 'artistAliases', 'links', 'images', 'albums'
+    'type', 'status', 'oldIds', 'aliases', 'artistAliases', 'links', 'images', 'albums'
   ]
   const REQUIRED_ALBUM_KEYS = [
     'id', 'title', 'disambiguation', 'overview', 'artistId',

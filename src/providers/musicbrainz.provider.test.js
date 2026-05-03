@@ -60,6 +60,7 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums[1].name, 'Album 2')
     assert.strictEqual(result.albums[1].year, null)
     assert.strictEqual(result.albums[1].releaseDate, null)
+    assert.deepStrictEqual(result.oldIds, [])
     assert.deepStrictEqual(result.aliases, ['Exact Alias', 'Sort Alias'])
     assert.deepStrictEqual(result.artistAliases, ['Exact Alias', 'Sort Alias'])
   })
@@ -96,6 +97,7 @@ test('MusicBrainz Provider', async (t) => {
 
     assert.deepStrictEqual(musicBrainzArtist.aliases, ['BSB', 'Backstreet'])
     assert.deepStrictEqual(musicBrainzArtist.artistAliases, ['BSB', 'Backstreet'])
+    assert.deepStrictEqual(lidarrArtist.oldIds, [])
     assert.deepStrictEqual(lidarrArtist.aliases, ['BSB', 'Backstreet'])
     assert.deepStrictEqual(lidarrArtist.artistAliases, ['BSB', 'Backstreet'])
   })
@@ -141,6 +143,7 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums.length, 1)
     assert.strictEqual(result.albums[0].provider, 'musicbrainz')
     assert.strictEqual(result.providers[0].name, 'musicbrainz')
+    assert.deepStrictEqual(result.oldIds, [])
     assert.deepStrictEqual(result.aliases, ['On a Friday'])
     assert.deepStrictEqual(result.artistAliases, ['On a Friday'])
     assert.deepStrictEqual(withArtistLookupDefaults(result).artistAliases, ['On a Friday'])

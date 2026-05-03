@@ -172,6 +172,7 @@ function buildArtistLookupResponse (data, enrichedTopResult, rankedResults) {
     disambiguation: data.disambiguation || '',
     overview: data.overview || '',
     status: data.status || 'continuing',
+    oldIds: normalizeStringArray(data.oldIds),
     aliases: normalizeStringArray(data.aliases),
     links: data.links || [],
     images: data.images || [],

@@ -87,9 +87,18 @@ test('Artist Discovery Provider', async (t) => {
     const { discovery, setMbMock } = setupMocks({ providers: 'musicbrainz' })
     setMbMock(async (path, params) => {
       assert.strictEqual(path, '/artist')
+      assert.strictEqual(params.inc, 'aliases')
       return {
         artists: [
-          { name: 'Test Artist', id: '1', score: '100' },
+          {
+            name: 'Test Artist',
+            id: '1',
+            score: '100',
+            aliases: [
+              { name: ' Test Alias ' },
+              { 'sort-name': 'Sort Alias' }
+            ]
+          },
           { 'sort-name': 'Test Sort', id: '2', score: '90' }
         ]
       }
@@ -98,6 +107,9 @@ test('Artist Discovery Provider', async (t) => {
     const result = await discovery.discoverArtists({ query: 'Test Artist', type: 'artist' })
     assert.strictEqual(result.length, 2)
     assert.strictEqual(result[0].artistName, 'Test Artist')
+    assert.deepStrictEqual(result[0].oldIds, [])
+    assert.deepStrictEqual(result[0].aliases, ['Test Alias', 'Sort Alias'])
+    assert.deepStrictEqual(result[0].artistAliases, ['Test Alias', 'Sort Alias'])
     assert.strictEqual(result[1].artistName, 'Test Sort')
   })
 

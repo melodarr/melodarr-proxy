@@ -24,6 +24,7 @@ test('withArtistLookupDefaults supplies Lidarr-safe lookup fields', () => {
   assert.equal(artist.id, '')
   assert.equal(artist.foreignArtistId, '')
   assert.equal(artist.status, LIDARR_LOOKUP_ARTIST_DEFAULTS.status)
+  assert.deepEqual(artist.oldIds, [])
   assert.deepEqual(artist.aliases, ['Ella'])
   assert.deepEqual(artist.artistAliases, ['Ella'])
   assert.deepEqual(artist.links, [])
@@ -60,6 +61,8 @@ test('withArtistLookupDefaults backfills aliases for Lidarr add-artist payloads'
 
   assert.ok(Object.prototype.hasOwnProperty.call(artist, 'aliases'))
   assert.ok(Object.prototype.hasOwnProperty.call(artist, 'artistAliases'))
+  assert.ok(Object.prototype.hasOwnProperty.call(artist, 'oldIds'))
+  assert.deepEqual(artist.oldIds, [])
   assert.deepEqual(artist.aliases, [])
   assert.deepEqual(artist.artistAliases, [])
   assert.equal(artist.qualityProfileId, 1)
@@ -81,6 +84,7 @@ test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
   assert.equal(artist.overview, '')
   assert.equal(artist.type, LIDARR_SKYHOOK_ARTIST_DEFAULTS.type)
   assert.equal(artist.status, LIDARR_SKYHOOK_ARTIST_DEFAULTS.status)
+  assert.deepEqual(artist.oldIds, [])
   assert.deepEqual(artist.aliases, ['On a Friday'])
   assert.deepEqual(artist.artistAliases, ['On a Friday'])
   assert.deepEqual(artist.links, [])
@@ -104,6 +108,11 @@ test('normalizeAliases falls back from empty artistAliases to populated aliases'
   assert.deepEqual(normalizeAliases({ artistAliases: [], aliases: ['BSB'] }), ['BSB'])
 })
 
+test('artist defaults preserve oldIds for Lidarr SkyHook metadata inserts', () => {
+  assert.deepEqual(withArtistLookupDefaults({ artistName: 'Radiohead', OldIds: [' old-1 ', ''] }).oldIds, ['old-1'])
+  assert.deepEqual(withSkyhookArtistDefaults({ artistName: 'Radiohead', oldIds: [' old-2 '] }).oldIds, ['old-2'])
+})
+
 test('normalizeLidarrArtistResponse injects aliases into artist-shaped responses', () => {
   const response = normalizeLidarrArtistResponse({
     status: 'continuing',
@@ -116,6 +125,7 @@ test('normalizeLidarrArtistResponse injects aliases into artist-shaped responses
 
   assert.deepEqual(response.aliases, [])
   assert.deepEqual(response.artistAliases, [])
+  assert.deepEqual(response.oldIds, [])
   assert.equal(response.rootFolderPath, '/mnt/shared/Music')
   assert.deepEqual(response.addOptions, { monitor: 'all', searchForMissingAlbums: false })
 })
@@ -156,6 +166,8 @@ test('normalizeLidarrArtistResponse injects aliases into Lidarr add payload with
 
   assert.ok(Object.prototype.hasOwnProperty.call(response, 'aliases'))
   assert.ok(Object.prototype.hasOwnProperty.call(response, 'artistAliases'))
+  assert.ok(Object.prototype.hasOwnProperty.call(response, 'oldIds'))
+  assert.deepEqual(response.oldIds, [])
   assert.deepEqual(response.aliases, [])
   assert.deepEqual(response.artistAliases, [])
   assert.equal(response.artistName, '*NSYNC')
@@ -198,6 +210,7 @@ test('normalizeLidarrArtistResponse injects artistAliases into Backstreet Boys a
 
   assert.deepEqual(response.aliases, [])
   assert.deepEqual(response.artistAliases, [])
+  assert.deepEqual(response.oldIds, [])
   assert.equal(response.artistName, 'Backstreet Boys')
   assert.equal(response.foreignArtistId, '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad')
 })
@@ -206,4 +219,5 @@ test('normalizeLidarrArtistResponse injects aliases into nested SkyHook artists'
   const response = normalizeLidarrArtistResponse([{ artist: { artistName: 'Radiohead', foreignArtistId: 'mb-1' } }])
   assert.deepEqual(response[0].artist.aliases, [])
   assert.deepEqual(response[0].artist.artistAliases, [])
+  assert.deepEqual(response[0].artist.oldIds, [])
 })

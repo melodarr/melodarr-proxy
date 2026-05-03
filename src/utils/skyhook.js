@@ -126,6 +126,7 @@ function wrapAlbum (candidate) {
           id: artistId,
           artistName: asString(candidate.artistName),
           disambiguation: asString(candidate.disambiguation),
+          oldIds: normalizeStringArray(candidate.oldIds || candidate.OldIds),
           aliases: normalizeAliases(candidate),
           artistAliases: normalizeAliases(candidate)
         }

@@ -23,6 +23,7 @@ function assertArtistContract (artist) {
   assert.equal(typeof artist.overview, 'string')
   assert.equal(typeof artist.type, 'string')
   assert.equal(typeof artist.status, 'string')
+  assert.ok(Array.isArray(artist.oldIds))
   assert.ok(Array.isArray(artist.aliases))
   assert.ok(Array.isArray(artist.artistAliases))
   assert.ok(Array.isArray(artist.links))
@@ -89,6 +90,7 @@ function assertAlbumContract (album) {
   assert.equal(typeof album.artist, 'object')
   assert.ok(Array.isArray(album.artist.aliases))
   assert.ok(Array.isArray(album.artist.artistAliases))
+  assert.ok(Array.isArray(album.artist.oldIds))
   assert.ok(Array.isArray(album.images))
   for (const image of album.images) {
     assert.equal(typeof image.coverType, 'string', 'album image missing coverType')
@@ -105,6 +107,7 @@ function assertAlbumContract (album) {
   assert.equal(typeof album.artists[0].id, 'string')
   assert.equal(typeof album.artists[0].artistName, 'string')
   assert.equal(typeof album.artists[0].disambiguation, 'string')
+  assert.ok(Array.isArray(album.artists[0].oldIds))
   assert.ok(Array.isArray(album.artists[0].artistAliases))
 
   assert.equal(album.foreignAlbumId, undefined, 'Lidarr expects id, not foreignAlbumId')
@@ -168,6 +171,8 @@ test('artist lookup golden fixture keeps Lidarr-safe fields stable', () => {
   assert.equal(artist.schemaVersion, 'skyhook-v1')
   assert.equal(typeof artist.artistName, 'string')
   assert.equal(typeof artist.id, 'string')
+  assert.ok(Array.isArray(artist.oldIds))
+  assert.ok(Array.isArray(artist.artistAliases))
   assert.ok(Array.isArray(artist.images))
   assert.equal(artist.images[0].coverType, 'poster')
   assert.ok(Array.isArray(artist.albums))
@@ -184,4 +189,29 @@ test('artist lookup golden fixture keeps Lidarr-safe fields stable', () => {
   assert.equal(typeof album.remoteCover, 'string')
   assert.equal(typeof album.provider, 'string')
   assert.equal(typeof album.ids, 'object')
+})
+
+test('Lidarr add-artist SkyHook metadata contract never maps required DB lists to null', () => {
+  // Source of truth in Lidarr develop:
+  // - ArtistController.AddArtist -> AddArtistService.AddSkyhookData()
+  // - AddSkyhookData() calls SkyHookProxy.GetArtistInfo(foreignArtistId)
+  // - SkyHookProxy.MapArtistMetadata() assigns:
+  //   Aliases = resource.ArtistAliases, OldForeignArtistIds = resource.OldIds,
+  //   Images = resource.Images?.Select(...).ToList()
+  // - migrations make ArtistMetadata.Images, Aliases, and OldForeignArtistIds
+  //   non-null database columns.
+  const searchFixture = readFixture('skyhook-search.golden.json')
+  const lookupFixture = readFixture('artist-lookup.golden.json')
+  const skyhookArtistResources = [
+    searchFixture[0].artist,
+    searchFixture[1].album.artist,
+    searchFixture[1].album.artists[0],
+    lookupFixture[0]
+  ]
+
+  for (const artist of skyhookArtistResources) {
+    assert.ok(Array.isArray(artist.oldIds), 'Lidarr resource.oldIds must map to non-null ArtistMetadata.OldForeignArtistIds')
+    assert.ok(Array.isArray(artist.artistAliases), 'Lidarr resource.artistAliases must map to non-null ArtistMetadata.Aliases')
+    assert.ok(Array.isArray(artist.images || []), 'Lidarr resource.images must map to non-null ArtistMetadata.Images')
+  }
 })
