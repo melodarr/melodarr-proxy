@@ -277,8 +277,8 @@ function setValidator (fn) {
   _validatorFn = fn
 }
 
-function runCanaryValidator (mode = 'deploy') {
-  if (_validatorFn) return _validatorFn(mode)
+function runCanaryValidator (mode = 'deploy', nextSettings, diff) {
+  if (_validatorFn) return _validatorFn(mode, nextSettings, diff)
   if (process.env.NODE_ENV === 'test') {
     return Promise.resolve({ code: 0, output: 'mocked test' })
   }

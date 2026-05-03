@@ -413,6 +413,25 @@ test('validateSettingsEndpoint returns validation result', async () => {
   assert.deepEqual(res.body.diff, { modified: true })
 })
 
+test('validateSettingsEndpoint forwards (mode, nextSettings, diff) to injected validator', async () => {
+  let capturedArgs = null
+  const c = loadController({
+    validateConfigInMemory: async (updates, validatorFn) => {
+      const nextSettings = { runtime: { cacheTtlSeconds: 100 } }
+      const diff = { modified: true }
+      capturedArgs = await validatorFn(nextSettings, diff)
+      return { code: 0, output: 'ok', diff }
+    }
+  })
+  c.setValidator((mode, ns, d) => Promise.resolve({ mode, ns, d }))
+  const res = makeRes()
+  await c.validateSettingsEndpoint({ body: { cacheTtlSeconds: 100 } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(capturedArgs.mode, 'config')
+  assert.deepEqual(capturedArgs.ns, { runtime: { cacheTtlSeconds: 100 } })
+  assert.deepEqual(capturedArgs.d, { modified: true })
+})
+
 // ── Versioning and Rollback ──────────────────────────────────────
 
 test('listVersions returns current, lastKnownGood, and reversed versions', async () => {
