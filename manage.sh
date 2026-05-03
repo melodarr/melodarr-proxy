@@ -148,7 +148,7 @@ while true; do
         exit 1
       fi
       
-      npm version --no-git-tag-version "$VERSION"
+      npm version --no-git-tag-version --allow-same-version "$VERSION"
       compose_cmd down --remove-orphans
       ensure_network
       compose_cmd up -d --build --remove-orphans proxy redis melodash
