@@ -355,8 +355,10 @@ let pendingSkipVersioning = false
 function saveSettingsDebounced (nextSettings, { skipVersioning = false } = {}) {
   settings = nextSettings
   if (metrics.recordSettingsDebounce) metrics.recordSettingsDebounce()
+  // Update the pending skip flag: only skip versioning when every queued call
+  // has opted out. If any call wants a version snapshot, honour it.
+  pendingSkipVersioning = saveTimeout ? (pendingSkipVersioning && skipVersioning) : skipVersioning
   if (!saveTimeout) {
-    pendingSkipVersioning = skipVersioning
     saveTimeout = setTimeout(() => {
       const skip = pendingSkipVersioning
       saveTimeout = null
