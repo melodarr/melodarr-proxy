@@ -46,7 +46,12 @@ function assertValidSettingsVersionId (versionId) {
 
 function getVersionPath (versionId) {
   assertValidSettingsVersionId(versionId)
-  return path.join(versionsDir, `${versionId}.json`)
+  const resolved = path.resolve(versionsDir, `${versionId}.json`)
+  const base = versionsDir.endsWith(path.sep) ? versionsDir : versionsDir + path.sep
+  if (!resolved.startsWith(base)) {
+    throw new Error('Invalid versionId')
+  }
+  return resolved
 }
 
 async function writeAtomic (filePath, data) {
