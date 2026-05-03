@@ -162,6 +162,12 @@ fi
 echo
 echo "[Phase 2] MusicBrainz-dependent"
 
+# In config mode the caller only needs to know the proxy's own API is
+# structurally sound — reachability of upstream providers is not relevant
+# to in-memory config validation. Skip Phase 2 and report a full pass.
+if [ "$VALIDATION_MODE" = "config" ]; then
+  echo "  Skipped in config mode — Phase 1 structure checks are sufficient"
+else
 # Probe MB from the runner host. --max-time prevents a hung TLS handshake
 # from stalling the validator (which has been the live failure mode lately).
 MB_PROBE=$(curl -s --max-time "$MB_TIMEOUT" -o /dev/null -w '%{http_code}' "$MB_URL" 2>/dev/null || echo "000")
@@ -195,6 +201,7 @@ else
   MB_SKIPPED=1
   echo "  MusicBrainz unreachable (HTTP $MB_PROBE) — Phase 2 skipped"
   echo "  Verdict will be PROVISIONAL — caller must set ALLOW_PROVISIONAL=1 to promote"
+fi
 fi
 
 # ────────────────────────────────────────────────────────

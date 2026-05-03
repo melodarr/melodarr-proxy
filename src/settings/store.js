@@ -351,13 +351,17 @@ function saveSettings (nextSettings) {
 }
 
 let saveTimeout = null
+let pendingSkipVersioning = false
 function saveSettingsDebounced (nextSettings, { skipVersioning = false } = {}) {
   settings = nextSettings
   if (metrics.recordSettingsDebounce) metrics.recordSettingsDebounce()
   if (!saveTimeout) {
+    pendingSkipVersioning = skipVersioning
     saveTimeout = setTimeout(() => {
+      const skip = pendingSkipVersioning
       saveTimeout = null
-      saveSettingsFile(settings, 'auto', 'system', { skipVersioning })
+      pendingSkipVersioning = false
+      saveSettingsFile(settings, 'auto', 'system', { skipVersioning: skip })
     }, 2000)
     if (saveTimeout.unref) saveTimeout.unref()
   }
@@ -366,8 +370,10 @@ function saveSettingsDebounced (nextSettings, { skipVersioning = false } = {}) {
 async function flushSettingsWrites () {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
+    const skip = pendingSkipVersioning
     saveTimeout = null
-    await saveSettingsFile(settings)
+    pendingSkipVersioning = false
+    await saveSettingsFile(settings, 'auto', 'system', { skipVersioning: skip })
   }
   return writePromise
 }

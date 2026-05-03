@@ -461,8 +461,8 @@ async function getVersion (req, res) {
 }
 
 async function applyRollback (req, res) {
-  const { versionId } = req.body
-  const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true'
+  const versionId = req.body?.versionId
+  const dryRun = req.query?.dryRun === '1' || req.query?.dryRun === 'true'
 
   if (!versionId) {
     return res.status(400).json({ error: 'versionId is required' })
