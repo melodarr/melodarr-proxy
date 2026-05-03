@@ -451,11 +451,50 @@ function deleteApiKey (id) {
   return true
 }
 
-let internalValidatorKey = null
-function setInternalValidatorKey (key) { internalValidatorKey = key }
+const INTERNAL_VALIDATOR_KEY_TTL_MS = 5 * 60 * 1000
+const internalValidatorKeys = new Map()
+
+function pruneExpiredInternalValidatorKeys (now = Date.now()) {
+  for (const [key, expiresAt] of internalValidatorKeys.entries()) {
+    if (expiresAt <= now) {
+      internalValidatorKeys.delete(key)
+    }
+  }
+}
+
+function setInternalValidatorKey (key) {
+  if (!key) {
+    return
+  }
+
+  const now = Date.now()
+  pruneExpiredInternalValidatorKeys(now)
+  internalValidatorKeys.set(key, now + INTERNAL_VALIDATOR_KEY_TTL_MS)
+}
+
+function isActiveInternalValidatorKey (key) {
+  if (!key) {
+    return false
+  }
+
+  const now = Date.now()
+  pruneExpiredInternalValidatorKeys(now)
+  const expiresAt = internalValidatorKeys.get(key)
+
+  if (!expiresAt) {
+    return false
+  }
+
+  if (expiresAt <= now) {
+    internalValidatorKeys.delete(key)
+    return false
+  }
+
+  return true
+}
 
 function checkApiKey (apiKey) {
-  if (internalValidatorKey && apiKey === internalValidatorKey) {
+  if (isActiveInternalValidatorKey(apiKey)) {
     return { valid: true, id: 'internal', name: 'validator' }
   }
   // Omit reloadSettings() on the hot path to prevent synchronous disk reads
