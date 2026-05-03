@@ -796,10 +796,21 @@ async function validateConfigInMemory (updates, validatorFn) {
     else nextRuntime[key] = value
   }
 
+  const previousSettings = settings
   const nextSettings = { ...settings, runtime: nextRuntime }
-  const diff = computeDiff(settings, nextSettings)
-  const result = await validatorFn(nextSettings, diff)
-  return { ...result, diff }
+  const diff = computeDiff(previousSettings, nextSettings)
+
+  // Swap in the proposed settings for the duration of the validator only.
+  // No disk writes happen here — saveSettingsFile/saveSettingsDebounced are
+  // not called, so the version history and on-disk settings.json stay
+  // untouched even if the canary runs against the new values.
+  settings = nextSettings
+  try {
+    const result = await validatorFn(nextSettings, diff)
+    return { ...result, diff }
+  } finally {
+    settings = previousSettings
+  }
 }
 
 module.exports = {
