@@ -258,7 +258,6 @@ services:
       REDIS_URL: redis://redis:6379
       DATA_DIR: /data
       APP_NAME: melodarr-proxy
-      APP_VERSION: ${APP_VERSION}
       APP_CONTACT: ${APP_CONTACT}
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
@@ -369,7 +368,6 @@ services:
       REDIS_URL: redis://redis:6379
       DATA_DIR: /data
       APP_NAME: melodarr-proxy
-      APP_VERSION: ${APP_VERSION}
       APP_CONTACT: ${APP_CONTACT}
       METADATA_PROVIDERS: musicbrainz,itunes
       PROVIDER_PRIORITY: musicbrainz,theaudiodb,itunes,lastfm,discogs
