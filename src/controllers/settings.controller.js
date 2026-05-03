@@ -571,13 +571,19 @@ async function validateSettingsEndpoint (req, res) {
 
   try {
     const result = await validateConfigInMemory(updates, async (nextSettings) => {
-      const previousSettings = JSON.parse(JSON.stringify(getRuntimeConfig()))
+      const previousRuntimeSettings = getRuntimeConfig()
+      const previousRuntimeValues = Object.fromEntries(
+        Object.entries(previousRuntimeSettings).map(([key, entry]) => [key, entry && typeof entry === 'object' ? entry.value : entry])
+      )
+      const nextRuntimeValues = nextSettings && nextSettings.runtime && typeof nextSettings.runtime === 'object'
+        ? { ...nextSettings.runtime }
+        : {}
 
-      updateRuntimeConfig(nextSettings)
+      updateRuntimeConfig(nextRuntimeValues)
       try {
         return await runCanaryValidator('config')
       } finally {
-        updateRuntimeConfig(previousSettings)
+        updateRuntimeConfig(previousRuntimeValues)
       }
     })
     res.json(result)
