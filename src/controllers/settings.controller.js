@@ -318,17 +318,23 @@ async function updateSettings (req, res) {
     const { getHealthStatus } = require('./health.controller')
     const health = await getHealthStatus()
 
-    if (health.status !== 'ok' && previousVersion) {
+    if (health.status !== 'ok') {
       logger.warn('validation_failed', { reason: 'health check degraded', health })
-      try {
-        await rollbackSettings(previousVersion, false, 'system:auto-rollback')
-        logger.info('rollback_applied', { versionId: previousVersion })
-      } catch (rollbackErr) {
-        logger.error('Auto-rollback failed', { error: rollbackErr.message })
-        return res.status(500).json({ error: 'System degraded and auto-rollback failed. Operator intervention required.' })
+      if (previousVersion) {
+        try {
+          await rollbackSettings(previousVersion, false, 'system:auto-rollback')
+          logger.info('rollback_applied', { versionId: previousVersion })
+        } catch (rollbackErr) {
+          logger.error('Auto-rollback failed', { error: rollbackErr.message })
+          return res.status(500).json({ error: 'System degraded and auto-rollback failed. Operator intervention required.' })
+        }
+        return res.status(400).json({
+          error: 'Configuration change degraded system health. Automatically rolled back.',
+          health
+        })
       }
       return res.status(400).json({
-        error: 'Configuration change degraded system health. Automatically rolled back.',
+        error: 'Configuration change degraded system health.',
         health
       })
     }
