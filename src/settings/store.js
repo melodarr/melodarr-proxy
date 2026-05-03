@@ -254,6 +254,11 @@ async function rollbackSettings (versionId, dryRun = false, actor = 'operator') 
   return new Promise((resolve, reject) => {
     writePromise = writePromise.then(async () => {
       try {
+        if (saveTimeout) {
+          clearTimeout(saveTimeout)
+          saveTimeout = null
+        }
+
         const index = await getSettingsVersions()
         const targetVersion = index.versions.find(v => v.id === versionId)
         if (!targetVersion) {
