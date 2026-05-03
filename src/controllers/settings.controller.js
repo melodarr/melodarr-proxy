@@ -305,11 +305,21 @@ function runCanaryValidator (mode = 'deploy') {
         .split('\n')
         .filter(line => line.includes('✗'))
         .map(line => line.split('✗')[1].trim())
+      const exitCode = error
+        ? (typeof error.code === 'number' ? error.code : 1)
+        : 0
 
       resolve({
-        code: error ? error.code : 0,
+        code: exitCode,
         output: rawOutput,
-        failedChecks
+        failedChecks,
+        signal: error && error.signal ? error.signal : null,
+        spawnError: error && typeof error.code !== 'number'
+          ? {
+              code: error.code || null,
+              message: error.message
+            }
+          : null
       })
     })
   })
