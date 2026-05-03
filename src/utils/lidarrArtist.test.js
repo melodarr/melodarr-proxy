@@ -89,7 +89,7 @@ test('normalizeStringArray trims values and drops blanks', () => {
   assert.deepEqual(normalizeStringArray('not-array'), [])
 })
 
-test('normalizeAliases accepts Lidarr PascalCase input and emits lowercase aliases', () => {
+test('normalizeAliases accepts Lidarr PascalCase input and trims while preserving alias casing', () => {
   assert.deepEqual(normalizeAliases({ Aliases: [' Surf ', '', null] }), ['Surf'])
   assert.deepEqual(withArtistLookupDefaults({ artistName: 'The Beach Boys', Aliases: ['Beach Boys'] }).aliases, ['Beach Boys'])
 })
