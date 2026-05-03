@@ -51,17 +51,42 @@ function getVersionPath (versionId) {
 
 async function writeAtomic (filePath, data) {
   const tmpPath = `${filePath}.tmp.${crypto.randomBytes(4).toString('hex')}`
-  const fh = await fs.promises.open(tmpPath, 'w', 0o600)
-  await fh.writeFile(data)
-  await fh.sync()
-  await fh.close()
-  await fs.promises.rename(tmpPath, filePath)
+  let fh
+  let renamed = false
+
+  try {
+    fh = await fs.promises.open(tmpPath, 'w', 0o600)
+    try {
+      await fh.writeFile(data)
+      await fh.sync()
+    } finally {
+      if (fh) {
+        await fh.close()
+      }
+    }
+
+    await fs.promises.rename(tmpPath, filePath)
+    renamed = true
+  } finally {
+    if (!renamed) {
+      try {
+        await fs.promises.unlink(tmpPath)
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          throw err
+        }
+      }
+    }
+  }
 
   try {
     const dirPath = path.dirname(filePath)
     const dirFh = await fs.promises.open(dirPath, 'r')
-    await dirFh.sync()
-    await dirFh.close()
+    try {
+      await dirFh.sync()
+    } finally {
+      await dirFh.close()
+    }
   } catch (err) {
     // Ignore error if directory cannot be opened for syncing (e.g. windows)
   }
