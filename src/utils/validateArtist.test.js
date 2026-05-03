@@ -48,6 +48,18 @@ test('isValidArtist — wrapped album with title and artistId → true', () => {
   assert.equal(isValidArtist({ album: { title: 'OK Computer', artistId: 'mb-1' } }), true)
 })
 
+test('isValidArtist — wrapped album with missing artistId → false', () => {
+  assert.equal(isValidArtist({ album: { title: 'OK Computer' } }), false)
+})
+
+test('isValidArtist — wrapped album with empty artistId → false', () => {
+  assert.equal(isValidArtist({ album: { title: 'OK Computer', artistId: '' } }), false)
+})
+
+test('isValidArtist — wrapped album with whitespace artistId → false', () => {
+  assert.equal(isValidArtist({ album: { title: 'OK Computer', artistId: '   ' } }), false)
+})
+
 test('isValidArtist — wrapped album with empty title → false', () => {
   assert.equal(isValidArtist({ album: { title: '' } }), false)
 })
