@@ -69,7 +69,7 @@ function loadController ({
     filename: healthControllerPath,
     loaded: true,
     exports: {
-      getHealthStatus: async () => ({ status: 'ok' })
+      buildHealthPayload: async () => ({ status: 'ok' })
     }
   }
 

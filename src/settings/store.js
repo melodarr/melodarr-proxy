@@ -216,7 +216,7 @@ function flattenConfig (obj, prefix = '') {
   }, {})
 }
 
-function saveSettingsFile (nextSettings, reason = 'auto', actor = 'system') {
+function saveSettingsFile (nextSettings, reason = 'auto', actor = 'system', { skipVersioning = false } = {}) {
   writePromise = writePromise.then(async () => {
     try {
       if (metrics.recordSettingsWrite) metrics.recordSettingsWrite()
@@ -224,7 +224,9 @@ function saveSettingsFile (nextSettings, reason = 'auto', actor = 'system') {
 
       const data = `${JSON.stringify(nextSettings, null, 2)}\n`
       await writeAtomic(settingsPath, data)
-      await commitSettingsVersion(nextSettings, reason, actor)
+      if (!skipVersioning) {
+        await commitSettingsVersion(nextSettings, reason, actor)
+      }
     } catch (err) {
       const logger = require('../utils/logger')
       logger.error('Failed to save settings file', { error: err.message })
@@ -307,13 +309,13 @@ function saveSettings (nextSettings) {
 }
 
 let saveTimeout = null
-function saveSettingsDebounced (nextSettings) {
+function saveSettingsDebounced (nextSettings, { skipVersioning = false } = {}) {
   settings = nextSettings
   if (metrics.recordSettingsDebounce) metrics.recordSettingsDebounce()
   if (!saveTimeout) {
     saveTimeout = setTimeout(() => {
       saveTimeout = null
-      saveSettingsFile(settings)
+      saveSettingsFile(settings, 'auto', 'system', { skipVersioning })
     }, 2000)
     if (saveTimeout.unref) saveTimeout.unref()
   }
@@ -548,7 +550,7 @@ function checkApiKey (apiKey) {
   saveSettingsDebounced({
     ...settings,
     apiKeys: nextKeys
-  })
+  }, { skipVersioning: true })
 
   return {
     valid: true,
