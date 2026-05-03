@@ -48,6 +48,7 @@ MB_URL="${MB_URL:-https://musicbrainz.org}"
 MB_TIMEOUT="${MB_TIMEOUT:-5}"
 GOLDEN_ARTIST="${GOLDEN_ARTIST:-Radiohead}"
 GOLDEN_MBID="${GOLDEN_MBID:-a74b1b7f-71a5-4011-9441-d0b5e4122711}"
+VALIDATION_MODE="${VALIDATION_MODE:-deploy}"
 
 # Strict UUID regex (RFC 4122, lowercase hex). Rejects synthetic
 # placeholders like "itunes:12345" and empty strings.
@@ -102,6 +103,11 @@ check () {
 # ────────────────────────────────────────────────────────
 echo
 echo "[Phase 1] Structure"
+
+if [ "$VALIDATION_MODE" = "config" ]; then
+  VC=$(http_get "$BASE_URL/api/settings/version")
+  check "/api/settings/version is 200" test "$VC" = "200" || P1_FAIL=1
+fi
 
 HC=$(http_get "$BASE_URL/api/health")
 check "/api/health is 200" test "$HC" = "200" || P1_FAIL=1

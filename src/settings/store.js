@@ -72,6 +72,10 @@ async function getSettingsVersions () {
     const data = await fs.promises.readFile(indexFile, 'utf8')
     return JSON.parse(data)
   } catch (err) {
+    if (err.code !== 'ENOENT') {
+      const logger = require('../utils/logger')
+      logger.error('Settings index corrupted or unreadable. Starting fresh history to recover.', { error: err.message })
+    }
     return { current: null, lastKnownGood: null, versions: [] }
   }
 }

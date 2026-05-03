@@ -283,9 +283,16 @@ function runCanaryValidator (mode = 'deploy') {
       }
     }, (error, stdout, stderr) => {
       setInternalValidatorKey(null)
+      const rawOutput = stdout + (stderr ? '\n' + stderr : '')
+      const failedChecks = rawOutput
+        .split('\n')
+        .filter(line => line.includes('✗'))
+        .map(line => line.split('✗')[1].trim())
+
       resolve({
         code: error ? error.code : 0,
-        output: stdout + (stderr ? '\n' + stderr : '')
+        output: rawOutput,
+        failedChecks
       })
     })
   })
@@ -338,7 +345,8 @@ async function updateSettings (req, res) {
       }
       return res.status(400).json({
         error: 'Canary validation failed. Automatically rolled back.',
-        canaryOutput: canaryResult.output
+        canaryOutput: canaryResult.output,
+        failedChecks: canaryResult.failedChecks
       })
     }
 
@@ -355,7 +363,8 @@ async function updateSettings (req, res) {
       }
       return res.status(400).json({
         error: 'Canary validation provisional failure (MB unreachable). Automatically rolled back. Set allowProvisional: true or ALLOW_PROVISIONAL_CONFIG=1 to force.',
-        canaryOutput: canaryResult.output
+        canaryOutput: canaryResult.output,
+        failedChecks: canaryResult.failedChecks
       })
     }
 
