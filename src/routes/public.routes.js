@@ -5,8 +5,6 @@ const lidarrArtistResponseMiddleware = require('../middleware/lidarrArtistRespon
 const proxyStateMiddleware = require('../middleware/proxy.middleware')
 const { handleArtistLookup } = require('../controllers/proxy.controller')
 
-router.use(lidarrArtistResponseMiddleware)
-
-router.get('/artist/search', apiKeyMiddleware, proxyStateMiddleware, handleArtistLookup)
+router.get('/artist/search', lidarrArtistResponseMiddleware, apiKeyMiddleware, proxyStateMiddleware, handleArtistLookup)
 
 module.exports = router
