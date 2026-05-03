@@ -3,12 +3,16 @@ const { normalizeLidarrArtistResponse } = require('../utils/lidarrArtist')
 function isStrictSkyhookMetadataRoute (req) {
   const path = String(req.path || req.url || '').split('?')[0]
   const parts = path.split('/').filter(Boolean)
-  if (parts.length < 2) return false
+  if (parts.length === 0) return false
 
   const last = parts.at(-1)
-  if (['lookup', 'discover', 'search'].includes(String(last).toLowerCase())) return false
-
+  const normalizedLast = String(last).toLowerCase()
   const routeName = parts.at(-2)
+
+  if (normalizedLast === 'search') return routeName !== 'artist'
+  if (normalizedLast === 'discover') return routeName === 'artist'
+  if (normalizedLast === 'lookup') return false
+
   return routeName === 'artist' || routeName === 'album'
 }
 

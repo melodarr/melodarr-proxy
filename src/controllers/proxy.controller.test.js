@@ -458,7 +458,7 @@ test('handleSearch requires a query parameter', async () => {
   assert.equal(res.body.error, 'Missing query parameter "q" or "query"')
 })
 
-test('handleSearch returns cached response in SkyHook shape', async () => {
+test('handleSearch returns cached response in source-derived SkyHook type=all shape', async () => {
   const cacheStore = new Map([
     ['search:test song', {
       data: [{ artistName: 'Cached Artist', type: 'artist', source: 'musicbrainz', ids: { musicbrainzArtistId: 'mb-cache-1' } }],
@@ -470,13 +470,15 @@ test('handleSearch returns cached response in SkyHook shape', async () => {
   await controller.handleSearch({ query: { q: ' Test Song ' } }, res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['X-Cache-Generated-At'], '2026-04-28T00:00:00.000Z')
-  // SkyHook discriminated-union: each item must be wrapped in {artist:{...}}.
+  // SkyHook SearchForNewEntity contract: each item is EntityResource.
   assert.ok(Array.isArray(res.body))
+  assert.deepEqual(Object.keys(res.body[0]).sort(), ['album', 'artist', 'score'])
   assert.ok(res.body[0].artist)
+  assert.equal(res.body[0].album, null)
   assert.equal(res.body[0].artist.id, 'mb-cache-1')
 })
 
-test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candidates', async () => {
+test('handleSearch fetches upstream, caches, and returns source-derived SkyHook candidates', async () => {
   let discoverCalled = false
   const { controller, cacheStore, lockCalls } = loadController({
     discoverArtists: async () => {
@@ -494,9 +496,11 @@ test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candida
   await controller.handleSearch({ query: { q: 'Test Song' } }, res)
   assert.equal(res.statusCode, 200)
   assert.ok(discoverCalled)
-  // Response is the SkyHook polymorphic array Lidarr expects.
+  // Response is the SkyHook EntityResource array Lidarr expects for type=all.
   assert.ok(Array.isArray(res.body))
-  assert.ok(res.body[0].artist, 'must be wrapped under "artist"')
+  assert.deepEqual(Object.keys(res.body[0]).sort(), ['album', 'artist', 'score'])
+  assert.ok(res.body[0].artist, 'must populate EntityResource.artist')
+  assert.equal(res.body[0].album, null)
   assert.equal(res.body[0].artist.artistName, 'Test Artist')
   assert.equal(res.body[0].artist.id, 'mb-fresh-1')
   // Cache stores the raw candidates (transformation happens at response time).
@@ -506,6 +510,27 @@ test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candida
     key: 'lock:search:test song',
     token: 'test-lock'
   })
+})
+
+test('handleSearch with type=artist returns ArtistResource[]', async () => {
+  const { controller } = loadController({
+    discoverArtists: async () => [{
+      artistName: 'Test Artist',
+      type: 'artist',
+      source: 'musicbrainz',
+      id: 'mb-fresh-1',
+      ids: { musicbrainzArtistId: 'mb-fresh-1' }
+    }]
+  })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: 'Test Artist', type: 'artist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body[0].id, 'mb-fresh-1')
+  assert.equal(res.body[0].artistName, 'Test Artist')
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body[0], 'artist'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body[0], 'album'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body[0], 'score'), false)
 })
 
 test('handleSearch handles upstream error', async () => {
@@ -692,7 +717,7 @@ test('handleArtistDiscover requires query', async () => {
   assert.equal(res.statusCode, 400)
 })
 
-test('handleArtistDiscover returns SkyHook-wrapped candidates inside envelope', async () => {
+test('handleArtistDiscover returns source-derived search candidates inside envelope', async () => {
   const { controller } = loadController({
     discoverArtists: async ({ query, type }) => [{
       artistName: query,
@@ -706,11 +731,12 @@ test('handleArtistDiscover returns SkyHook-wrapped candidates inside envelope', 
   await controller.handleArtistDiscover({ query: { q: 'test' } }, res)
   assert.equal(res.statusCode, 200)
   // Envelope shape is preserved (query/type/providers/partial/warning) but
-  // each candidate inside is wrapped in the SkyHook discriminated union.
+  // type=artist candidates follow SkyHook ArtistResource[].
   assert.equal(res.body.query, 'test')
-  assert.ok(res.body.candidates[0].artist)
-  assert.equal(res.body.candidates[0].artist.artistName, 'test')
-  assert.equal(res.body.candidates[0].artist.id, 'mb-discover-1')
+  assert.equal(res.body.candidates[0].artistName, 'test')
+  assert.equal(res.body.candidates[0].id, 'mb-discover-1')
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body.candidates[0], 'artist'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body.candidates[0], 'album'), false)
 })
 
 test('handleArtistDiscover handles errors', async () => {

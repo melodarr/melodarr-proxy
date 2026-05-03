@@ -93,12 +93,12 @@ test('MusicBrainz Provider', async (t) => {
       ...musicBrainzArtist,
       type: 'artist',
       ids: { musicbrainzArtistId: musicBrainzArtist.id }
-    }], 'artist')[0].artist
+    }], 'artist')[0]
 
     assert.deepStrictEqual(musicBrainzArtist.aliases, ['BSB', 'Backstreet'])
     assert.deepStrictEqual(musicBrainzArtist.artistAliases, ['BSB', 'Backstreet'])
     assert.deepStrictEqual(lidarrArtist.oldIds, [])
-    assert.deepStrictEqual(lidarrArtist.aliases, ['BSB', 'Backstreet'])
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(lidarrArtist, 'aliases'), false)
     assert.deepStrictEqual(lidarrArtist.artistAliases, ['BSB', 'Backstreet'])
   })
 

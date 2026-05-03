@@ -42,6 +42,10 @@ test('isValidArtist — wrapped artist with missing or empty foreignArtistId is 
   assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: undefined } }), false)
 })
 
+test('isValidArtist — strict SkyHook wrapped artist accepts id instead of foreignArtistId', () => {
+  assert.equal(isValidArtist({ artist: { artistName: 'X', id: 'mb-1' } }), true)
+})
+
 // ── SkyHook wrapped album ─────────────────────────────────────────
 
 test('isValidArtist — wrapped album with title and artistId → true', () => {
@@ -81,6 +85,10 @@ test('isValidArtist — unwrapped lookup artist with missing/empty/whitespace fo
   assert.equal(isValidArtist({ artistName: 'X', albums: [] }), false)
   assert.equal(isValidArtist({ artistName: 'X', foreignArtistId: '', albums: [] }), false)
   assert.equal(isValidArtist({ artistName: 'X', foreignArtistId: '   ', albums: [] }), false)
+})
+
+test('isValidArtist — strict SkyHook unwrapped artist accepts id instead of foreignArtistId', () => {
+  assert.equal(isValidArtist({ artistName: 'X', id: 'mb-1', albums: [] }), true)
 })
 
 test('isValidArtist — unwrapped lookup artist with empty artistName → false', () => {
