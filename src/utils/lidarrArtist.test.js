@@ -40,6 +40,29 @@ test('withArtistLookupDefaults does not override an explicit foreignArtistId wit
   assert.equal(artist.foreignArtistId, 'faid-value')
 })
 
+test('withArtistLookupDefaults backfills aliases for Lidarr add-artist payloads', () => {
+  const artist = withArtistLookupDefaults({
+    status: 'continuing',
+    ended: false,
+    artistName: 'The Beach Boys',
+    foreignArtistId: 'ebfc1398-8d96-47e3-82c3-f782abcdb13d',
+    qualityProfileId: 1,
+    metadataProfileId: 1,
+    monitored: true,
+    monitorNewItems: 'all',
+    folder: 'The Beach Boys',
+    rootFolderPath: '/mnt/shared/Music',
+    addOptions: { monitor: 'all', searchForMissingAlbums: false }
+  })
+
+  assert.ok(Object.prototype.hasOwnProperty.call(artist, 'aliases'))
+  assert.deepEqual(artist.aliases, [])
+  assert.equal(artist.qualityProfileId, 1)
+  assert.equal(artist.metadataProfileId, 1)
+  assert.equal(artist.rootFolderPath, '/mnt/shared/Music')
+  assert.deepEqual(artist.addOptions, { monitor: 'all', searchForMissingAlbums: false })
+})
+
 test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
   const artist = withSkyhookArtistDefaults({ artistName: 'Radiohead', aliases: ['On a Friday'] })
 
