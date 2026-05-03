@@ -571,7 +571,10 @@ async function validateSettingsEndpoint (req, res) {
   }
 
   try {
-    const result = await validateConfigInMemory(updates, () => runCanaryValidator('config'))
+    const result = await validateConfigInMemory(
+      updates,
+      (nextSettings, diff) => runCanaryValidator('config', nextSettings, diff)
+    )
     res.json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })
