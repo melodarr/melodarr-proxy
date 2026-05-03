@@ -105,8 +105,7 @@ echo
 echo "[Phase 1] Structure"
 
 if [ "$VALIDATION_MODE" = "config" ]; then
-  VC=$(http_get "$BASE_URL/api/settings/version")
-  check "/api/settings/version is 200" test "$VC" = "200" || P1_FAIL=1
+  echo "  - Skipping /api/settings/version in config mode: endpoint requires settings-session auth and this validator uses x-api-key only"
 fi
 
 HC=$(http_get "$BASE_URL/api/health")
