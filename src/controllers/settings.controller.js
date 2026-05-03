@@ -26,6 +26,21 @@ const SETTINGS_COOKIE = 'melodarr_proxy_settings'
 const SETTINGS_SESSION_TTL_MS = 12 * 60 * 60 * 1000
 const CSRF_HEADER = 'x-csrf-token'
 
+const SENSITIVE_SETTING_KEYS = new Set([
+  'musicbrainzApiKey',
+  'lastfmApiKey',
+  'discogsToken',
+  'theAudioDbApiKey',
+  'customProviderToken'
+])
+
+function redactSensitiveKeys (obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [k, SENSITIVE_SETTING_KEYS.has(k) ? '[REDACTED]' : v])
+  )
+}
+
 function getCookie (req, name) {
   const cookies = req.headers?.cookie || ''
   const match = cookies
@@ -311,7 +326,7 @@ async function updateSettings (req, res) {
   const result = updateRuntimeConfig(updates)
 
   if (Object.keys(result.applied || {}).length > 0 || Object.keys(result.cleared || {}).length > 0) {
-    logger.info('config_update', { applied: result.applied, cleared: result.cleared })
+    logger.info('config_update', { applied: redactSensitiveKeys(result.applied), cleared: redactSensitiveKeys(result.cleared) })
     await flushSettingsWrites()
 
     // Check health after config change
