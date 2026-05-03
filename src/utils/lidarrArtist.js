@@ -60,6 +60,59 @@ function normalizeArray (value) {
   return Array.isArray(value) ? value : []
 }
 
+function normalizeReleaseStatuses (value) {
+  const statuses = normalizeStringArray(value)
+  return statuses.length > 0 ? statuses : ['Official']
+}
+
+function normalizeRating (value) {
+  if (!value || typeof value !== 'object') {
+    return { count: 0, value: 0 }
+  }
+
+  return {
+    count: Number(value.count ?? value.votes ?? 0) || 0,
+    value: Number(value.value ?? 0) || 0
+  }
+}
+
+function normalizeRatings (value) {
+  if (!value || typeof value !== 'object') {
+    return { votes: 0, value: 0 }
+  }
+
+  return {
+    votes: Number(value.votes ?? value.count ?? 0) || 0,
+    value: Number(value.value ?? 0) || 0
+  }
+}
+
+function normalizeAlbum (album = {}) {
+  const type = asString(album.type || album.albumType || album.primaryType || 'Album')
+  const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
+  const images = normalizeArray(album.images)
+
+  return {
+    ...album,
+    id: asString(album.id || album.foreignAlbumId),
+    oldIds: normalizeStringArray(album.oldIds || album.OldIds),
+    title: asString(album.title || album.name || album.albumName),
+    type,
+    albumType: type,
+    secondaryTypes: normalizeStringArray(album.secondaryTypes || album.SecondaryTypes),
+    releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
+    rating: normalizeRating(album.rating || album.ratings),
+    ratings: normalizeRatings(album.ratings || album.rating),
+    releaseDate: releaseDate || null,
+    releases: normalizeArray(album.releases),
+    genres: normalizeStringArray(album.genres),
+    media: normalizeArray(album.media),
+    images,
+    links: normalizeArray(album.links),
+    remoteCover: asString(album.remoteCover || images[0]?.remoteUrl || images[0]?.url)
+  }
+}
+
 function normalizeAliases (artist) {
   const candidates = [
     artist.artistAliases,
@@ -121,7 +174,7 @@ function withArtistLookupDefaults (artist = {}) {
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum)
   }
 }
 
@@ -140,7 +193,7 @@ function withSkyhookArtistDefaults (artist = {}) {
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum)
   }
 }
 
@@ -151,6 +204,7 @@ module.exports = {
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   asString,
   normalizeAliases,
+  normalizeAlbum,
   normalizeLidarrArtistResponse,
   normalizeStringArray,
   withArtistLookupDefaults,

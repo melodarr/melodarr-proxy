@@ -12,7 +12,7 @@ const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
 const { isValidArtist } = require('../utils/validateArtist')
-const { normalizeStringArray, withArtistLookupDefaults } = require('../utils/lidarrArtist')
+const { normalizeAlbum, normalizeStringArray, withArtistLookupDefaults, withSkyhookArtistDefaults } = require('../utils/lidarrArtist')
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -142,12 +142,32 @@ function summarizeProvidersFromAlbums (albums = []) {
 }
 
 function buildArtistLookupRankingInput (term, data) {
+  const artistId = data.id || data.foreignArtistId || ''
+  const nestedArtist = withSkyhookArtistDefaults({
+    artistName: data.artistName,
+    id: artistId,
+    foreignArtistId: artistId,
+    disambiguation: data.disambiguation || '',
+    overview: data.overview || '',
+    type: data.type || 'Group',
+    status: data.status || 'active',
+    oldIds: normalizeStringArray(data.oldIds),
+    aliases: normalizeStringArray(data.artistAliases || data.aliases),
+    artistAliases: normalizeStringArray(data.artistAliases || data.aliases),
+    links: data.links || [],
+    images: data.images || [],
+    albums: []
+  })
+
   return {
     query: term,
     results: [
       {
         artistName: data.artistName,
         albums: data.albums.map(album => ({
+          artistId,
+          artist: nestedArtist,
+          artists: [nestedArtist],
           title: album.name,
           id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
           firstReleaseDate: toIsoDate(album.releaseDate || album.year),
@@ -156,7 +176,7 @@ function buildArtistLookupRankingInput (term, data) {
           remoteCover: album.imageUrl || '',
           provider: album.provider || '',
           ids: album.ids || {}
-        })),
+        })).map(normalizeAlbum),
         providerSources: Array.from(new Set(data.albums.map(a => a.provider))),
         confidence: data.confidence
       }

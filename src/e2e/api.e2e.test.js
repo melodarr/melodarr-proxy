@@ -66,7 +66,17 @@ describe('API E2E Tests', () => {
       mock.method(axiosModule, 'get', async (url, config) => {
         if (url.includes('musicbrainz.org')) {
           if (url.includes('/release-group')) {
-            return { data: { 'release-groups': [] } }
+            return {
+              data: {
+                'release-groups': [{
+                  id: '920a68fe-7b93-3d0e-bf73-44ac72f03dd2',
+                  title: 'Millennium',
+                  'first-release-date': '1999-05-18',
+                  'primary-type': 'Album',
+                  'secondary-types': []
+                }]
+              }
+            }
           }
           if (url.includes('/artist/')) {
             return {
@@ -187,6 +197,67 @@ describe('API E2E Tests', () => {
       assert.deepStrictEqual(res.data.artistAliases, ['BSB', 'Back Street Boys'])
       assert.ok(Array.isArray(res.data.images))
       assert.ok(Array.isArray(res.data.albums))
+    })
+
+    it('Lidarr POST /api/v1/artist add flow can refetch SkyHook metadata by foreignArtistId', async () => {
+      // Source of truth in Lidarr develop:
+      // ArtistController.AddArtist accepts this public resource, then
+      // AddArtistService calls SkyHookProxy.GetArtistInfo(foreignArtistId),
+      // which requests route artist/{foreignArtistId}.
+      const lidarrAddArtistRequest = {
+        status: 'continuing',
+        ended: false,
+        artistName: 'Backstreet Boys',
+        foreignArtistId: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+        overview: '',
+        disambiguation: '',
+        links: [],
+        images: [],
+        qualityProfileId: 1,
+        metadataProfileId: 1,
+        monitored: true,
+        monitorNewItems: 'all',
+        rootFolderPath: '/mnt/shared/Music',
+        folder: 'Backstreet Boys',
+        genres: [],
+        tags: [],
+        ratings: { votes: 0, value: 0 },
+        addOptions: { monitor: 'all', searchForMissingAlbums: false }
+      }
+
+      const lidarrPublicEndpoint = '/api/v1/artist'
+      const proxyMetadataEndpoint = `/api/artist/${lidarrAddArtistRequest.foreignArtistId}`
+
+      assert.strictEqual(lidarrPublicEndpoint, '/api/v1/artist')
+      assert.strictEqual(proxyMetadataEndpoint, '/api/artist/2f569e60-0a1b-4fb9-95a4-3dc1525d1aad')
+
+      const res = await client.get(proxyMetadataEndpoint)
+
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data.id, lidarrAddArtistRequest.foreignArtistId)
+      assert.strictEqual(res.data.artistName, lidarrAddArtistRequest.artistName)
+      assert.deepStrictEqual(res.data.oldIds, [])
+      assert.deepStrictEqual(res.data.artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(res.data.images))
+      assert.ok(Array.isArray(res.data.links))
+      assert.ok(Array.isArray(res.data.genres))
+      assert.ok(Array.isArray(res.data.albums))
+
+      const album = res.data.albums[0]
+      assert.ok(album, 'metadata refetch should include mapped MusicBrainz albums when present')
+      assert.strictEqual(album.id, '920a68fe-7b93-3d0e-bf73-44ac72f03dd2')
+      assert.deepStrictEqual(album.oldIds, [])
+      assert.strictEqual(album.type, 'Album')
+      assert.deepStrictEqual(album.secondaryTypes, [])
+      assert.deepStrictEqual(album.releaseStatuses, ['Official'])
+      assert.deepStrictEqual(album.rating, { count: 0, value: 0 })
+      assert.ok(Array.isArray(album.releases))
+      assert.ok(Array.isArray(album.images))
+      assert.ok(Array.isArray(album.links))
+      assert.ok(Array.isArray(album.artists))
+      assert.deepStrictEqual(album.artists[0].artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(album.artists[0].images))
+      assert.ok(Array.isArray(album.artists[0].links))
     })
   })
 

@@ -15,7 +15,7 @@
 const {
   LIDARR_SKYHOOK_ARTIST_DEFAULTS,
   asString,
-  normalizeAliases,
+  normalizeAlbum,
   normalizeStringArray,
   withSkyhookArtistDefaults
 } = require('./lidarrArtist')
@@ -90,9 +90,12 @@ function wrapAlbum (candidate) {
   const artistId = pickArtistMbid(candidate)
   const images = normalizeImages(candidate, 'cover')
   const releaseDate = asString(candidate.releaseDate || candidate.firstReleaseDate || candidate.year)
+  const type = asString(candidate.albumType || candidate.primaryType || candidate.typeName || 'Album')
+  const nestedArtist = buildNestedArtist(candidate, artistId)
   return {
-    album: {
+    album: normalizeAlbum({
       id: albumId,
+      oldIds: normalizeStringArray(candidate.oldIds || candidate.OldIds),
       title: asString(candidate.match || candidate.albumName || candidate.title),
       disambiguation: asString(candidate.disambiguation),
       overview: asString(candidate.overview),
@@ -101,15 +104,18 @@ function wrapAlbum (candidate) {
       anyReleaseOk: false,
       profileId: 0,
       duration: 0,
-      albumType: asString(candidate.albumType || candidate.primaryType || 'Album'),
+      type,
+      albumType: type,
       secondaryTypes: normalizeStringArray(candidate.secondaryTypes),
+      releaseStatuses: normalizeStringArray(candidate.releaseStatuses || candidate.ReleaseStatuses || ['Official']),
       mediumCount: 0,
+      rating: { count: 0, value: 0 },
       ratings: { votes: 0, value: 0 },
-      releaseDate,
+      releaseDate: releaseDate || null,
       releases: [],
       genres: normalizeStringArray(candidate.genres),
       media: [],
-      artist: buildNestedArtist(candidate, artistId),
+      artist: nestedArtist,
       images,
       links: [],
       lastSearchTime: null,
@@ -122,16 +128,9 @@ function wrapAlbum (candidate) {
       addOptions: {},
       remoteCover: images[0]?.remoteUrl || images[0]?.url || '',
       artists: [
-        {
-          id: artistId,
-          artistName: asString(candidate.artistName),
-          disambiguation: asString(candidate.disambiguation),
-          oldIds: normalizeStringArray(candidate.oldIds || candidate.OldIds),
-          aliases: normalizeAliases(candidate),
-          artistAliases: normalizeAliases(candidate)
-        }
+        nestedArtist
       ]
-    }
+    })
   }
 }
 

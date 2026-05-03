@@ -40,6 +40,7 @@ function assertArtistContract (artist) {
 function assertAlbumContract (album) {
   const required = [
     'id',
+    'oldIds',
     'title',
     'disambiguation',
     'overview',
@@ -49,8 +50,11 @@ function assertAlbumContract (album) {
     'profileId',
     'duration',
     'albumType',
+    'type',
     'secondaryTypes',
+    'releaseStatuses',
     'mediumCount',
+    'rating',
     'ratings',
     'releaseDate',
     'releases',
@@ -71,6 +75,7 @@ function assertAlbumContract (album) {
   }
 
   assert.equal(typeof album.id, 'string')
+  assert.ok(Array.isArray(album.oldIds))
   assert.equal(typeof album.title, 'string')
   assert.equal(typeof album.disambiguation, 'string')
   assert.equal(typeof album.overview, 'string')
@@ -80,10 +85,13 @@ function assertAlbumContract (album) {
   assert.equal(typeof album.profileId, 'number')
   assert.equal(typeof album.duration, 'number')
   assert.equal(typeof album.albumType, 'string')
+  assert.equal(typeof album.type, 'string')
   assert.ok(Array.isArray(album.secondaryTypes))
+  assert.ok(Array.isArray(album.releaseStatuses))
   assert.equal(typeof album.mediumCount, 'number')
+  assert.equal(typeof album.rating, 'object')
   assert.equal(typeof album.ratings, 'object')
-  assert.equal(typeof album.releaseDate, 'string')
+  assert.ok(typeof album.releaseDate === 'string' || album.releaseDate === null)
   assert.ok(Array.isArray(album.releases))
   assert.ok(Array.isArray(album.genres))
   assert.ok(Array.isArray(album.media))
@@ -109,6 +117,8 @@ function assertAlbumContract (album) {
   assert.equal(typeof album.artists[0].disambiguation, 'string')
   assert.ok(Array.isArray(album.artists[0].oldIds))
   assert.ok(Array.isArray(album.artists[0].artistAliases))
+  assert.ok(Array.isArray(album.artists[0].images))
+  assert.ok(Array.isArray(album.artists[0].links))
 
   assert.equal(album.foreignAlbumId, undefined, 'Lidarr expects id, not foreignAlbumId')
 }
@@ -213,5 +223,24 @@ test('Lidarr add-artist SkyHook metadata contract never maps required DB lists t
     assert.ok(Array.isArray(artist.oldIds), 'Lidarr resource.oldIds must map to non-null ArtistMetadata.OldForeignArtistIds')
     assert.ok(Array.isArray(artist.artistAliases), 'Lidarr resource.artistAliases must map to non-null ArtistMetadata.Aliases')
     assert.ok(Array.isArray(artist.images || []), 'Lidarr resource.images must map to non-null ArtistMetadata.Images')
+  }
+})
+
+test('Lidarr album SkyHook contract includes fields read by FilterAlbums and MapAlbum', () => {
+  const fixture = readFixture('skyhook-search.golden.json')
+  const album = fixture[1].album
+
+  assert.ok(Array.isArray(album.oldIds), 'AlbumResource.OldIds must be an array')
+  assert.equal(typeof album.type, 'string', 'AlbumResource.Type must be populated for metadata profile filtering')
+  assert.ok(Array.isArray(album.secondaryTypes), 'AlbumResource.SecondaryTypes is dereferenced with .Any()')
+  assert.ok(Array.isArray(album.releaseStatuses), 'AlbumResource.ReleaseStatuses is dereferenced with .Any()')
+  assert.ok(album.releaseDate === null || typeof album.releaseDate === 'string', 'AlbumResource.ReleaseDate must be null or date-like')
+  assert.ok(Array.isArray(album.releases), 'AlbumResource.Releases must be an array for MapAlbum')
+
+  for (const artist of album.artists) {
+    assert.ok(Array.isArray(artist.oldIds), 'AlbumResource.Artists[].OldIds must be an array')
+    assert.ok(Array.isArray(artist.artistAliases), 'AlbumResource.Artists[].ArtistAliases must be an array')
+    assert.ok(Array.isArray(artist.images), 'AlbumResource.Artists[].Images must be an array')
+    assert.ok(Array.isArray(artist.links), 'AlbumResource.Artists[].Links must be an array')
   }
 })
