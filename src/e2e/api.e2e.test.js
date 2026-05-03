@@ -65,7 +65,22 @@ describe('API E2E Tests', () => {
       const axiosModule = require('axios')
       mock.method(axiosModule, 'get', async (url, config) => {
         if (url.includes('musicbrainz.org')) {
-          return { data: { artists: [{ id: '123', name: 'Test Artist' }] } }
+          if (url.includes('/release-group')) {
+            return { data: { 'release-groups': [] } }
+          }
+          return {
+            data: {
+              artists: [{
+                id: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+                name: 'Backstreet Boys',
+                'sort-name': 'Backstreet Boys',
+                aliases: [
+                  { name: ' BSB ' },
+                  { name: 'Back Street Boys' }
+                ]
+              }]
+            }
+          }
         }
         if (url.includes('itunes.apple.com')) {
           return { data: { results: [] } }
@@ -120,6 +135,16 @@ describe('API E2E Tests', () => {
         assert.strictEqual(res.status, 200)
         assert.ok(Array.isArray(res.data))
       }
+    })
+
+    it('GET /api/v1/artist/lookup?term=Backstreet%20Boys → returns Lidarr artistAliases from MusicBrainz aliases', async () => {
+      const res = await client.get('/api/v1/artist/lookup?term=Backstreet%20Boys')
+
+      assert.strictEqual(res.status, 200)
+      assert.ok(Array.isArray(res.data))
+      assert.strictEqual(res.data[0].artistName, 'Backstreet Boys')
+      assert.deepStrictEqual(res.data[0].aliases, ['BSB', 'Back Street Boys'])
+      assert.deepStrictEqual(res.data[0].artistAliases, ['BSB', 'Back Street Boys'])
     })
   })
 

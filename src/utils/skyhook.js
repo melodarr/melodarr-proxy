@@ -15,6 +15,7 @@
 const {
   LIDARR_SKYHOOK_ARTIST_DEFAULTS,
   asString,
+  normalizeAliases,
   normalizeStringArray,
   withSkyhookArtistDefaults
 } = require('./lidarrArtist')
@@ -124,7 +125,9 @@ function wrapAlbum (candidate) {
         {
           id: artistId,
           artistName: asString(candidate.artistName),
-          disambiguation: asString(candidate.disambiguation)
+          disambiguation: asString(candidate.disambiguation),
+          aliases: normalizeAliases(candidate),
+          artistAliases: normalizeAliases(candidate)
         }
       ]
     }

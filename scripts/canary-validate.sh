@@ -143,7 +143,7 @@ if [ "$SC" = "200" ]; then
   # missing/wrong-typed fields cause silent rejection or runtime errors.
   ARTIST=$(jq -c '[.[] | select(.artist) | .artist] | .[0] // empty' "$TMP_BODY")
   if [ -n "$ARTIST" ]; then
-    for FIELD_TYPE in id:string artistName:string status:string aliases:array links:array images:array; do
+    for FIELD_TYPE in id:string artistName:string status:string aliases:array artistAliases:array links:array images:array; do
       FIELD="${FIELD_TYPE%%:*}"
       EXPECTED="${FIELD_TYPE##*:}"
       OK=$(echo "$ARTIST" | jq --arg f "$FIELD" --arg t "$EXPECTED" \

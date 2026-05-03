@@ -225,6 +225,8 @@ test('artist lookup normalizes provider data and caches the response', async () 
         artistName: term.toUpperCase(),
         id: 'mock-mbid',
         foreignArtistId: 'mock-mbid',
+        aliases: ['Provider Alias'],
+        artistAliases: ['Provider Alias'],
         albums: [
           {
             name: 'First Album',
@@ -254,7 +256,8 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.headers['X-Providers'], 'musicbrainz')
   assert.equal(res.body[0].artistName, 'TEST ARTIST')
   assert.equal(res.body[0].id, 'mock-mbid')
-  assert.deepEqual(res.body[0].aliases, [])
+  assert.deepEqual(res.body[0].aliases, ['Provider Alias'])
+  assert.deepEqual(res.body[0].artistAliases, ['Provider Alias'])
   assert.equal(res.body[0].albums[0].title, 'First Album')
   assert.equal(res.body[0].albums[0].id, 'rg-1')
   // v0.3.36: year-only is now padded to ISO 8601 (Skyhook-compatible).

@@ -9,6 +9,7 @@
       "type": "Group",
       "status": "active",
       "aliases": [],
+      "artistAliases": [],
       "links": [],
       "images": [
         {
@@ -51,6 +52,7 @@
         "type": "Group",
         "status": "active",
         "aliases": [],
+        "artistAliases": [],
         "links": [],
         "images": [],
         "albums": []
@@ -76,7 +78,9 @@
         {
           "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
           "artistName": "Radiohead",
-          "disambiguation": ""
+          "disambiguation": "",
+          "aliases": [],
+          "artistAliases": []
         }
       ]
     }

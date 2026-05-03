@@ -24,6 +24,7 @@ function assertArtistContract (artist) {
   assert.equal(typeof artist.type, 'string')
   assert.equal(typeof artist.status, 'string')
   assert.ok(Array.isArray(artist.aliases))
+  assert.ok(Array.isArray(artist.artistAliases))
   assert.ok(Array.isArray(artist.links))
   assert.ok(Array.isArray(artist.images))
   for (const image of artist.images) {
@@ -87,6 +88,7 @@ function assertAlbumContract (album) {
   assert.ok(Array.isArray(album.media))
   assert.equal(typeof album.artist, 'object')
   assert.ok(Array.isArray(album.artist.aliases))
+  assert.ok(Array.isArray(album.artist.artistAliases))
   assert.ok(Array.isArray(album.images))
   for (const image of album.images) {
     assert.equal(typeof image.coverType, 'string', 'album image missing coverType')
@@ -103,6 +105,7 @@ function assertAlbumContract (album) {
   assert.equal(typeof album.artists[0].id, 'string')
   assert.equal(typeof album.artists[0].artistName, 'string')
   assert.equal(typeof album.artists[0].disambiguation, 'string')
+  assert.ok(Array.isArray(album.artists[0].artistAliases))
 
   assert.equal(album.foreignAlbumId, undefined, 'Lidarr expects id, not foreignAlbumId')
 }

@@ -25,6 +25,7 @@ test('withArtistLookupDefaults supplies Lidarr-safe lookup fields', () => {
   assert.equal(artist.foreignArtistId, '')
   assert.equal(artist.status, LIDARR_LOOKUP_ARTIST_DEFAULTS.status)
   assert.deepEqual(artist.aliases, ['Ella'])
+  assert.deepEqual(artist.artistAliases, ['Ella'])
   assert.deepEqual(artist.links, [])
   assert.deepEqual(artist.images, [])
   assert.deepEqual(artist.albums, [])
@@ -58,7 +59,9 @@ test('withArtistLookupDefaults backfills aliases for Lidarr add-artist payloads'
   })
 
   assert.ok(Object.prototype.hasOwnProperty.call(artist, 'aliases'))
+  assert.ok(Object.prototype.hasOwnProperty.call(artist, 'artistAliases'))
   assert.deepEqual(artist.aliases, [])
+  assert.deepEqual(artist.artistAliases, [])
   assert.equal(artist.qualityProfileId, 1)
   assert.equal(artist.metadataProfileId, 1)
   assert.equal(artist.rootFolderPath, '/mnt/shared/Music')
@@ -79,6 +82,7 @@ test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
   assert.equal(artist.type, LIDARR_SKYHOOK_ARTIST_DEFAULTS.type)
   assert.equal(artist.status, LIDARR_SKYHOOK_ARTIST_DEFAULTS.status)
   assert.deepEqual(artist.aliases, ['On a Friday'])
+  assert.deepEqual(artist.artistAliases, ['On a Friday'])
   assert.deepEqual(artist.links, [])
   assert.deepEqual(artist.images, [])
   assert.deepEqual(artist.albums, [])
@@ -91,7 +95,13 @@ test('normalizeStringArray trims values and drops blanks', () => {
 
 test('normalizeAliases accepts Lidarr PascalCase input and trims while preserving alias casing', () => {
   assert.deepEqual(normalizeAliases({ Aliases: [' Surf ', '', null] }), ['Surf'])
+  assert.deepEqual(normalizeAliases({ ArtistAliases: [' Surf ', '', null] }), ['Surf'])
   assert.deepEqual(withArtistLookupDefaults({ artistName: 'The Beach Boys', Aliases: ['Beach Boys'] }).aliases, ['Beach Boys'])
+  assert.deepEqual(withArtistLookupDefaults({ artistName: 'The Beach Boys', ArtistAliases: ['Beach Boys'] }).artistAliases, ['Beach Boys'])
+})
+
+test('normalizeAliases falls back from empty artistAliases to populated aliases', () => {
+  assert.deepEqual(normalizeAliases({ artistAliases: [], aliases: ['BSB'] }), ['BSB'])
 })
 
 test('normalizeLidarrArtistResponse injects aliases into artist-shaped responses', () => {
@@ -105,6 +115,7 @@ test('normalizeLidarrArtistResponse injects aliases into artist-shaped responses
   })
 
   assert.deepEqual(response.aliases, [])
+  assert.deepEqual(response.artistAliases, [])
   assert.equal(response.rootFolderPath, '/mnt/shared/Music')
   assert.deepEqual(response.addOptions, { monitor: 'all', searchForMissingAlbums: false })
 })
@@ -144,12 +155,55 @@ test('normalizeLidarrArtistResponse injects aliases into Lidarr add payload with
   })
 
   assert.ok(Object.prototype.hasOwnProperty.call(response, 'aliases'))
+  assert.ok(Object.prototype.hasOwnProperty.call(response, 'artistAliases'))
   assert.deepEqual(response.aliases, [])
+  assert.deepEqual(response.artistAliases, [])
   assert.equal(response.artistName, '*NSYNC')
   assert.equal(response.folder, '-NSYNC')
+})
+
+test('normalizeLidarrArtistResponse injects artistAliases into Backstreet Boys add payload', () => {
+  const response = normalizeLidarrArtistResponse({
+    status: 'continuing',
+    ended: false,
+    artistName: 'Backstreet Boys',
+    foreignArtistId: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+    tadbId: 0,
+    discogsId: 0,
+    overview: '',
+    disambiguation: '',
+    links: [],
+    nextAlbum: null,
+    lastAlbum: null,
+    images: [
+      {
+        url: 'https://r2.theaudiodb.com/images/media/artist/thumb/urpspy1341340999.jpg',
+        coverType: 'poster',
+        extension: '.jpg'
+      }
+    ],
+    remotePoster: 'https://r2.theaudiodb.com/images/media/artist/thumb/urpspy1341340999.jpg',
+    qualityProfileId: 1,
+    metadataProfileId: 1,
+    monitored: true,
+    monitorNewItems: 'all',
+    folder: 'Backstreet Boys',
+    genres: [],
+    tags: [],
+    added: '0001-01-01T04:57:00Z',
+    ratings: { votes: 0, value: 0 },
+    addOptions: { monitor: 'all', searchForMissingAlbums: false },
+    rootFolderPath: '/mnt/shared/Music'
+  })
+
+  assert.deepEqual(response.aliases, [])
+  assert.deepEqual(response.artistAliases, [])
+  assert.equal(response.artistName, 'Backstreet Boys')
+  assert.equal(response.foreignArtistId, '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad')
 })
 
 test('normalizeLidarrArtistResponse injects aliases into nested SkyHook artists', () => {
   const response = normalizeLidarrArtistResponse([{ artist: { artistName: 'Radiohead', foreignArtistId: 'mb-1' } }])
   assert.deepEqual(response[0].artist.aliases, [])
+  assert.deepEqual(response[0].artist.artistAliases, [])
 })

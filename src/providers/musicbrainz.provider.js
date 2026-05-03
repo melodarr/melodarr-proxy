@@ -77,6 +77,7 @@ class MusicBrainzProvider {
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
       aliases: this.extractAliases(artist),
+      artistAliases: this.extractAliases(artist),
       images: [],
       albums
     }
@@ -129,6 +130,7 @@ class MusicBrainzProvider {
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
       aliases: this.extractAliases(artist),
+      artistAliases: this.extractAliases(artist),
       images: [],
       albums,
       partial: false,

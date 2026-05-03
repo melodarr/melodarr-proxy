@@ -1,6 +1,7 @@
 const LIDARR_LOOKUP_ARTIST_DEFAULTS = Object.freeze({
   status: 'continuing',
   aliases: Object.freeze([]),
+  artistAliases: Object.freeze([]),
   links: Object.freeze([])
 })
 
@@ -8,6 +9,7 @@ const LIDARR_SKYHOOK_ARTIST_DEFAULTS = Object.freeze({
   type: 'Group',
   status: 'active',
   aliases: Object.freeze([]),
+  artistAliases: Object.freeze([]),
   links: Object.freeze([]),
   images: Object.freeze([]),
   albums: Object.freeze([])
@@ -19,6 +21,7 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'foreignArtistId',
   'status',
   'aliases',
+  'artistAliases',
   'links',
   'images',
   'albums'
@@ -33,6 +36,7 @@ const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
   'type',
   'status',
   'aliases',
+  'artistAliases',
   'links',
   'images',
   'albums'
@@ -53,7 +57,21 @@ function normalizeArray (value) {
 }
 
 function normalizeAliases (artist) {
-  return normalizeStringArray(artist.aliases ?? artist.Aliases)
+  const candidates = [
+    artist.artistAliases,
+    artist.ArtistAliases,
+    artist.aliases,
+    artist.Aliases
+  ]
+
+  for (const candidate of candidates) {
+    const aliases = normalizeStringArray(candidate)
+    if (aliases.length > 0) {
+      return aliases
+    }
+  }
+
+  return []
 }
 
 function isArtistLike (value) {
@@ -78,7 +96,9 @@ function normalizeLidarrArtistResponse (value) {
   }
 
   if (isArtistLike(normalized)) {
-    normalized.aliases = normalizeAliases(normalized)
+    const aliases = normalizeAliases(normalized)
+    normalized.aliases = aliases
+    normalized.artistAliases = aliases
   }
 
   return normalized
@@ -92,6 +112,7 @@ function withArtistLookupDefaults (artist = {}) {
     foreignArtistId: asString(artist.foreignArtistId || artist.id),
     status: asString(artist.status || LIDARR_LOOKUP_ARTIST_DEFAULTS.status),
     aliases: normalizeAliases(artist),
+    artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums)
@@ -109,6 +130,7 @@ function withSkyhookArtistDefaults (artist = {}) {
     type: asString(artist.type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     status: asString(artist.status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
     aliases: normalizeAliases(artist),
+    artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums)

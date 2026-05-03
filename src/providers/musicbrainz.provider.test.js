@@ -1,5 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert')
+const { withArtistLookupDefaults } = require('../utils/lidarrArtist')
+const { toSkyhookSearchShape } = require('../utils/skyhook')
 
 function setupMocks () {
   delete require.cache[require.resolve('./musicbrainz.provider')]
@@ -59,6 +61,43 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums[1].year, null)
     assert.strictEqual(result.albums[1].releaseDate, null)
     assert.deepStrictEqual(result.aliases, ['Exact Alias', 'Sort Alias'])
+    assert.deepStrictEqual(result.artistAliases, ['Exact Alias', 'Sort Alias'])
+  })
+
+  await t.test('searchArtist - maps MusicBrainz aliases through to Lidarr artistAliases', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path) => {
+      if (path === '/artist') {
+        return {
+          artists: [
+            {
+              id: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+              name: 'Backstreet Boys',
+              'sort-name': 'Backstreet Boys',
+              aliases: [
+                { name: ' BSB ' },
+                { name: 'Backstreet' }
+              ]
+            }
+          ]
+        }
+      }
+      if (path === '/release-group') {
+        return { 'release-groups': [] }
+      }
+    })
+
+    const musicBrainzArtist = await musicbrainzProvider.searchArtist('Backstreet Boys')
+    const lidarrArtist = toSkyhookSearchShape([{
+      ...musicBrainzArtist,
+      type: 'artist',
+      ids: { musicbrainzArtistId: musicBrainzArtist.id }
+    }], 'artist')[0].artist
+
+    assert.deepStrictEqual(musicBrainzArtist.aliases, ['BSB', 'Backstreet'])
+    assert.deepStrictEqual(musicBrainzArtist.artistAliases, ['BSB', 'Backstreet'])
+    assert.deepStrictEqual(lidarrArtist.aliases, ['BSB', 'Backstreet'])
+    assert.deepStrictEqual(lidarrArtist.artistAliases, ['BSB', 'Backstreet'])
   })
 
   await t.test('searchArtist - returns empty if no artist found', async () => {
@@ -103,5 +142,7 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.albums[0].provider, 'musicbrainz')
     assert.strictEqual(result.providers[0].name, 'musicbrainz')
     assert.deepStrictEqual(result.aliases, ['On a Friday'])
+    assert.deepStrictEqual(result.artistAliases, ['On a Friday'])
+    assert.deepStrictEqual(withArtistLookupDefaults(result).artistAliases, ['On a Friday'])
   })
 })

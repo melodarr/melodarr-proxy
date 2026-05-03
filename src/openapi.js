@@ -80,6 +80,10 @@ const openApiDocument = {
             type: 'array',
             items: { type: 'string' }
           },
+          artistAliases: {
+            type: 'array',
+            items: { type: 'string' }
+          },
           links: {
             type: 'array',
             items: { type: 'object', additionalProperties: true }
