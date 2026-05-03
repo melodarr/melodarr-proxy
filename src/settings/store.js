@@ -46,8 +46,8 @@ function assertValidSettingsVersionId (versionId) {
 
 function getVersionPath (versionId) {
   assertValidSettingsVersionId(versionId)
+  const base = path.resolve(versionsDir) + path.sep
   const resolved = path.resolve(versionsDir, `${versionId}.json`)
-  const base = versionsDir.endsWith(path.sep) ? versionsDir : versionsDir + path.sep
   if (!resolved.startsWith(base)) {
     throw new Error('Invalid versionId')
   }
