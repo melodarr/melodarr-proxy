@@ -19,7 +19,7 @@ const {
   validateConfigInMemory
 } = require('../settings/store')
 const { testProvider } = require('../providers')
-const { exec } = require('child_process')
+const { execFile } = require('child_process')
 const logger = require('../utils/logger')
 
 const SETTINGS_COOKIE = 'melodarr_proxy_settings'
@@ -289,7 +289,7 @@ function runCanaryValidator (mode = 'deploy') {
     const baseUrl = `http://127.0.0.1:${port}`
     const scriptPath = require('path').join(process.cwd(), 'scripts/canary-validate.sh')
 
-    require('child_process').execFile('bash', [scriptPath], {
+    execFile('bash', [scriptPath], {
       env: {
         ...process.env,
         BASE_URL: baseUrl,
@@ -357,17 +357,21 @@ async function updateSettings (req, res) {
     const canaryResult = await runCanaryValidator('config')
     if (canaryResult.code === 1 || canaryResult.code === 3) {
       logger.warn('validation_failed', { reason: 'canary failed', canaryOutput: canaryResult.output, code: canaryResult.code })
+      let rolledBack = false
       if (previousVersion) {
         try {
           await rollbackSettings(previousVersion, false, 'system:auto-rollback')
           logger.info('rollback_applied', { versionId: previousVersion })
+          rolledBack = true
         } catch (rollbackErr) {
           logger.error('Auto-rollback failed', { error: rollbackErr.message })
           return res.status(500).json({ error: 'Canary validation failed and auto-rollback failed. Operator intervention required.', canaryOutput: canaryResult.output })
         }
       }
       return res.status(400).json({
-        error: 'Canary validation failed. Automatically rolled back.',
+        error: rolledBack
+          ? 'Canary validation failed. Automatically rolled back.'
+          : 'Canary validation failed. No previous version available for rollback; new configuration retained.',
         canaryOutput: canaryResult.output,
         failedChecks: canaryResult.failedChecks
       })
@@ -375,17 +379,21 @@ async function updateSettings (req, res) {
 
     if (canaryResult.code === 2 && process.env.ALLOW_PROVISIONAL_CONFIG !== '1' && req.body.allowProvisional !== true) {
       logger.warn('validation_failed', { reason: 'canary provisional failure', canaryOutput: canaryResult.output })
+      let rolledBack = false
       if (previousVersion) {
         try {
           await rollbackSettings(previousVersion, false, 'system:auto-rollback')
           logger.info('rollback_applied', { versionId: previousVersion })
+          rolledBack = true
         } catch (rollbackErr) {
           logger.error('Auto-rollback failed', { error: rollbackErr.message })
           return res.status(500).json({ error: 'Canary validation provisional failure and auto-rollback failed. Operator intervention required.', canaryOutput: canaryResult.output })
         }
       }
       return res.status(400).json({
-        error: 'Canary validation provisional failure (MB unreachable). Automatically rolled back. Set allowProvisional: true or ALLOW_PROVISIONAL_CONFIG=1 to force.',
+        error: rolledBack
+          ? 'Canary validation provisional failure (MB unreachable). Automatically rolled back. Set allowProvisional: true or ALLOW_PROVISIONAL_CONFIG=1 to force.'
+          : 'Canary validation provisional failure (MB unreachable). No previous version available for rollback; new configuration retained. Set allowProvisional: true or ALLOW_PROVISIONAL_CONFIG=1 to force.',
         canaryOutput: canaryResult.output,
         failedChecks: canaryResult.failedChecks
       })
@@ -463,7 +471,8 @@ async function applyRollback (req, res) {
     }
     res.json(result)
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    const status = getVersionErrorStatus(err)
+    res.status(status).json({ error: err.message })
   }
 }
 

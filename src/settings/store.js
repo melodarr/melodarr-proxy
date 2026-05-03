@@ -73,7 +73,8 @@ async function writeAtomic (filePath, data) {
         await fs.promises.unlink(tmpPath)
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          throw err
+          const logger = require('../utils/logger')
+          logger.warn('Failed to remove temp settings file', { tmpPath, error: err.message })
         }
       }
     }
@@ -253,11 +254,14 @@ async function rollbackSettings (versionId, dryRun = false, actor = 'operator') 
   // Wait for any pending writes to complete, then execute our block.
   return new Promise((resolve, reject) => {
     writePromise = writePromise.then(async () => {
-      try {
+      const cancelDebouncedSave = () => {
         if (saveTimeout) {
           clearTimeout(saveTimeout)
           saveTimeout = null
         }
+      }
+      try {
+        cancelDebouncedSave()
 
         const index = await getSettingsVersions()
         const targetVersion = index.versions.find(v => v.id === versionId)
@@ -275,12 +279,14 @@ async function rollbackSettings (versionId, dryRun = false, actor = 'operator') 
           return resolve({ ok: true, dryRun: true, diff, previousVersion })
         }
 
+        cancelDebouncedSave()
         settings = targetSettings
         if (metrics.recordSettingsWrite) metrics.recordSettingsWrite()
         await fs.promises.mkdir(dataDir, { recursive: true })
         await writeAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
 
         await commitSettingsVersion(settings, `rollback to ${versionId}`, actor)
+        cancelDebouncedSave()
 
         resolve({ ok: true, dryRun: false, diff, rolledBackTo: versionId, previousVersion })
       } catch (err) {

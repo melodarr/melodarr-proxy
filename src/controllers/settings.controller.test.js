@@ -515,14 +515,14 @@ test('applyRollback calls rollbackSettings with correct parameters', async () =>
   assert.equal(res.body.rolledBackTo, '456')
 })
 
-test('applyRollback handles rollback errors', async () => {
+test('applyRollback returns 500 for unexpected rollback errors', async () => {
   const c = loadController({
     rollbackSettings: async () => { throw new Error('Rollback failed') }
   })
   const res = makeRes()
   await c.applyRollback({ body: { versionId: '456' }, query: {} }, res)
 
-  assert.equal(res.statusCode, 400)
+  assert.equal(res.statusCode, 500)
   assert.equal(res.body.error, 'Rollback failed')
 })
 
@@ -534,6 +534,16 @@ test('applyRollback surfaces malformed version ids as 400', async () => {
   await c.applyRollback({ body: { versionId: '../settings.json' }, query: {} }, res)
   assert.equal(res.statusCode, 400)
   assert.equal(res.body.error, 'Invalid versionId')
+})
+
+test('applyRollback returns 404 when target version is not found', async () => {
+  const c = loadController({
+    rollbackSettings: async () => { throw new Error('Version 999 not found') }
+  })
+  const res = makeRes()
+  await c.applyRollback({ body: { versionId: '999' }, query: {} }, res)
+  assert.equal(res.statusCode, 404)
+  assert.equal(res.body.error, 'Version 999 not found')
 })
 
 test('updateSettings triggers rollback on canary failure (code 1)', async () => {
