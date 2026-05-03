@@ -77,6 +77,12 @@ test('isValidArtist — unwrapped lookup artist with artistName and foreignArtis
   assert.equal(isValidArtist({ artistName: 'Radiohead', foreignArtistId: 'mb-1', albums: [] }), true)
 })
 
+test('isValidArtist — unwrapped lookup artist with missing/empty/whitespace foreignArtistId → false', () => {
+  assert.equal(isValidArtist({ artistName: 'X', albums: [] }), false)
+  assert.equal(isValidArtist({ artistName: 'X', foreignArtistId: '', albums: [] }), false)
+  assert.equal(isValidArtist({ artistName: 'X', foreignArtistId: '   ', albums: [] }), false)
+})
+
 test('isValidArtist — unwrapped lookup artist with empty artistName → false', () => {
   assert.equal(isValidArtist({ artistName: '', albums: [] }), false)
 })
