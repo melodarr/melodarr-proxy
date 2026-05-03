@@ -800,17 +800,12 @@ async function validateConfigInMemory (updates, validatorFn) {
   const nextSettings = { ...settings, runtime: nextRuntime }
   const diff = computeDiff(previousSettings, nextSettings)
 
-  // Swap in the proposed settings for the duration of the validator only.
-  // No disk writes happen here — saveSettingsFile/saveSettingsDebounced are
-  // not called, so the version history and on-disk settings.json stay
-  // untouched even if the canary runs against the new values.
-  settings = nextSettings
-  try {
-    const result = await validatorFn(nextSettings, diff)
-    return { ...result, diff }
-  } finally {
-    settings = previousSettings
-  }
+  // Validate against the proposed settings object without mutating the
+  // module-global `settings`. This keeps uncommitted config isolated from
+  // concurrent production traffic while still allowing the validator to
+  // inspect the exact candidate settings and computed diff.
+  const result = await validatorFn(nextSettings, diff)
+  return { ...result, diff }
 }
 
 module.exports = {
