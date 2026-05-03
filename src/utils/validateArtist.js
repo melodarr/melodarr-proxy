@@ -8,12 +8,15 @@
 //   - Lookup unwrapped album:  { title, ... }
 //
 // An item is valid iff its shape-appropriate display field
-// (artistName/title) is a non-empty trimmed string, AND the upstream
-// identifier is present for shapes that provide one:
-//   - Lidarr explicitly rejects artists with an empty ForeignArtistId.
-//   - SkyHook-wrapped albums without an artistId have no upstream artist
-//     linkage and would be orphaned inside Lidarr, so they are rejected
-//     here too.
+// (artistName/title) is a non-empty trimmed string. For shapes that
+// carry an upstream identifier, that identifier must also be non-empty:
+//   - All artist shapes require a non-empty foreignArtistId (Lidarr
+//     rejects artists with an empty ForeignArtistId).
+//   - SkyHook-wrapped albums ({ album: { title, artistId } }) require a
+//     non-empty artistId; albums without an upstream artist linkage would
+//     be orphaned inside Lidarr.
+//   - Unwrapped lookup-shape albums (top-level { title }) are accepted on
+//     a non-empty title alone — no artistId check applies to that shape.
 
 function nonEmptyString (v) {
   return typeof v === 'string' && v.trim().length > 0
