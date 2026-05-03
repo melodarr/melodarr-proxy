@@ -6,6 +6,7 @@ const {
   LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
   LIDARR_SKYHOOK_ARTIST_DEFAULTS,
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
+  normalizeAliases,
   normalizeStringArray,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults
@@ -85,4 +86,9 @@ test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
 test('normalizeStringArray trims values and drops blanks', () => {
   assert.deepEqual(normalizeStringArray([' One ', '', null, 42]), ['One', '42'])
   assert.deepEqual(normalizeStringArray('not-array'), [])
+})
+
+test('normalizeAliases accepts Lidarr PascalCase input and emits lowercase aliases', () => {
+  assert.deepEqual(normalizeAliases({ Aliases: [' Surf ', '', null] }), ['Surf'])
+  assert.deepEqual(withArtistLookupDefaults({ artistName: 'The Beach Boys', Aliases: ['Beach Boys'] }).aliases, ['Beach Boys'])
 })
