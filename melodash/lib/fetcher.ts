@@ -1,4 +1,5 @@
 import { fetchWithFallback } from "./proxy";
+import { rememberCsrfToken } from "./csrf";
 
 function isRelativePath(url: string): boolean {
   return url.startsWith("/") && !url.startsWith("//");
@@ -13,6 +14,7 @@ export async function fetchJson<T = unknown>(url: string, init?: RequestInit): P
   const body = await res.text();
   const isJson = contentType.includes("application/json");
   const parsed: any = isJson && body ? JSON.parse(body) : null;
+  rememberCsrfToken(parsed);
 
   if (!res.ok) {
     const message =

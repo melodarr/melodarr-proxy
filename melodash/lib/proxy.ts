@@ -1,3 +1,5 @@
+import { getCsrfToken, rememberCsrfToken, withCsrfToken } from "./csrf";
+
 /**
  * Resolves the base URL for the melodarr-proxy API.
  *
@@ -40,10 +42,26 @@ export async function fetchWithFallback(
 ): Promise<Response> {
   const primaryBase = resolveProxyBaseUrl();
   const primaryUrl = joinBaseAndPath(primaryBase, path);
+  const method = String(init?.method || "GET").toUpperCase();
+  const needsCsrf = !["GET", "HEAD", "OPTIONS"].includes(method);
+
+  if (needsCsrf && !getCsrfToken()) {
+    try {
+      const csrfStatus = await fetch(joinBaseAndPath(primaryBase, "/api/settings/status"), { credentials: "include" });
+      const contentType = csrfStatus.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        rememberCsrfToken(await csrfStatus.json());
+      }
+    } catch (_error) {
+      // The original request below will surface auth/CSRF failures with context.
+    }
+  }
+
+  const requestInit = withCsrfToken(init);
 
   let primaryError: unknown;
   try {
-    const res = await fetch(primaryUrl, init);
+    const res = await fetch(primaryUrl, requestInit);
     if (res.ok) return res;
     primaryError = new Error(`Primary returned ${res.status} ${res.statusText}`);
   } catch (err) {
@@ -54,7 +72,7 @@ export async function fetchWithFallback(
   if (fallbackBase) {
     const fallbackUrl = joinBaseAndPath(fallbackBase.replace(/\/+$/, ""), path);
     try {
-      return await fetch(fallbackUrl, init);
+      return await fetch(fallbackUrl, requestInit);
     } catch (err) {
       throw new Error(
         `Proxy unreachable (primary: ${primaryUrl} — ${describeError(primaryError)}; fallback: ${fallbackUrl} — ${describeError(err)})`

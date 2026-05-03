@@ -57,13 +57,15 @@ test('Store Module', async (t) => {
     assert.strictEqual(store.getConfigValue('appVersion'), '0.4.0')
   })
 
-  await t.test('updateRuntimeConfig with null clears the saved override', () => {
+  await t.test('updateRuntimeConfig with null clears the saved override', async () => {
     // First save a value.
     store.updateRuntimeConfig({ metadataProviders: 'musicbrainz,itunes,theaudiodb' })
+    await store.flushSettingsWrites()
     assert.strictEqual(store.getConfigValue('metadataProviders'), 'musicbrainz,itunes,theaudiodb')
 
     // Then clear it via null sentinel.
     const result = store.updateRuntimeConfig({ metadataProviders: null })
+    await store.flushSettingsWrites()
     assert.deepStrictEqual(result.cleared, { metadataProviders: true })
     assert.deepStrictEqual(result.applied, {})
 
@@ -72,12 +74,14 @@ test('Store Module', async (t) => {
     assert.strictEqual(store.getConfigValue('metadataProviders'), 'musicbrainz,itunes')
   })
 
-  await t.test('clearRuntimeOverride removes a saved value and reports new source', () => {
+  await t.test('clearRuntimeOverride removes a saved value and reports new source', async () => {
     store.updateRuntimeConfig({ metadataProviders: 'discogs,itunes' })
+    await store.flushSettingsWrites()
     assert.strictEqual(store.getConfigValue('metadataProviders'), 'discogs,itunes')
 
     process.env.METADATA_PROVIDERS = 'itunes,theaudiodb'
     const result = store.clearRuntimeOverride('metadataProviders')
+    await store.flushSettingsWrites()
     assert.strictEqual(result.ok, true)
     assert.strictEqual(result.cleared, true)
     assert.strictEqual(result.newValue, 'itunes,theaudiodb')
@@ -99,9 +103,10 @@ test('Store Module', async (t) => {
     assert.strictEqual(result.reason, 'unknown_key')
   })
 
-  await t.test('getEnvShadowedKeys reports only when saved differs from env', () => {
+  await t.test('getEnvShadowedKeys reports only when saved differs from env', async () => {
     // Saved differs from env → reported.
     store.updateRuntimeConfig({ metadataProviders: 'musicbrainz,theaudiodb,itunes,discogs' })
+    await store.flushSettingsWrites()
     process.env.METADATA_PROVIDERS = 'itunes,theaudiodb,discogs'
     const shadowed = store.getEnvShadowedKeys()
     const entry = shadowed.find((s) => s.key === 'metadataProviders')
@@ -112,6 +117,7 @@ test('Store Module', async (t) => {
 
     // Saved matches env → not reported.
     store.updateRuntimeConfig({ metadataProviders: 'itunes,theaudiodb,discogs' })
+    await store.flushSettingsWrites()
     const shadowed2 = store.getEnvShadowedKeys()
     assert.strictEqual(shadowed2.find((s) => s.key === 'metadataProviders'), undefined)
 
@@ -121,8 +127,9 @@ test('Store Module', async (t) => {
     assert.strictEqual(shadowed3.find((s) => s.key === 'metadataProviders'), undefined)
   })
 
-  await t.test('API Keys management', () => {
+  await t.test('API Keys management', async () => {
     const created = store.createApiKey({ name: 'Test Key', quotaPerMinute: 100 })
+    await store.flushSettingsWrites()
     assert.ok(created.id)
     assert.ok(created.key.startsWith('mp_'))
 
@@ -141,13 +148,15 @@ test('Store Module', async (t) => {
 
     // Delete API Key
     const deleted = store.deleteApiKey(created.id)
+    await store.flushSettingsWrites()
     assert.strictEqual(deleted, true)
 
     const notDeleted = store.deleteApiKey('nonexistent')
+    await store.flushSettingsWrites()
     assert.strictEqual(notDeleted, false)
   })
 
-  await t.test('Admin Password', () => {
+  await t.test('Admin Password', async () => {
     const canBootstrap = store.canBootstrapAdmin()
     assert.strictEqual(typeof canBootstrap, 'boolean')
 
@@ -160,6 +169,7 @@ test('Store Module', async (t) => {
     // Bootstrap
     if (store.canBootstrapAdmin()) {
       store.bootstrapAdminPassword('password123')
+      await store.flushSettingsWrites()
       assert.strictEqual(store.canBootstrapAdmin(), false)
       assert.strictEqual(store.hasAdminPassword(), true)
       assert.strictEqual(store.verifyPassword('password123'), true)
@@ -178,5 +188,29 @@ test('Store Module', async (t) => {
     } else {
       delete process.env.ADMIN_PASSWORD
     }
+  })
+
+  await t.test('Settings persistence debounces rapid updates (write coalescing)', async () => {
+    const metrics = require('../metrics')
+
+    // Reset stats for clean test
+    metrics.stats.settings.writes = 0
+    metrics.stats.settings.debounced = 0
+
+    // Issue 5 rapid updates
+    for (let i = 0; i < 5; i++) {
+      store.updateRuntimeConfig({ appVersion: `test-coalesce-${i}` })
+    }
+
+    // Flush to ensure any pending write completes
+    await store.flushSettingsWrites()
+
+    const stats = metrics.getStats().settings
+    assert.strictEqual(stats.writes, 1, 'Should only write once for rapid updates')
+    assert.strictEqual(stats.debounced, 5, 'Should debounce 5 rapid updates')
+
+    // Clean up
+    store.clearRuntimeOverride('appVersion')
+    await store.flushSettingsWrites()
   })
 })

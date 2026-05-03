@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { fetchJson, fetcher } from "@/lib/fetcher";
+import { clearCsrfToken } from "@/lib/csrf";
 import { fetchWithFallback } from "@/lib/proxy";
 
 type RuntimeValue = string | number | boolean;
@@ -36,9 +37,11 @@ type SettingsStatus = {
   enabled?: boolean;
   setupRequired?: boolean;
   authenticated?: boolean;
+  csrfToken?: string | null;
 };
 
 type SettingsPayload = {
+  csrfToken?: string | null;
   config?: Record<string, RuntimeEntry>;
   admin?: {
     passwordConfigured?: boolean;
@@ -364,6 +367,7 @@ export default function SettingsPage() {
     setAuthBusy(true);
     try {
       await postSettings("/api/settings/logout");
+      clearCsrfToken();
       setForm({});
       await refreshAll();
     } catch (error) {

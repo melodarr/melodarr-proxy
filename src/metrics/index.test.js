@@ -45,6 +45,46 @@ test('recordCache increments misses on cache miss', () => {
   m.shutdown()
 })
 
+test('recordCache tracks stale cache hits', () => {
+  const m = freshMetrics()
+  m.recordCache(true, true)
+  const stats = m.getStats()
+  assert.equal(m.stats.cache.staleHits, 1)
+  assert.equal(stats.cache.staleHits, 1)
+  m.shutdown()
+})
+
+// ── lock/provider/Lidarr safety metrics ──────────────────────────
+
+test('recordLockWait tracks wait count, average, and max', () => {
+  const m = freshMetrics()
+  m.recordLockWait(25)
+  m.recordLockWait(75)
+  const stats = m.getStats()
+  assert.equal(stats.locks.waitEvents, 2)
+  assert.equal(stats.locks.avgWaitMs, 50)
+  assert.equal(stats.locks.maxWaitMs, 75)
+  m.shutdown()
+})
+
+test('recordProviderFallback tracks fallback and exhaustion counters', () => {
+  const m = freshMetrics()
+  m.recordProviderFallback(false)
+  m.recordProviderFallback(true)
+  const stats = m.getStats()
+  assert.equal(stats.providerFallbacks.fallbacks, 1)
+  assert.equal(stats.providerFallbacks.exhaustions, 1)
+  m.shutdown()
+})
+
+test('recordLidarrAddShapeFailure tracks add-shape failures', () => {
+  const m = freshMetrics()
+  m.recordLidarrAddShapeFailure()
+  const stats = m.getStats()
+  assert.equal(stats.lidarr.addShapeFailures, 1)
+  m.shutdown()
+})
+
 // ── recordLatency / getLatencyStats ──────────────────────────────
 
 test('getLatencyStats returns zeros when no samples exist', () => {

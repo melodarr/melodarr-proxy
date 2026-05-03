@@ -96,12 +96,21 @@ function loadServer () {
   return { app, logRecords }
 }
 
-function invokeApp (app, path) {
+function normalizeHeaders (headers = {}) {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])
+  )
+}
+
+function invokeApp (app, path, options = {}) {
   return new Promise((resolve, reject) => {
     const req = new Readable({ read () {} })
     req.url = path
-    req.method = 'GET'
-    req.headers = {}
+    req.method = options.method || 'GET'
+    req.headers = normalizeHeaders(options.headers || {})
+    if (!req.headers.host) {
+      req.headers.host = '127.0.0.1'
+    }
     req.connection = {}
     req.socket = {}
     req.push(null)
@@ -164,6 +173,46 @@ test('proxy exposes API metadata on /api/info', async (t) => {
   assert.equal(body.docs, '/docs')
   assert.equal(body.openapi, '/openapi.json')
   assert.equal(body.health, '/api/health')
+})
+
+test('public API CORS remains wildcard', async (t) => {
+  const { app } = loadServer()
+  const response = await invokeApp(app, '/api/info', {
+    headers: { Origin: 'https://untrusted.example' }
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.headers['access-control-allow-origin'], '*')
+})
+
+test('operator CORS rejects untrusted preflight origins', async (t) => {
+  const { app } = loadServer()
+  const response = await invokeApp(app, '/api/settings', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://untrusted.example',
+      Host: 'proxy.local'
+    }
+  })
+
+  assert.equal(response.statusCode, 403)
+  assert.equal(response.headers['access-control-allow-origin'], undefined)
+})
+
+test('operator CORS allows same-origin preflight with credentials', async (t) => {
+  const { app } = loadServer()
+  const response = await invokeApp(app, '/api/settings', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://proxy.local',
+      Host: 'proxy.local'
+    }
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.headers['access-control-allow-origin'], 'http://proxy.local')
+  assert.equal(response.headers['access-control-allow-credentials'], 'true')
+  assert.match(response.headers['access-control-allow-headers'], /X-CSRF-Token/)
 })
 
 test('proxy exposes Scalar docs and OpenAPI JSON', async (t) => {

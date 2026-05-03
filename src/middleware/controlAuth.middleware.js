@@ -10,7 +10,7 @@ function controlAuthMiddleware (req, res, next) {
   }
 
   // Fallback to strict API key check (bypasses REQUIRE_API_KEY=false)
-  const key = req.headers['x-api-key'] || req.query.api_key || req.query.apikey
+  const key = req.headers['x-api-key']
 
   if (!key) {
     return res.status(401).json({ error: 'Authentication required. Provide settings session cookie or API key.' })

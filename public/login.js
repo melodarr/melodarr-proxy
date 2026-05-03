@@ -1,6 +1,7 @@
 const authPanel = document.querySelector('#auth-panel')
 const statusEl = document.querySelector('#status')
 const introEl = document.querySelector('#auth-intro')
+const CSRF_STORAGE_KEY = 'melodarr_proxy_csrf'
 
 function setStatus (message, isError = false) {
   statusEl.textContent = message
@@ -9,6 +10,12 @@ function setStatus (message, isError = false) {
 
 function goHome () {
   window.location.assign('/')
+}
+
+function rememberCsrfToken (payload) {
+  if (payload?.csrfToken) {
+    window.sessionStorage.setItem(CSRF_STORAGE_KEY, payload.csrfToken)
+  }
 }
 
 function renderLogin () {
@@ -65,6 +72,7 @@ docker compose exec proxy \
         throw new Error(data.error || 'Sign in failed')
       }
 
+      rememberCsrfToken(data)
       goHome()
     } catch (error) {
       setStatus(error.message, true)
@@ -128,6 +136,7 @@ function renderSetup () {
         throw new Error(data.error || 'Password setup failed')
       }
 
+      rememberCsrfToken(data)
       goHome()
     } catch (error) {
       setStatus(error.message, true)
@@ -142,6 +151,7 @@ function renderSetup () {
 async function checkStatus () {
   const response = await fetch('/api/settings/status')
   const status = await response.json()
+  rememberCsrfToken(status)
 
   if (status.authenticated) {
     goHome()

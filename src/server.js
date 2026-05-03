@@ -204,6 +204,30 @@ async function boot (appInstance) {
   } else {
     logger.info('Skipping appInstance.listen due to NO_LISTEN flag.')
   }
+
+  const { flushSettingsWrites } = require('./settings/store')
+  let shuttingDown = false
+
+  async function gracefulShutdown (signal) {
+    if (shuttingDown) return
+    shuttingDown = true
+    logger.info(`Received ${signal}. Starting graceful shutdown...`)
+    try {
+      await flushSettingsWrites()
+      logger.info('Settings flushed to disk.')
+    } catch (err) {
+      logger.error('Error flushing settings to disk during shutdown', { error: err.message })
+    }
+    process.exit(0)
+  }
+
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+  process.on('beforeExit', async () => {
+    if (!shuttingDown) {
+      await flushSettingsWrites()
+    }
+  })
 }
 
 if (require.main === module) {

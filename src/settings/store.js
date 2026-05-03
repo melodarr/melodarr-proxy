@@ -1,6 +1,7 @@
 const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
+const metrics = require('../metrics')
 
 const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data')
 const settingsPath = path.join(dataDir, 'settings.json')
@@ -22,21 +23,39 @@ function reloadSettings () {
   return settings
 }
 
+let writePromise = Promise.resolve()
+
 function saveSettingsFile (nextSettings) {
-  fs.mkdirSync(dataDir, { recursive: true })
-  const tmpPath = `${settingsPath}.tmp.${crypto.randomBytes(4).toString('hex')}`
-  fs.writeFileSync(tmpPath, `${JSON.stringify(nextSettings, null, 2)}\n`, { mode: 0o600 })
-  fs.renameSync(tmpPath, settingsPath)
+  writePromise = writePromise.then(async () => {
+    try {
+      if (metrics.recordSettingsWrite) metrics.recordSettingsWrite()
+      await fs.promises.mkdir(dataDir, { recursive: true })
+      const tmpPath = `${settingsPath}.tmp.${crypto.randomBytes(4).toString('hex')}`
+      const data = `${JSON.stringify(nextSettings, null, 2)}\n`
+
+      const fh = await fs.promises.open(tmpPath, 'w', 0o600)
+      await fh.writeFile(data)
+      await fh.sync()
+      await fh.close()
+
+      await fs.promises.rename(tmpPath, settingsPath)
+    } catch (err) {
+      const logger = require('../utils/logger')
+      logger.error('Failed to save settings file', { error: err.message })
+    }
+  })
+  return writePromise
 }
 
 function saveSettings (nextSettings) {
   settings = nextSettings
-  saveSettingsFile(settings)
+  return saveSettingsFile(settings)
 }
 
 let saveTimeout = null
 function saveSettingsDebounced (nextSettings) {
   settings = nextSettings
+  if (metrics.recordSettingsDebounce) metrics.recordSettingsDebounce()
   if (!saveTimeout) {
     saveTimeout = setTimeout(() => {
       saveTimeout = null
@@ -44,6 +63,15 @@ function saveSettingsDebounced (nextSettings) {
     }, 2000)
     if (saveTimeout.unref) saveTimeout.unref()
   }
+}
+
+async function flushSettingsWrites () {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+    await saveSettingsFile(settings)
+  }
+  return writePromise
 }
 
 function hashPassword (password, salt = crypto.randomBytes(16).toString('base64url')) {
@@ -380,7 +408,7 @@ function updateRuntimeConfig (updates) {
     for (const key of Object.keys(cleared)) {
       delete nextRuntime[key]
     }
-    saveSettings({ ...settings, runtime: nextRuntime })
+    saveSettingsDebounced({ ...settings, runtime: nextRuntime })
   }
 
   return { applied, cleared, skipped }
@@ -408,7 +436,7 @@ function clearRuntimeOverride (key) {
 
   const nextRuntime = { ...settings.runtime }
   delete nextRuntime[key]
-  saveSettings({ ...settings, runtime: nextRuntime })
+  saveSettingsDebounced({ ...settings, runtime: nextRuntime })
 
   return {
     ok: true,
@@ -450,6 +478,7 @@ module.exports = {
   clearRuntimeOverride,
   createApiKey,
   deleteApiKey,
+  flushSettingsWrites,
   generateRandomName,
   getConfigValue,
   getEnvShadowedKeys,

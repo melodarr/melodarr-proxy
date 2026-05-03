@@ -31,12 +31,12 @@ const SESSION_SECRET = 'test-session-secret-32bytes-long'
 
 function makeReqWithValidCookie () {
   const token = makeToken(SESSION_SECRET)
-  return { headers: { cookie: `${COOKIE}=${encodeURIComponent(token)}` } }
+  return { method: 'GET', headers: { cookie: `${COOKIE}=${encodeURIComponent(token)}` } }
 }
 
 function makeReqWithExpiredCookie () {
   const token = makeExpiredToken(SESSION_SECRET)
-  return { headers: { cookie: `${COOKIE}=${encodeURIComponent(token)}` } }
+  return { method: 'GET', headers: { cookie: `${COOKIE}=${encodeURIComponent(token)}` } }
 }
 
 function loadController ({
@@ -119,6 +119,15 @@ test('getSettingsStatus returns enabled, setupRequired, authenticated fields', (
   assert.equal(typeof res.body.authenticated, 'boolean')
 })
 
+test('getSettingsStatus returns a csrfToken for authenticated sessions', () => {
+  const c = loadController({ hasAdminPassword: true, canBootstrapAdmin: false })
+  const req = makeReqWithValidCookie()
+  const res = makeRes()
+  c.getSettingsStatus(req, res)
+  assert.equal(res.body.authenticated, true)
+  assert.equal(res.body.csrfToken, c.getSettingsCsrfToken(req))
+})
+
 test('getSettingsStatus reflects hasAdminPassword correctly', () => {
   const c = loadController({ hasAdminPassword: false, canBootstrapAdmin: true })
   const res = makeRes()
@@ -154,6 +163,7 @@ test('setupSettings calls bootstrapAdminPassword and sets auth cookie on success
   assert.equal(capturedPassword, 'ValidPassword1!')
   assert.ok(COOKIE in res.cookies)
   assert.equal(res.body.ok, true)
+  assert.equal(res.body.csrfToken, c.getSettingsCsrfToken({ headers: { cookie: `${COOKIE}=${encodeURIComponent(res.cookies[COOKIE].value)}` } }))
 })
 
 // ── loginSettings ─────────────────────────────────────────────────
@@ -178,6 +188,7 @@ test('loginSettings sets auth cookie and returns ok on correct password', () => 
   c.loginSettings({ body: { password: 'correct' } }, res)
   assert.equal(res.body.ok, true)
   assert.ok(COOKIE in res.cookies)
+  assert.equal(res.body.csrfToken, c.getSettingsCsrfToken({ headers: { cookie: `${COOKIE}=${encodeURIComponent(res.cookies[COOKIE].value)}` } }))
 })
 
 // ── logoutSettings ────────────────────────────────────────────────
@@ -213,6 +224,33 @@ test('requireSettingsAuth returns 401 with setup message when no password config
   const res = makeRes()
   c.requireSettingsAuth({ headers: {} }, res, () => {})
   assert.ok(res.body.error.includes('not configured'))
+})
+
+// ── CSRF protection ──────────────────────────────────────────────
+
+test('requireSettingsCsrf rejects cookie-authenticated unsafe requests without token', () => {
+  const c = loadController()
+  const res = makeRes()
+  let nextCalled = false
+  c.requireSettingsCsrf({ ...makeReqWithValidCookie(), method: 'POST', body: {} }, res, () => { nextCalled = true })
+  assert.equal(nextCalled, false)
+  assert.equal(res.statusCode, 403)
+})
+
+test('requireSettingsCsrf accepts cookie-authenticated unsafe requests with valid token', () => {
+  const c = loadController()
+  const req = { ...makeReqWithValidCookie(), method: 'POST', body: {} }
+  req.headers['x-csrf-token'] = c.getSettingsCsrfToken(req)
+  let nextCalled = false
+  c.requireSettingsCsrf(req, makeRes(), () => { nextCalled = true })
+  assert.equal(nextCalled, true)
+})
+
+test('requireSettingsCsrfIfSession bypasses API-key style requests without settings cookie', () => {
+  const c = loadController()
+  let nextCalled = false
+  c.requireSettingsCsrfIfSession({ method: 'POST', headers: { 'x-api-key': 'mp_key' } }, makeRes(), () => { nextCalled = true })
+  assert.equal(nextCalled, true)
 })
 
 // ── updateSettings ────────────────────────────────────────────────

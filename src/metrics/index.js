@@ -41,6 +41,11 @@ class MetricsManager extends EventEmitter {
           popularity: 0
         }
       },
+      settings: {
+        writes: 0,
+        debounced: 0,
+        lastWriteAt: null
+      },
       apikeys: {
         // key -> { requests, errors, latencySum }
       },
@@ -210,6 +215,15 @@ class MetricsManager extends EventEmitter {
     this.stats.apikeys[key].errors++
   }
 
+  recordSettingsWrite () {
+    this.stats.settings.writes++
+    this.stats.settings.lastWriteAt = new Date().toISOString()
+  }
+
+  recordSettingsDebounce () {
+    this.stats.settings.debounced++
+  }
+
   getRPM () {
     const oneMinuteAgo = Date.now() - 60 * 1000
     return this.requestTimestamps.filter(t => t >= oneMinuteAgo).length
@@ -347,6 +361,7 @@ class MetricsManager extends EventEmitter {
             : 0
         }
       },
+      settings: this.stats.settings,
       apikeys: apikeysFormatted
     }
   }

@@ -70,7 +70,7 @@ function isTokenValid (token) {
 }
 
 function isAuthenticated (req) {
-  return isTokenValid(getCookie(req, SETTINGS_COOKIE))
+  return Boolean(isTokenValid(getCookie(req, SETTINGS_COOKIE)))
 }
 
 function setAuthCookie (res) {

@@ -2,10 +2,39 @@ const settingsPanel = document.querySelector('#settings-panel')
 const logoutButton = document.querySelector('#logout')
 const settingsGrid = document.querySelector('#settings-grid')
 const statusEl = document.querySelector('#status')
+const CSRF_STORAGE_KEY = 'melodarr_proxy_csrf'
 
 function setStatus (message, isError = false) {
   statusEl.textContent = message
   statusEl.style.color = isError ? '#b42318' : 'var(--c-muted)'
+}
+
+function rememberCsrfToken (payload) {
+  if (payload?.csrfToken) {
+    window.sessionStorage.setItem(CSRF_STORAGE_KEY, payload.csrfToken)
+  }
+}
+
+function withCsrfHeaders (headers = {}) {
+  const next = new Headers(headers)
+  const token = window.sessionStorage.getItem(CSRF_STORAGE_KEY)
+  if (token) {
+    next.set('X-CSRF-Token', token)
+  }
+  return next
+}
+
+async function apiFetch (url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: withCsrfHeaders(options.headers)
+  })
+}
+
+async function readJson (response) {
+  const payload = await response.json()
+  rememberCsrfToken(payload)
+  return payload
 }
 
 // Human-readable labels for each config key
@@ -181,9 +210,9 @@ function renderSettings (data) {
       regenBtn.addEventListener('click', async () => {
         try {
           regenBtn.disabled = true
-          const res = await fetch('/api/settings/generate-name', { method: 'POST' })
+          const res = await apiFetch('/api/settings/generate-name', { method: 'POST' })
           if (!res.ok) throw new Error('Failed to generate name')
-          const data = await res.json()
+          const data = await readJson(res)
           input.value = data.name
           await loadNameHistory()
         } catch (e) {
@@ -278,8 +307,8 @@ function renderSettings (data) {
   settingsGrid.append(apiKeySection)
 
   async function loadApiKeys () {
-    const response = await fetch('/api/admin/keys')
-    const result = await response.json()
+    const response = await apiFetch('/api/admin/keys')
+    const result = await readJson(response)
 
     if (!response.ok) {
       throw new Error(result.error || 'Unable to load API keys')
@@ -306,10 +335,10 @@ function renderSettings (data) {
       revoke.textContent = 'Revoke'
       revoke.className = 'inline-danger'
       revoke.addEventListener('click', async () => {
-        const response = await fetch(`/api/admin/keys/${encodeURIComponent(key.id)}`, {
+        const response = await apiFetch(`/api/admin/keys/${encodeURIComponent(key.id)}`, {
           method: 'DELETE'
         })
-        const result = await response.json()
+        const result = await readJson(response)
         if (!response.ok) {
           throw new Error(result.error || 'Unable to revoke API key')
         }
@@ -333,7 +362,7 @@ function renderSettings (data) {
 
     try {
       const formData = new FormData(apiKeyForm)
-      const response = await fetch('/api/admin/keys/create', {
+      const response = await apiFetch('/api/admin/keys/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -341,7 +370,7 @@ function renderSettings (data) {
           quota: Number(formData.get('quota') || 60)
         })
       })
-      const result = await response.json()
+      const result = await readJson(response)
 
       if (!response.ok) {
         throw new Error(result.error || 'Unable to create API key')
@@ -394,13 +423,13 @@ function renderSettings (data) {
     }
 
     try {
-      const response = await fetch('/api/settings', {
+      const response = await apiFetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       })
 
-      const result = await response.json()
+      const result = await readJson(response)
 
       if (!response.ok) {
         throw new Error(result.error || 'Save failed')
@@ -427,8 +456,8 @@ function renderSettings (data) {
 }
 
 async function loadSettings () {
-  const response = await fetch('/api/settings')
-  const data = await response.json()
+  const response = await apiFetch('/api/settings')
+  const data = await readJson(response)
 
   if (response.status === 401) {
     window.location.assign('/login.html')
@@ -445,10 +474,11 @@ async function loadSettings () {
 }
 
 logoutButton.addEventListener('click', async () => {
-  await fetch('/api/settings/logout', {
+  await apiFetch('/api/settings/logout', {
     method: 'POST'
   })
 
+  window.sessionStorage.removeItem(CSRF_STORAGE_KEY)
   window.location.assign('/login.html')
 })
 
@@ -460,8 +490,8 @@ if (btnStart) {
   btnStart.addEventListener('click', async () => {
     try {
       setStatus('Starting service...')
-      const res = await fetch('/api/proxy/start', { method: 'POST' })
-      const data = await res.json()
+      const res = await apiFetch('/api/proxy/start', { method: 'POST' })
+      const data = await readJson(res)
       if (!res.ok) throw new Error(data.error || 'Failed to start service')
       setStatus(data.message || 'Service started')
     } catch (err) {
@@ -474,8 +504,8 @@ if (btnStop) {
   btnStop.addEventListener('click', async () => {
     try {
       setStatus('Stopping service...')
-      const res = await fetch('/api/proxy/stop', { method: 'POST' })
-      const data = await res.json()
+      const res = await apiFetch('/api/proxy/stop', { method: 'POST' })
+      const data = await readJson(res)
       if (!res.ok) throw new Error(data.error || 'Failed to stop service')
       setStatus(data.message || 'Service stopped')
     } catch (err) {
@@ -488,8 +518,8 @@ if (btnClear) {
   btnClear.addEventListener('click', async () => {
     try {
       setStatus('Clearing cache...')
-      const res = await fetch('/api/cache/clear', { method: 'POST' })
-      const data = await res.json()
+      const res = await apiFetch('/api/cache/clear', { method: 'POST' })
+      const data = await readJson(res)
       if (!res.ok) throw new Error(data.error || 'Failed to clear cache')
       setStatus(data.message || 'Cache cleared')
     } catch (err) {
