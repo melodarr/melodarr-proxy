@@ -6,11 +6,21 @@ cd "$ROOT_DIR"
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
+USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-0}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-melodarr-ipv6}"
 DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
+use_ipv6_network() {
+  [[ "$USE_IPV6_NETWORK" == "1" || "$USE_IPV6_NETWORK" == "true" || "$USE_IPV6_NETWORK" == "yes" ]]
+}
+
 compose() {
-  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" docker compose "$@"
+  local compose_files=(-f docker-compose.yml)
+  if use_ipv6_network; then
+    compose_files+=(-f docker-compose.ipv6.yml)
+  fi
+
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" docker compose "${compose_files[@]}" "$@"
 }
 
 cleanup() {
@@ -18,7 +28,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
+if use_ipv6_network && ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
   docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null 2>&1 ||
     docker network create "$DOCKER_NETWORK" >/dev/null
 fi

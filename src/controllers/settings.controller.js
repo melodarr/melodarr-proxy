@@ -14,9 +14,10 @@ const { testProvider } = require('../providers')
 
 const SETTINGS_COOKIE = 'melodarr_proxy_settings'
 const SETTINGS_SESSION_TTL_MS = 12 * 60 * 60 * 1000
+const CSRF_HEADER = 'x-csrf-token'
 
 function getCookie (req, name) {
-  const cookies = req.headers.cookie || ''
+  const cookies = req.headers?.cookie || ''
   const match = cookies
     .split(';')
     .map((cookie) => cookie.trim())
@@ -32,6 +33,13 @@ function signPayload (payload) {
 function createToken () {
   const payload = Buffer.from(JSON.stringify({ exp: Date.now() + SETTINGS_SESSION_TTL_MS })).toString('base64url')
   return `${payload}.${signPayload(payload)}`
+}
+
+function createCsrfToken (sessionToken) {
+  if (!sessionToken) {
+    return ''
+  }
+  return signPayload(`csrf:${sessionToken}`)
 }
 
 function isTokenValid (token) {
@@ -66,12 +74,63 @@ function isAuthenticated (req) {
 }
 
 function setAuthCookie (res) {
-  res.cookie(SETTINGS_COOKIE, createToken(), {
+  const token = createToken()
+  res.cookie(SETTINGS_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: false,
     maxAge: SETTINGS_SESSION_TTL_MS
   })
+  return token
+}
+
+function getSettingsCsrfToken (req) {
+  const token = getCookie(req, SETTINGS_COOKIE)
+  return isTokenValid(token) ? createCsrfToken(token) : null
+}
+
+function getSubmittedCsrfToken (req) {
+  const header = req.headers?.[CSRF_HEADER]
+  if (Array.isArray(header)) {
+    return String(header[0] || '')
+  }
+  return String(header || req.body?._csrf || '')
+}
+
+function isCsrfTokenValid (req) {
+  const expected = getSettingsCsrfToken(req)
+  const submitted = getSubmittedCsrfToken(req)
+
+  if (!expected || !submitted) {
+    return false
+  }
+
+  const expectedBuffer = Buffer.from(expected)
+  const submittedBuffer = Buffer.from(submitted)
+
+  return expectedBuffer.length === submittedBuffer.length && crypto.timingSafeEqual(expectedBuffer, submittedBuffer)
+}
+
+function isSafeMethod (method) {
+  return ['GET', 'HEAD', 'OPTIONS'].includes(String(method || 'GET').toUpperCase())
+}
+
+function requireSettingsCsrf (req, res, next) {
+  if (isSafeMethod(req.method) || isCsrfTokenValid(req)) {
+    return next()
+  }
+
+  return res.status(403).json({
+    error: 'CSRF token required'
+  })
+}
+
+function requireSettingsCsrfIfSession (req, res, next) {
+  if (!isAuthenticated(req) || isSafeMethod(req.method)) {
+    return next()
+  }
+
+  return requireSettingsCsrf(req, res, next)
 }
 
 function requireSettingsAuth (req, res, next) {
@@ -102,10 +161,13 @@ function getSettingsPayload () {
 }
 
 function getSettingsStatus (req, res) {
+  const authenticated = isAuthenticated(req)
+
   res.json({
     enabled: hasAdminPassword(),
     setupRequired: canBootstrapAdmin(),
-    authenticated: isAuthenticated(req)
+    authenticated,
+    csrfToken: authenticated ? getSettingsCsrfToken(req) : null
   })
 }
 
@@ -125,10 +187,11 @@ function setupSettings (req, res) {
   }
 
   bootstrapAdminPassword(password)
-  setAuthCookie(res)
+  const token = setAuthCookie(res)
 
   return res.json({
-    ok: true
+    ok: true,
+    csrfToken: createCsrfToken(token)
   })
 }
 
@@ -145,10 +208,11 @@ function loginSettings (req, res) {
     })
   }
 
-  setAuthCookie(res)
+  const token = setAuthCookie(res)
 
   return res.json({
-    ok: true
+    ok: true,
+    csrfToken: createCsrfToken(token)
   })
 }
 
@@ -159,8 +223,11 @@ function logoutSettings (_req, res) {
   })
 }
 
-function getSettings (_req, res) {
-  res.json(getSettingsPayload())
+function getSettings (req, res) {
+  res.json({
+    ...getSettingsPayload(),
+    csrfToken: getSettingsCsrfToken(req)
+  })
 }
 
 const nameHistory = []
@@ -265,11 +332,14 @@ module.exports = {
   generateName,
   getNameHistory,
   getSettings,
+  getSettingsCsrfToken,
   getSettingsStatus,
   isAuthenticated,
   loginSettings,
   logoutSettings,
   requireSettingsAuth,
+  requireSettingsCsrf,
+  requireSettingsCsrfIfSession,
   setupSettings,
   testSettingsProvider,
   updateSettings

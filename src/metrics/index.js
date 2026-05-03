@@ -11,8 +11,10 @@ class MetricsManager extends EventEmitter {
 
     this.stats = {
       requests: { total: 0 },
-      cache: { hits: 0, misses: 0 },
+      cache: { hits: 0, misses: 0, staleHits: 0 },
       errors: { count: 0 },
+      locks: { waitEvents: 0, totalWaitMs: 0, maxWaitMs: 0 },
+      lidarr: { addShapeFailures: 0 },
       artistLookup: {
         total: 0,
         upstreamCalls: 0,
@@ -41,6 +43,10 @@ class MetricsManager extends EventEmitter {
       },
       apikeys: {
         // key -> { requests, errors, latencySum }
+      },
+      providers: {
+        fallbacks: 0,
+        exhaustions: 0
       }
     }
 
@@ -124,13 +130,34 @@ class MetricsManager extends EventEmitter {
     this.emit('request_error')
   }
 
-  recordCache (hit) {
+  recordCache (hit, isStale = false) {
     if (hit) {
       this.stats.cache.hits++
+      if (isStale) this.stats.cache.staleHits++
     } else {
       this.stats.cache.misses++
     }
     this.emit('cache', hit)
+  }
+
+  recordLockWait (ms) {
+    this.stats.locks.waitEvents++
+    this.stats.locks.totalWaitMs += ms
+    if (ms > this.stats.locks.maxWaitMs) {
+      this.stats.locks.maxWaitMs = ms
+    }
+  }
+
+  recordProviderFallback (exhausted = false) {
+    if (exhausted) {
+      this.stats.providers.exhaustions++
+    } else {
+      this.stats.providers.fallbacks++
+    }
+  }
+
+  recordLidarrAddShapeFailure () {
+    this.stats.lidarr.addShapeFailures++
   }
 
   recordLatency (ms) {
@@ -254,6 +281,7 @@ class MetricsManager extends EventEmitter {
       cache: {
         hits: this.stats.cache.hits,
         misses: this.stats.cache.misses,
+        staleHits: this.stats.cache.staleHits,
         hitRate: (this.stats.cache.hits + this.stats.cache.misses) > 0
           ? Number((this.stats.cache.hits / (this.stats.cache.hits + this.stats.cache.misses)).toFixed(4))
           : null
@@ -273,6 +301,20 @@ class MetricsManager extends EventEmitter {
       errors: {
         count: this.stats.errors.count,
         rate: errorRate
+      },
+      locks: {
+        waitEvents: this.stats.locks.waitEvents,
+        avgWaitMs: this.stats.locks.waitEvents > 0
+          ? Math.round(this.stats.locks.totalWaitMs / this.stats.locks.waitEvents)
+          : 0,
+        maxWaitMs: this.stats.locks.maxWaitMs
+      },
+      lidarr: {
+        addShapeFailures: this.stats.lidarr.addShapeFailures
+      },
+      providerFallbacks: {
+        fallbacks: this.stats.providers.fallbacks,
+        exhaustions: this.stats.providers.exhaustions
       },
       providers,
       topQueries: this.getTopQueries(),

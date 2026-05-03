@@ -16,6 +16,8 @@ const {
   loginSettings,
   logoutSettings,
   requireSettingsAuth,
+  requireSettingsCsrf,
+  requireSettingsCsrfIfSession,
   setupSettings,
   testSettingsProvider,
   updateSettings
@@ -30,24 +32,24 @@ router.get('/ready', getReadiness)
 router.get('/settings/status', getSettingsStatus)
 router.post('/settings/setup', setupSettings)
 router.post('/settings/login', loginSettings)
-router.post('/settings/logout', logoutSettings)
+router.post('/settings/logout', requireSettingsAuth, requireSettingsCsrf, logoutSettings)
 router.get('/update/status', getUpdateStatus)
 
 // Authenticated monitoring/configuration
 router.get('/stats', requireSettingsAuth, getStats)
 router.get('/stats/history', requireSettingsAuth, getHistory)
 router.get('/settings', requireSettingsAuth, getSettings)
-router.patch('/settings', requireSettingsAuth, updateSettings)
-router.delete('/settings/runtime/:key', requireSettingsAuth, clearRuntimeSetting)
-router.post('/settings/generate-name', requireSettingsAuth, generateName)
-router.post('/settings/providers/test', requireSettingsAuth, testSettingsProvider)
+router.patch('/settings', requireSettingsAuth, requireSettingsCsrf, updateSettings)
+router.delete('/settings/runtime/:key', requireSettingsAuth, requireSettingsCsrf, clearRuntimeSetting)
+router.post('/settings/generate-name', requireSettingsAuth, requireSettingsCsrf, generateName)
+router.post('/settings/providers/test', requireSettingsAuth, requireSettingsCsrf, testSettingsProvider)
 router.get('/settings/name-history', requireSettingsAuth, getNameHistory)
-router.post('/update/apply', requireSettingsAuth, applyUpdate)
+router.post('/update/apply', requireSettingsAuth, requireSettingsCsrf, applyUpdate)
 
 // API Key Administration
-router.post('/admin/keys/create', requireSettingsAuth, generateKey)
+router.post('/admin/keys/create', requireSettingsAuth, requireSettingsCsrf, generateKey)
 router.get('/admin/keys', requireSettingsAuth, getAllKeys)
-router.delete('/admin/keys/:key', requireSettingsAuth, revokeKey)
+router.delete('/admin/keys/:key', requireSettingsAuth, requireSettingsCsrf, revokeKey)
 
 // Main proxy route (requires proxy to be running)
 const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 })
@@ -95,10 +97,12 @@ router.get('/:apiKey/v0.4/recent/artist', pathAuthMiddleware, proxyRateLimiter, 
 router.get('/:apiKey/v0.4/recent/album', pathAuthMiddleware, proxyRateLimiter, proxyAuthMiddleware, proxyStateMiddleware, handleRecentFeed)
 
 // Control routes
-router.post('/proxy/start', proxyRateLimiter, proxyAuthMiddleware, startProxy)
-router.post('/proxy/stop', proxyRateLimiter, proxyAuthMiddleware, stopProxy)
-router.post('/cache/clear', proxyRateLimiter, proxyAuthMiddleware, clearCache)
-router.post('/sync/trigger', proxyRateLimiter, proxyAuthMiddleware, triggerSync)
+const controlAuthMiddleware = require('../middleware/controlAuth.middleware')
+
+router.post('/proxy/start', proxyRateLimiter, controlAuthMiddleware, requireSettingsCsrfIfSession, startProxy)
+router.post('/proxy/stop', proxyRateLimiter, controlAuthMiddleware, requireSettingsCsrfIfSession, stopProxy)
+router.post('/cache/clear', proxyRateLimiter, controlAuthMiddleware, requireSettingsCsrfIfSession, clearCache)
+router.post('/sync/trigger', proxyRateLimiter, controlAuthMiddleware, requireSettingsCsrfIfSession, triggerSync)
 
 module.exports = router
 module.exports.pathAuthMiddleware = pathAuthMiddleware

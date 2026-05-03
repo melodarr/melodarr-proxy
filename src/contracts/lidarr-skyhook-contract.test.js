@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { toSkyhookSearchShape } = require('../utils/skyhook')
+const { LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS } = require('../utils/lidarrArtist')
 
 const fixturesDir = path.join(__dirname, '../fixtures/lidarr')
 
@@ -12,20 +13,7 @@ function readFixture (name) {
 }
 
 function assertArtistContract (artist) {
-  const required = [
-    'id',
-    'artistName',
-    'disambiguation',
-    'overview',
-    'type',
-    'status',
-    'aliases',
-    'links',
-    'images',
-    'albums'
-  ]
-
-  for (const key of required) {
+  for (const key of LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS) {
     assert.ok(Object.prototype.hasOwnProperty.call(artist, key), `artist missing ${key}`)
   }
 

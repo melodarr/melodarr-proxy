@@ -4,7 +4,7 @@ RUN corepack enable
 COPY package.json yarn.lock .yarnrc.yml ./
 
 FROM base AS dev
-RUN yarn install
+RUN yarn install --immutable
 COPY . .
 
 FROM dev AS test
@@ -25,9 +25,10 @@ ENV APP_CREATED=$APP_CREATED
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates gosu wget \
   && rm -rf /var/lib/apt/lists/*
-RUN node -e "const fs=require('fs'); const p=require('./package.json'); delete p.devDependencies; if (p.scripts) delete p.scripts.prepare; fs.writeFileSync('package.json', JSON.stringify(p, null, 2))" \
-  && npm install --omit=dev --ignore-scripts \
+RUN yarn plugin import workspace-tools \
+  && yarn workspaces focus --all --production \
   && rm -f yarn.lock .yarnrc.yml \
+  && rm -rf .yarn/cache \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY src ./src
 COPY public ./public

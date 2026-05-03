@@ -3,6 +3,7 @@ const fs = require('fs')
 const https = require('https')
 const path = require('path')
 const { promisify } = require('util')
+const { isAuthenticated } = require('./settings.controller')
 
 const execFileAsync = promisify(execFile)
 const DEFAULT_REPOSITORY = 'melodarr/melodarr-proxy'
@@ -179,8 +180,15 @@ async function buildUpdateStatus () {
   }
 }
 
-async function getUpdateStatus (_req, res) {
-  res.json(await buildUpdateStatus())
+async function getUpdateStatus (req, res) {
+  const status = await buildUpdateStatus()
+
+  if (!isAuthenticated(req)) {
+    delete status.runner
+    delete status.error
+  }
+
+  res.json(status)
 }
 
 async function runStep (command, args, options) {

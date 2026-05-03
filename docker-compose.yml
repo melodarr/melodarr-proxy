@@ -6,9 +6,7 @@ services:
       context: .
       target: production
     restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+
     environment:
       PORT: 3000
       REDIS_URL: redis://redis:6379
@@ -74,8 +72,3 @@ services:
 
 volumes:
   melodarr_proxy_data:
-
-networks:
-  default:
-    name: melodarr-ipv6
-    external: true

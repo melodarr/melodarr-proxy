@@ -1,4 +1,8 @@
 const { getAppVersion } = require('./utils/version')
+const {
+  LIDARR_LOOKUP_ARTIST_DEFAULTS,
+  LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS
+} = require('./utils/lidarrArtist')
 
 const openApiDocument = {
   openapi: '3.1.0',
@@ -66,11 +70,12 @@ const openApiDocument = {
       },
       ArtistLookupResponse: {
         type: 'object',
+        required: LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
         properties: {
           artistName: { type: 'string', example: 'Radiohead' },
           id: { type: 'string' },
           foreignArtistId: { type: 'string' },
-          status: { type: 'string', example: 'continuing' },
+          status: { type: 'string', example: LIDARR_LOOKUP_ARTIST_DEFAULTS.status },
           aliases: {
             type: 'array',
             items: { type: 'string' }
@@ -86,6 +91,10 @@ const openApiDocument = {
           albums: {
             type: 'array',
             items: { $ref: '#/components/schemas/Album' }
+          },
+          images: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: true }
           },
           partial: { type: 'boolean' },
           warning: { type: ['string', 'null'] }

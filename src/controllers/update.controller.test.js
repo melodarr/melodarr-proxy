@@ -11,11 +11,22 @@ function loadController () {
   const cpPath = require.resolve('child_process')
   const fsPath = require.resolve('fs')
   const httpsPath = require.resolve('https')
+  const settingsPath = require.resolve('./settings.controller')
 
   delete require.cache[controllerPath]
   delete require.cache[cpPath]
   delete require.cache[fsPath]
   delete require.cache[httpsPath]
+  delete require.cache[settingsPath]
+
+  require.cache[settingsPath] = {
+    id: settingsPath,
+    filename: settingsPath,
+    loaded: true,
+    exports: {
+      isAuthenticated: (req) => req.auth === true
+    }
+  }
 
   require.cache[cpPath] = {
     id: cpPath,
@@ -74,7 +85,7 @@ function loadController () {
 
 after(() => {
   const paths = [
-    './update.controller', 'child_process', 'fs', 'https'
+    './update.controller', 'child_process', 'fs', 'https', './settings.controller'
   ].map(p => {
     try { return require.resolve(p) } catch (_) { return null }
   }).filter(Boolean)
@@ -209,7 +220,32 @@ test('buildUpdateStatus handles GitHub API error', async () => {
   assert.match(status.error, /Unable to check for updates/)
 })
 
-test('getUpdateStatus sends JSON response', async () => {
+test('getUpdateStatus sends full JSON response when authenticated', async () => {
+  process.env.APP_VERSION = '0.2.0'
+  mockHttpsGet = (url, cb) => {
+    const res = {
+      statusCode: 200,
+      setEncoding: () => {},
+      on: (event, handler) => {
+        if (event === 'data') handler(JSON.stringify({ tag_name: 'v0.2.0' }))
+        if (event === 'end') handler()
+      }
+    }
+    cb(res)
+    return { on: () => {}, setTimeout: () => {}, destroy: () => {} }
+  }
+  mockExistsSync = () => false // disables runner
+
+  const { getUpdateStatus } = loadController()
+  let jsonCalledWith = null
+  const res = { json: (data) => { jsonCalledWith = data } }
+
+  await getUpdateStatus({ auth: true }, res)
+  assert.equal(jsonCalledWith.updateAvailable, false)
+  assert.equal(jsonCalledWith.runner.enabled, false)
+})
+
+test('getUpdateStatus redacts runner details when unauthenticated', async () => {
   process.env.APP_VERSION = '0.2.0'
   mockHttpsGet = (url, cb) => {
     const res = {
@@ -231,7 +267,8 @@ test('getUpdateStatus sends JSON response', async () => {
 
   await getUpdateStatus({}, res)
   assert.equal(jsonCalledWith.updateAvailable, false)
-  assert.equal(jsonCalledWith.runner.enabled, false)
+  assert.equal(jsonCalledWith.runner, undefined)
+  assert.equal(jsonCalledWith.error, undefined)
 })
 
 test('applyUpdate returns 409 if runner is not enabled', async () => {

@@ -50,6 +50,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   delete require.cache[upstreamPath]
   delete require.cache[artistDiscoveryPath]
 
+  const lockCalls = []
   const fakeCache = {
     async get (key) {
       return cacheStore.get(key) || null
@@ -61,10 +62,12 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
         ttlSeconds
       })
     },
-    async acquireLock () {
+    async acquireLock (key, ttlMs) {
+      lockCalls.push({ method: 'acquireLock', key, ttlMs })
       return cacheStore.get('_lock_fail') ? false : 'test-lock'
     },
-    async releaseLock () {
+    async releaseLock (key, token) {
+      lockCalls.push({ method: 'releaseLock', key, token })
       return true
     }
   }
@@ -73,7 +76,8 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     recordArtistLookup () {},
     recordCache () {},
     recordEnrichment () {},
-    recordRanking () {}
+    recordRanking () {},
+    recordLockWait () {}
   }
 
   require.cache[providersPath] = {
@@ -197,6 +201,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
 
   return {
     cacheStore,
+    lockCalls,
     controller: require('./proxy.controller')
   }
 }
@@ -213,7 +218,7 @@ test('artist lookup requires a term', async () => {
 
 test('artist lookup normalizes provider data and caches the response', async () => {
   let upstreamCalls = 0
-  const { controller, cacheStore } = loadController({
+  const { controller, cacheStore, lockCalls } = loadController({
     aggregateArtist: async (term) => {
       upstreamCalls++
       return {
@@ -256,6 +261,11 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.body[0].albums[0].remoteCover, 'https://example.test/cover.jpg')
   assert.equal(res.body[0].partial, false)
   assert.ok(cacheStore.has('artist:test artist'))
+  assert.deepEqual(lockCalls.at(-1), {
+    method: 'releaseLock',
+    key: 'lock:artist:test artist',
+    token: 'test-lock'
+  })
 })
 
 test('artist lookup preserves ISO 8601 firstReleaseDate from provider (v0.3.36)', async () => {
@@ -321,7 +331,7 @@ test('artist lookup returns cached response without debug data by default', asyn
 })
 
 test('artist lookup returns partial error response when all providers fail', async () => {
-  const { controller } = loadController({
+  const { controller, lockCalls } = loadController({
     aggregateArtist: async () => {
       throw new Error('All metadata providers failed')
     }
@@ -337,6 +347,11 @@ test('artist lookup returns partial error response when all providers fail', asy
   assert.deepEqual(res.body[0].albums, [])
   assert.equal(res.body[0].partial, true)
   assert.equal(res.body[0].warning, 'All metadata providers failed')
+  assert.deepEqual(lockCalls.at(-1), {
+    method: 'releaseLock',
+    key: 'lock:artist:broken artist',
+    token: 'test-lock'
+  })
 })
 
 test('artist by id returns full artist payload for Lidarr path-segment lookup', async () => {
@@ -416,7 +431,7 @@ test('handleSearch returns cached response in SkyHook shape', async () => {
 
 test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candidates', async () => {
   let discoverCalled = false
-  const { controller, cacheStore } = loadController({
+  const { controller, cacheStore, lockCalls } = loadController({
     discoverArtists: async () => {
       discoverCalled = true
       return [{
@@ -439,10 +454,15 @@ test('handleSearch fetches upstream, caches, and returns SkyHook-wrapped candida
   assert.equal(res.body[0].artist.id, 'mb-fresh-1')
   // Cache stores the raw candidates (transformation happens at response time).
   assert.ok(cacheStore.has('search:test song'))
+  assert.deepEqual(lockCalls.at(-1), {
+    method: 'releaseLock',
+    key: 'lock:search:test song',
+    token: 'test-lock'
+  })
 })
 
 test('handleSearch handles upstream error', async () => {
-  const { controller } = loadController({
+  const { controller, lockCalls } = loadController({
     discoverArtists: async () => { throw new Error('Upstream failed') }
   })
   const res = makeResponse()
@@ -450,6 +470,11 @@ test('handleSearch handles upstream error', async () => {
   assert.equal(res.statusCode, 502)
   assert.equal(res.body.error, 'Failed to fetch from upstream API')
   assert.equal(res.body.details.message, 'Upstream failed')
+  assert.deepEqual(lockCalls.at(-1), {
+    method: 'releaseLock',
+    key: 'lock:search:fail',
+    token: 'test-lock'
+  })
 })
 
 test('handleSearch error body MUST NOT leak axios err.config (URL, headers, params, User-Agent)', async () => {

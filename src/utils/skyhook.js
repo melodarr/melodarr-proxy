@@ -12,23 +12,12 @@
 // result (e.g. add an artist) still depends on whether id is
 // a real MBID, which is a provider-layer concern.
 
-const ARTIST_DEFAULTS = {
-  // Lidarr's ArtistType enum: Person | Group | Orchestra | Choir | Character | Other.
-  // We don't know which from upstream candidates, so 'Group' is the safest
-  // default — it's the most common and Lidarr accepts it for both bands and
-  // solo acts without complaint.
-  type: 'Group',
-  // Lidarr's ArtistStatus enum: active | ended | split-up.
-  status: 'active'
-}
-
-function asString (v) {
-  return v == null ? '' : String(v)
-}
-
-function asStringArray (v) {
-  return Array.isArray(v) ? v.map(asString).filter(Boolean) : []
-}
+const {
+  LIDARR_SKYHOOK_ARTIST_DEFAULTS,
+  asString,
+  normalizeStringArray,
+  withSkyhookArtistDefaults
+} = require('./lidarrArtist')
 
 function pickArtistMbid (candidate) {
   return asString(candidate.id || candidate.ids?.musicbrainzArtistId)
@@ -71,34 +60,25 @@ function normalizeImages (candidate, coverType) {
 }
 
 function buildNestedArtist (candidate, artistId) {
-  return {
+  return withSkyhookArtistDefaults({
     id: artistId,
     artistName: asString(candidate.artistName),
     disambiguation: asString(candidate.disambiguation),
     overview: '',
-    type: ARTIST_DEFAULTS.type,
-    status: ARTIST_DEFAULTS.status,
-    aliases: asStringArray(candidate.aliases),
-    links: [],
-    images: [],
-    albums: []
-  }
+    aliases: candidate.aliases
+  })
 }
 
 function wrapArtist (candidate) {
   return {
-    artist: {
+    artist: withSkyhookArtistDefaults({
       id: pickArtistMbid(candidate),
       artistName: asString(candidate.artistName || candidate.match),
       disambiguation: asString(candidate.disambiguation),
       overview: '',
-      type: ARTIST_DEFAULTS.type,
-      status: ARTIST_DEFAULTS.status,
-      aliases: asStringArray(candidate.aliases),
-      links: [],
       images: normalizeImages(candidate, 'poster'),
-      albums: []
-    }
+      aliases: candidate.aliases
+    })
   }
 }
 
@@ -119,12 +99,12 @@ function wrapAlbum (candidate) {
       profileId: 0,
       duration: 0,
       albumType: asString(candidate.albumType || candidate.primaryType || 'Album'),
-      secondaryTypes: asStringArray(candidate.secondaryTypes),
+      secondaryTypes: normalizeStringArray(candidate.secondaryTypes),
       mediumCount: 0,
       ratings: { votes: 0, value: 0 },
       releaseDate,
       releases: [],
-      genres: asStringArray(candidate.genres),
+      genres: normalizeStringArray(candidate.genres),
       media: [],
       artist: buildNestedArtist(candidate, artistId),
       images,
@@ -171,4 +151,7 @@ function toSkyhookSearchShape (candidates, requestedType = 'all') {
   return out
 }
 
-module.exports = { toSkyhookSearchShape }
+module.exports = {
+  LIDARR_SKYHOOK_ARTIST_DEFAULTS,
+  toSkyhookSearchShape
+}

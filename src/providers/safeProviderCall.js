@@ -25,6 +25,7 @@
 
 const health = require('../health/providerHealth')
 const metrics = require('../health/providerMetrics')
+const globalMetrics = require('../metrics')
 
 function isValidItem (item) {
   if (!item || typeof item !== 'object') return false
@@ -63,6 +64,7 @@ async function safeProviderCall (name, fn, query) {
         // Items present but all malformed → invalid shape.
         health.recordFailure(name, 'all items have invalid shape')
         metrics.record(name, false, latency)
+        globalMetrics.recordLidarrAddShapeFailure()
         const e = new Error(`Provider ${name} returned items with invalid shape`)
         e.code = 'INVALID_SHAPE'
         throw e
@@ -80,6 +82,7 @@ async function safeProviderCall (name, fn, query) {
 
     health.recordFailure(name, 'result has invalid shape')
     metrics.record(name, false, latency)
+    globalMetrics.recordLidarrAddShapeFailure()
     const e = new Error(`Provider ${name} returned invalid shape`)
     e.code = 'INVALID_SHAPE'
     throw e

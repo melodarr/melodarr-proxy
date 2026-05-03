@@ -27,10 +27,24 @@ if (process.argv.includes('--reset-password')) {
 
 const metricsMiddleware = require('./middleware/metrics.middleware')
 const requestIdMiddleware = require('./middleware/requestId.middleware')
+const corsMiddleware = require('./middleware/cors.middleware')
 const apiRoutes = require('./routes/api.routes')
 const debugRoutes = require('./routes/debug.routes')
 const publicRoutes = require('./routes/public.routes')
 const openApiDocument = require('./openapi')
+
+const PATH_API_KEY_SEGMENT_RE = /^(?:mp_[A-Za-z0-9_-]+|[a-f0-9]{32,64})$/i
+
+function redactPathApiKeys (value = '') {
+  return String(value)
+    .split('/')
+    .map((segment) => {
+      const [pathPart, ...suffixParts] = segment.split('?')
+      const redactedPathPart = PATH_API_KEY_SEGMENT_RE.test(pathPart) ? '[redacted-api-key]' : pathPart
+      return suffixParts.length ? `${redactedPathPart}?${suffixParts.join('?')}` : redactedPathPart
+    })
+    .join('/')
+}
 
 function createApp () {
   const app = express()
@@ -39,18 +53,7 @@ function createApp () {
   // controller, and async hop sees the correlation id.
   app.use(requestIdMiddleware)
 
-  // Middleware
-  // Custom CORS middleware
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*')
-    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Api-Key')
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(200)
-    } else {
-      next()
-    }
-  })
+  app.use(corsMiddleware)
   app.use(express.json())
 
   // Metrics tracking for all routes
@@ -112,11 +115,13 @@ function createApp () {
   // Fallback for unmatched routes
   app.use((req, res) => {
     const queryKeys = Object.keys(req.query || {}).filter(key => !/api[_-]?key|apikey|token|secret/i.test(key))
+    const originalUrl = redactPathApiKeys(req.originalUrl)
+    const path = redactPathApiKeys(req.path)
     logger.warn('Route not found', {
       requestId: req.requestId,
       method: req.method,
-      originalUrl: req.originalUrl,
-      path: req.path,
+      originalUrl,
+      path,
       queryKeys,
       userAgent: req.headers?.['user-agent']
     })

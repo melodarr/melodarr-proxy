@@ -216,7 +216,7 @@ test('proxy mounts legacy /artist/search compatibility route', async (t) => {
 
 test('proxy logs unmatched route details without sensitive query keys', async (t) => {
   const { app, logRecords } = loadServer()
-  const response = await invokeApp(app, '/missing/path?term=radiohead&apikey=mp_secret&token=hidden')
+  const response = await invokeApp(app, '/api/mp_secret/missing/path?term=radiohead&apikey=mp_secret&token=hidden')
   const body = response.json()
   const routeLog = logRecords.find(record => record.level === 'warn' && record.message === 'Route not found')
 
@@ -224,6 +224,20 @@ test('proxy logs unmatched route details without sensitive query keys', async (t
   assert.equal(body.error, 'API route not found')
   assert.ok(routeLog)
   assert.equal(routeLog.meta.method, 'GET')
-  assert.equal(routeLog.meta.path, '/missing/path')
+  assert.equal(routeLog.meta.originalUrl, '/api/[redacted-api-key]/missing/path?term=radiohead&apikey=mp_secret&token=hidden')
+  assert.equal(routeLog.meta.path, '/api/[redacted-api-key]/missing/path')
   assert.deepEqual(routeLog.meta.queryKeys, ['term'])
+})
+
+test('proxy logs unmatched legacy path-key routes with hex key redacted', async (t) => {
+  const { app, logRecords } = loadServer()
+  const legacyKey = 'bc57be1e98bed038597f1fed0f058137'
+  const response = await invokeApp(app, `/api/${legacyKey}/v1/artist/lookup/typo?term=radiohead`)
+  const routeLog = logRecords.find(record => record.level === 'warn' && record.message === 'Route not found')
+
+  assert.equal(response.statusCode, 404)
+  assert.ok(routeLog)
+  assert.equal(routeLog.meta.originalUrl, '/api/[redacted-api-key]/v1/artist/lookup/typo?term=radiohead')
+  assert.equal(routeLog.meta.path, '/api/[redacted-api-key]/v1/artist/lookup/typo')
+  assert.ok(!JSON.stringify(routeLog).includes(legacyKey))
 })

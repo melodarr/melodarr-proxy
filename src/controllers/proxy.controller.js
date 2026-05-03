@@ -12,6 +12,7 @@ const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
 const { isValidArtist } = require('../utils/validateArtist')
+const { normalizeStringArray, withArtistLookupDefaults } = require('../utils/lidarrArtist')
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -36,8 +37,9 @@ async function handleSearch (req, res) {
   const startCache = Date.now()
   const cached = await cache.get(cacheKey)
   if (cached) {
-    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
-    metrics.recordCache(true)
+    const isStale = (Date.now() - new Date(cached.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
+    metrics.recordCache(true, isStale)
     await tracer.finalizeTrace(trace, { cacheHit: true })
     res.set('X-Cache-Generated-At', cached.generatedAt)
     return res.json(toSkyhookSearchShape(cached.data, type).filter(isValidArtist))
@@ -48,12 +50,14 @@ async function handleSearch (req, res) {
 
   const lockKey = `lock:${cacheKey}`
   let hasLock = false
+  let lockToken = null
   const startWait = Date.now()
   const ttlMs = 15000
 
   let attempt = 0
   while (Date.now() - startWait < ttlMs) {
-    hasLock = await cache.acquireLock(lockKey, ttlMs)
+    lockToken = await cache.acquireLock(lockKey, ttlMs)
+    hasLock = Boolean(lockToken)
     if (hasLock) break
 
     attempt++
@@ -62,10 +66,13 @@ async function handleSearch (req, res) {
     const waitTime = baseWait + jitter
 
     tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
+    metrics.recordLockWait(waitTime)
     await new Promise(resolve => setTimeout(resolve, waitTime))
 
     const cachedData = await cache.get(cacheKey)
     if (cachedData) {
+      const isStale = (Date.now() - new Date(cachedData.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
+      metrics.recordCache(true, isStale)
       await tracer.finalizeTrace(trace, { cacheHit: true })
       res.set('X-Cache-Generated-At', cachedData.generatedAt)
       return res.json(toSkyhookSearchShape(cachedData.data, type).filter(isValidArtist))
@@ -113,7 +120,7 @@ async function handleSearch (req, res) {
       details: { message: err.message, code: err.code || null }
     })
   } finally {
-    await cache.releaseLock(lockKey)
+    await cache.releaseLock(lockKey, lockToken)
   }
 }
 
@@ -132,21 +139,6 @@ function summarizeProvidersFromAlbums (albums = []) {
     name,
     albumCount
   }))
-}
-
-function normalizeStringArray (value) {
-  return Array.isArray(value)
-    ? value.map(item => String(item ?? '').trim()).filter(Boolean)
-    : []
-}
-
-function withArtistLookupDefaults (artist) {
-  return {
-    ...artist,
-    status: artist.status || 'continuing',
-    aliases: normalizeStringArray(artist.aliases),
-    links: Array.isArray(artist.links) ? artist.links : []
-  }
 }
 
 function buildArtistLookupRankingInput (term, data) {
@@ -283,7 +275,7 @@ async function handleArtistLookup (req, res) {
       ? cachedObj.providers
       : summarizeProvidersFromAlbums(cachedObj.albums)
 
-    metrics.recordCache(true)
+    metrics.recordCache(true, isStale)
     metrics.recordArtistLookup({
       term,
       upstreamCalls: 0,
@@ -310,12 +302,14 @@ async function handleArtistLookup (req, res) {
 
   const lockKey = `lock:${cacheKey}`
   let hasLock = false
+  let lockToken = null
   const startWait = Date.now()
   const ttlMs = 15000
 
   let attempt = 0
   while (Date.now() - startWait < ttlMs) {
-    hasLock = await cache.acquireLock(lockKey, ttlMs)
+    lockToken = await cache.acquireLock(lockKey, ttlMs)
+    hasLock = Boolean(lockToken)
     if (hasLock) break
 
     attempt++
@@ -324,6 +318,7 @@ async function handleArtistLookup (req, res) {
     const waitTime = baseWait + jitter
 
     tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
+    metrics.recordLockWait(waitTime)
     await new Promise(resolve => setTimeout(resolve, waitTime))
 
     const cachedDataAfterWait = await cache.get(cacheKey)
@@ -333,7 +328,8 @@ async function handleArtistLookup (req, res) {
         ? cachedObj.providers
         : summarizeProvidersFromAlbums(cachedObj.albums)
 
-      metrics.recordCache(true)
+      const isStale = (Date.now() - new Date(cachedDataAfterWait.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
+      metrics.recordCache(true, isStale)
       metrics.recordArtistLookup({
         term,
         upstreamCalls: 0,
@@ -360,17 +356,11 @@ async function handleArtistLookup (req, res) {
     tracer.addStep(trace, 'error', 0, 'timeout')
     metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 502, error: 'Lock timeout' })
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json([{
+    return res.status(502).json([withArtistLookupDefaults({
       artistName: term,
-      id: '',
-      foreignArtistId: '',
-      status: 'continuing',
-      aliases: [],
-      links: [],
-      albums: [],
       partial: true,
       warning: 'Upstream request failed during coalescing (lock timeout)'
-    }])
+    })])
   }
 
   try {
@@ -415,23 +405,17 @@ async function handleArtistLookup (req, res) {
 
     await tracer.finalizeTrace(trace, { cacheHit: false })
 
-    return res.status(502).json([{
+    return res.status(502).json([withArtistLookupDefaults({
       artistName: term,
-      id: '',
-      foreignArtistId: '',
-      status: 'continuing',
-      aliases: [],
-      links: [],
-      albums: [],
       partial: true,
       warning: error.message,
       details: {
         message: error.message,
         code: error.code
       }
-    }])
+    })])
   } finally {
-    await cache.releaseLock(lockKey)
+    await cache.releaseLock(lockKey, lockToken)
   }
 }
 
@@ -449,8 +433,9 @@ async function handleArtistById (req, res) {
   const startCache = Date.now()
   const cachedData = await cache.get(cacheKey)
   if (cachedData) {
-    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'hit')
-    metrics.recordCache(true)
+    const isStale = (Date.now() - new Date(cachedData.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
+    metrics.recordCache(true, isStale)
     const response = withArtistLookupDefaults({ ...cachedData.data, _generatedAt: cachedData.generatedAt })
     if (!isDebug && response.debug) delete response.debug
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: ['musicbrainz'] })

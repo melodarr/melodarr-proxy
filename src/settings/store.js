@@ -15,14 +15,35 @@ function loadSettings () {
 }
 
 function reloadSettings () {
+  if (saveTimeout) {
+    return settings
+  }
   settings = loadSettings()
   return settings
 }
 
-function saveSettings (nextSettings) {
+function saveSettingsFile (nextSettings) {
   fs.mkdirSync(dataDir, { recursive: true })
-  fs.writeFileSync(settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, { mode: 0o600 })
+  const tmpPath = `${settingsPath}.tmp.${crypto.randomBytes(4).toString('hex')}`
+  fs.writeFileSync(tmpPath, `${JSON.stringify(nextSettings, null, 2)}\n`, { mode: 0o600 })
+  fs.renameSync(tmpPath, settingsPath)
+}
+
+function saveSettings (nextSettings) {
   settings = nextSettings
+  saveSettingsFile(settings)
+}
+
+let saveTimeout = null
+function saveSettingsDebounced (nextSettings) {
+  settings = nextSettings
+  if (!saveTimeout) {
+    saveTimeout = setTimeout(() => {
+      saveTimeout = null
+      saveSettingsFile(settings)
+    }, 2000)
+    if (saveTimeout.unref) saveTimeout.unref()
+  }
 }
 
 function hashPassword (password, salt = crypto.randomBytes(16).toString('base64url')) {
@@ -185,8 +206,7 @@ function deleteApiKey (id) {
 }
 
 function checkApiKey (apiKey) {
-  reloadSettings()
-
+  // Omit reloadSettings() on the hot path to prevent synchronous disk reads
   const keys = settings.apiKeys || []
   const index = keys.findIndex((key) => verifyHash(apiKey, key.hash))
 
@@ -211,7 +231,8 @@ function checkApiKey (apiKey) {
 
   const nextKeys = [...keys]
   nextKeys[index] = key
-  saveSettings({
+
+  saveSettingsDebounced({
     ...settings,
     apiKeys: nextKeys
   })

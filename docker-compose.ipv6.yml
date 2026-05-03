@@ -1,0 +1,4 @@
+networks:
+  default:
+    name: ${DOCKER_NETWORK:-melodarr-ipv6}
+    external: true

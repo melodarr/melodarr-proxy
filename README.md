@@ -67,9 +67,19 @@ Or start manually:
 
 ```bash
 cp .env.example .env
-docker network create --ipv6 --subnet fd00:dead:beef:1::/64 melodarr-ipv6
 docker compose up -d --build proxy redis melodash
 ```
+
+For deployments that need the external IPv6 Docker network used by older
+Melodarr installs:
+
+```bash
+docker network create --ipv6 --subnet fd00:dead:beef:1::/64 melodarr-ipv6
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --build proxy redis melodash
+```
+
+`manage.sh` and the Compose smoke test use the self-contained default network
+unless `USE_IPV6_NETWORK=1` is set.
 
 Check active endpoints:
 

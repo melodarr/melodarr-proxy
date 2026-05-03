@@ -7,11 +7,21 @@ cd "$ROOT_DIR" || exit 1
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
+USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-0}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-melodarr-ipv6}"
 DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
+use_ipv6_network() {
+  [[ "$USE_IPV6_NETWORK" == "1" || "$USE_IPV6_NETWORK" == "true" || "$USE_IPV6_NETWORK" == "yes" ]]
+}
+
 compose_cmd() {
-  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" docker compose "$@"
+  local compose_files=(-f docker-compose.yml)
+  if use_ipv6_network; then
+    compose_files+=(-f docker-compose.ipv6.yml)
+  fi
+
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" docker compose "${compose_files[@]}" "$@"
 }
 
 run_proxy_lint() {
@@ -42,6 +52,10 @@ run_compose_smoke() {
 }
 
 ensure_network() {
+  if ! use_ipv6_network; then
+    return
+  fi
+
   if docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
     return
   fi
@@ -149,7 +163,9 @@ while true; do
       read -r confirm
       if [[ "$confirm" == "DELETE" ]]; then
         compose_cmd down -v --rmi all --remove-orphans
-        docker network rm "$DOCKER_NETWORK" >/dev/null 2>&1 || true
+        if use_ipv6_network; then
+          docker network rm "$DOCKER_NETWORK" >/dev/null 2>&1 || true
+        fi
         echo "Cleanup complete."
       else
         echo "Cleanup cancelled."

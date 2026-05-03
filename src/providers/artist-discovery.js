@@ -6,6 +6,7 @@ const logger = require('../utils/logger')
 const theaudiodbProvider = require('./theaudiodb.provider')
 const discogsProvider = require('./discogs.provider')
 const { safeProviderCall } = require('./safeProviderCall')
+const metrics = require('../metrics')
 
 const FALLBACK_ORDER = ['musicbrainz', 'itunes', 'theaudiodb', 'discogs']
 
@@ -118,15 +119,22 @@ async function tryProvidersInOrder (kind, query, attempts) {
     try {
       const result = await safeProviderCall(name, fn, query)
       // null = circuit breaker open → skip silently and try next provider.
-      if (result === null) continue
+      if (result === null) {
+        metrics.recordProviderFallback(false)
+        continue
+      }
       if (Array.isArray(result) && result.length > 0) {
         if (kind !== 'artist' || name !== 'musicbrainz' || result.some(hasImages)) {
           return result
         }
 
         return enrichArtistImages(result, query, enabled, attempts, name)
+      } else {
+        // Result is an empty array -> fallback to next provider
+        metrics.recordProviderFallback(false)
       }
     } catch (err) {
+      metrics.recordProviderFallback(false)
       errors.push({ provider: name, message: err.message, code: err.code })
       logger.warn('Discovery provider failed', {
         kind,
@@ -139,6 +147,7 @@ async function tryProvidersInOrder (kind, query, attempts) {
   }
 
   if (errors.length > 0) {
+    metrics.recordProviderFallback(true) // Exhaustion
     logger.warn('All discovery providers exhausted', { kind, query, errors })
   }
   return []
@@ -429,6 +438,7 @@ async function findSongAlbums ({ artist, song }) {
 
   const allRejected = settled.every(s => s.status === 'rejected')
   if (albums.length === 0 && allRejected) {
+    metrics.recordProviderFallback(true) // Exhaustion
     return {
       artist: normalizedArtist,
       song: normalizedSong,
