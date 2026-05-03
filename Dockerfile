@@ -25,7 +25,8 @@ ENV APP_CREATED=$APP_CREATED
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates gosu wget \
   && rm -rf /var/lib/apt/lists/*
-RUN yarn workspaces focus --all --production \
+RUN yarn plugin import workspace-tools \
+  && yarn workspaces focus --all --production \
   && rm -f yarn.lock .yarnrc.yml \
   && rm -rf .yarn/cache \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
