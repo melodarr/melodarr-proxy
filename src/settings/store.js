@@ -98,16 +98,45 @@ async function writeAtomic (filePath, data) {
   }
 }
 
+function createEmptySettingsVersionsIndex () {
+  return { current: null, lastKnownGood: null, versions: [] }
+}
+
+function normalizeSettingsVersionsIndex (index) {
+  if (!index || typeof index !== 'object' || Array.isArray(index)) {
+    return null
+  }
+
+  if (!Array.isArray(index.versions)) {
+    return null
+  }
+
+  return {
+    current: typeof index.current === 'string' ? index.current : null,
+    lastKnownGood: typeof index.lastKnownGood === 'string' ? index.lastKnownGood : null,
+    versions: index.versions
+  }
+}
+
 async function getSettingsVersions () {
   try {
     const data = await fs.promises.readFile(indexFile, 'utf8')
-    return JSON.parse(data)
+    const parsed = JSON.parse(data)
+    const normalized = normalizeSettingsVersionsIndex(parsed)
+
+    if (!normalized) {
+      const logger = require('../utils/logger')
+      logger.error('Settings index corrupted or unreadable. Starting fresh history to recover.', { error: 'Invalid settings index shape' })
+      return createEmptySettingsVersionsIndex()
+    }
+
+    return normalized
   } catch (err) {
     if (err.code !== 'ENOENT') {
       const logger = require('../utils/logger')
       logger.error('Settings index corrupted or unreadable. Starting fresh history to recover.', { error: err.message })
     }
-    return { current: null, lastKnownGood: null, versions: [] }
+    return createEmptySettingsVersionsIndex()
   }
 }
 
