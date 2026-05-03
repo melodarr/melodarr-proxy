@@ -7,6 +7,15 @@
 #   BASE_URL     — proxy URL inside the LXC     (default: http://127.0.0.1:3055)
 #   API_KEY      — proxy API key                (default: empty; prompt in interactive mode)
 #   SKIP_DEPLOY  — set to 1 to skip pull+up     (default: 0)
+#   BRANCH_REMOTE — git remote to fetch/list     (default: origin)
+#   LIST_BRANCHES — set to 1 to print deployable remote branches before checks
+#   BRANCH_LIST_ONLY — set to 1 with LIST_BRANCHES=1 to list branches and exit
+#   BRANCH_LIMIT — max branches to print         (default: 80)
+#   DEPLOY_BRANCH — branch/ref to deploy before verification.
+#                  Empty keeps the old pull+recreate deployment behavior.
+#                  When set, the script fetches the remote, switches to the
+#                  branch/ref in /opt/melodarr-proxy, builds proxy from source,
+#                  and verifies /api/version against that checked-out revision.
 #   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
 #                  overrides and restart the proxy (re-enables MusicBrainz)
 #                  (default: 0 — verify-only, never mutate)
@@ -24,6 +33,11 @@ CTID="${CTID:-163}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
 API_KEY="${API_KEY:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
+BRANCH_REMOTE="${BRANCH_REMOTE:-origin}"
+LIST_BRANCHES="${LIST_BRANCHES:-0}"
+BRANCH_LIST_ONLY="${BRANCH_LIST_ONLY:-0}"
+BRANCH_LIMIT="${BRANCH_LIMIT:-80}"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-}"
 REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
 EXPECTED_REV="${EXPECTED_REV:-}"
@@ -56,12 +70,79 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
   ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
   ask    API_KEY      "Proxy API key"                         "$API_KEY"
   ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
+  ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
+  ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
+  if [ "$LIST_BRANCHES" = "1" ]; then
+    ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
+  fi
+  ask    DEPLOY_BRANCH "Branch/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
   ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
   if [ "$REENABLE_MB" = "1" ]; then
     ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
   fi
   ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
   echo
+fi
+
+# ── Branch listing/deploy helpers ────────────────────────────────
+list_remote_branches () {
+  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" BRANCH_LIMIT="$BRANCH_LIMIT" bash -lc '
+    set -euo pipefail
+    cd /opt/melodarr-proxy
+    git fetch --prune "$BRANCH_REMOTE" >/dev/null
+    git for-each-ref \
+      --sort=-committerdate \
+      --format="%(refname:short)  %(committerdate:short)  %(subject)" \
+      "refs/remotes/$BRANCH_REMOTE" \
+      | awk -v head="$BRANCH_REMOTE/HEAD" "\$1 != head { print }" \
+      | sed -n "1,${BRANCH_LIMIT}p"
+  '
+}
+
+deploy_branch_ref () {
+  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" DEPLOY_BRANCH="$DEPLOY_BRANCH" bash -lc '
+    set -euo pipefail
+    cd /opt/melodarr-proxy
+
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "ERROR: /opt/melodarr-proxy has uncommitted changes; refusing to switch branches."
+      echo "Commit, stash, or clean that deployment checkout before using DEPLOY_BRANCH."
+      git status --short
+      exit 2
+    fi
+
+    git fetch --prune "$BRANCH_REMOTE"
+
+    ref="$DEPLOY_BRANCH"
+    remote_branch="$ref"
+    case "$ref" in
+      "$BRANCH_REMOTE"/*) remote_branch="${ref#"$BRANCH_REMOTE"/}" ;;
+    esac
+
+    if git show-ref --verify --quiet "refs/remotes/$BRANCH_REMOTE/$remote_branch"; then
+      git switch -C "$remote_branch" "$BRANCH_REMOTE/$remote_branch"
+    else
+      git switch --detach "$ref"
+    fi
+
+    docker compose up -d --build --force-recreate proxy
+  '
+}
+
+current_deploy_revision () {
+  pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && git rev-parse HEAD' 2>/dev/null || true
+}
+
+if [ "$LIST_BRANCHES" = "1" ]; then
+  echo
+  echo "## Available deploy branches ($BRANCH_REMOTE, newest first)"
+  if ! list_remote_branches; then
+    echo "ERROR: unable to list branches from /opt/melodarr-proxy in CTID=$CTID"
+    exit 1
+  fi
+  if [ "$BRANCH_LIST_ONLY" = "1" ]; then
+    exit 0
+  fi
 fi
 
 # ── API key required for auth-gated test paths ───────────────────
@@ -142,7 +223,7 @@ remote_post () {
 }
 
 echo "Melodarr verification harness"
-echo "CTID=$CTID  BASE_URL=$BASE_URL  SKIP_DEPLOY=$SKIP_DEPLOY"
+echo "CTID=$CTID  BASE_URL=$BASE_URL  SKIP_DEPLOY=$SKIP_DEPLOY  DEPLOY_BRANCH=${DEPLOY_BRANCH:-<none>}"
 
 # ── 1. Disk + deploy ─────────────────────────────────────────────
 echo
@@ -152,8 +233,21 @@ pct exec "$CTID" -- bash -lc 'df -h /var/lib/docker 2>/dev/null; docker system d
 if [ "$SKIP_DEPLOY" = "0" ]; then
   echo
   echo "## Deploy proxy only"
-  if pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && docker compose pull proxy && docker compose up -d --force-recreate proxy'; then
-    record_pass "deploy succeeded"
+  if [ -n "$DEPLOY_BRANCH" ]; then
+    echo "Deploying branch/ref: $DEPLOY_BRANCH"
+    DEPLOY_OK=0
+    deploy_branch_ref && DEPLOY_OK=1
+  else
+    DEPLOY_OK=0
+    pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && docker compose pull proxy && docker compose up -d --force-recreate proxy' && DEPLOY_OK=1
+  fi
+
+  if [ "$DEPLOY_OK" = "1" ]; then
+    DEPLOYED_REV="$(current_deploy_revision)"
+    if [ -n "$DEPLOY_BRANCH" ] && [ -n "$DEPLOYED_REV" ] && [ -z "$EXPECTED_REV" ]; then
+      EXPECTED_REV="$DEPLOYED_REV"
+    fi
+    record_pass "deploy succeeded${DEPLOYED_REV:+ (checkout revision=$DEPLOYED_REV)}"
     sleep 5
   else
     record_fail "deploy failed — aborting verification"
@@ -653,6 +747,7 @@ echo
 echo "========================================"
 echo "Verification summary"
 echo "  Revision:         $ACTUAL_REV"
+echo "  Deploy branch:    ${DEPLOY_BRANCH:-<none>}"
 echo "  Active providers: $ACTIVE_PROVIDERS"
 echo "  Tests passed:     $PASSES"
 echo "  Tests failed:     $FAILS"
