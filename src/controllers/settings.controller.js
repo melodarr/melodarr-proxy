@@ -547,6 +547,9 @@ async function getCurrentVersionMeta (req, res) {
     return res.status(404).json({ error: 'No current version' })
   }
   const meta = index.versions.find(v => v.id === index.current)
+  if (!meta) {
+    return res.status(404).json({ error: 'Current version metadata not found' })
+  }
   res.json({ meta })
 }
 
