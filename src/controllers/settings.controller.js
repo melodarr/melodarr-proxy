@@ -274,13 +274,15 @@ function runCanaryValidator (mode = 'deploy') {
     const baseUrl = `http://127.0.0.1:${port}`
     const scriptPath = require('path').join(process.cwd(), 'scripts/canary-validate.sh')
 
-    exec(`bash ${scriptPath}`, {
+    require('child_process').execFile('bash', [scriptPath], {
       env: {
         ...process.env,
         BASE_URL: baseUrl,
         API_KEY: tempKey,
         VALIDATION_MODE: mode
-      }
+      },
+      timeout: 30000,
+      maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
       setInternalValidatorKey(null)
       const rawOutput = stdout + (stderr ? '\n' + stderr : '')
