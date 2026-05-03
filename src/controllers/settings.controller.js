@@ -8,9 +8,19 @@ const {
   getSessionSecret,
   hasAdminPassword,
   updateRuntimeConfig,
-  verifyPassword
+  getSettingsVersions,
+  getSettingsVersion,
+  getCurrentSettingsVersion,
+  rollbackSettings,
+  markLastKnownGood,
+  flushSettingsWrites,
+  verifyPassword,
+  setInternalValidatorKey,
+  validateConfigInMemory
 } = require('../settings/store')
 const { testProvider } = require('../providers')
+const { exec } = require('child_process')
+const logger = require('../utils/logger')
 
 const SETTINGS_COOKIE = 'melodarr_proxy_settings'
 const SETTINGS_SESSION_TTL_MS = 12 * 60 * 60 * 1000
@@ -245,14 +255,112 @@ function generateName (_req, res) {
   res.json({ name: newName })
 }
 
-function updateSettings (req, res) {
+let _validatorFn = null
+
+function setValidator (fn) {
+  _validatorFn = fn
+}
+
+function runCanaryValidator (mode = 'deploy') {
+  if (_validatorFn) return _validatorFn(mode)
+  if (process.env.NODE_ENV === 'test') {
+    return Promise.resolve({ code: 0, output: 'mocked test' })
+  }
+  return new Promise((resolve) => {
+    const tempKey = `mp_${crypto.randomBytes(32).toString('base64url')}`
+    setInternalValidatorKey(tempKey)
+
+    const port = process.env.PORT || 3000
+    const baseUrl = `http://127.0.0.1:${port}`
+    const scriptPath = require('path').join(process.cwd(), 'scripts/canary-validate.sh')
+
+    exec(`bash ${scriptPath}`, {
+      env: {
+        ...process.env,
+        BASE_URL: baseUrl,
+        API_KEY: tempKey,
+        VALIDATION_MODE: mode
+      }
+    }, (error, stdout, stderr) => {
+      setInternalValidatorKey(null)
+      resolve({
+        code: error ? error.code : 0,
+        output: stdout + (stderr ? '\n' + stderr : '')
+      })
+    })
+  })
+}
+
+async function updateSettings (req, res) {
   const updates = req.body
 
   if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'Provide at least one setting to update' })
   }
 
+  const previousVersion = await getCurrentSettingsVersion()
   const result = updateRuntimeConfig(updates)
+
+  if (Object.keys(result.applied || {}).length > 0 || Object.keys(result.cleared || {}).length > 0) {
+    logger.info('config_update', { applied: result.applied, cleared: result.cleared })
+    await flushSettingsWrites()
+
+    // Check health after config change
+    const { getHealthStatus } = require('./health.controller')
+    const health = await getHealthStatus()
+
+    if (health.status !== 'ok' && previousVersion) {
+      logger.warn('validation_failed', { reason: 'health check degraded', health })
+      try {
+        await rollbackSettings(previousVersion, false, 'system:auto-rollback')
+        logger.info('rollback_applied', { versionId: previousVersion })
+      } catch (rollbackErr) {
+        logger.error('Auto-rollback failed', { error: rollbackErr.message })
+        return res.status(500).json({ error: 'System degraded and auto-rollback failed. Operator intervention required.' })
+      }
+      return res.status(400).json({
+        error: 'Configuration change degraded system health. Automatically rolled back.',
+        health
+      })
+    }
+
+    const canaryResult = await runCanaryValidator('config')
+    if (canaryResult.code === 1 || canaryResult.code === 3) {
+      logger.warn('validation_failed', { reason: 'canary failed', canaryOutput: canaryResult.output, code: canaryResult.code })
+      if (previousVersion) {
+        try {
+          await rollbackSettings(previousVersion, false, 'system:auto-rollback')
+          logger.info('rollback_applied', { versionId: previousVersion })
+        } catch (rollbackErr) {
+          logger.error('Auto-rollback failed', { error: rollbackErr.message })
+          return res.status(500).json({ error: 'Canary validation failed and auto-rollback failed. Operator intervention required.', canaryOutput: canaryResult.output })
+        }
+      }
+      return res.status(400).json({
+        error: 'Canary validation failed. Automatically rolled back.',
+        canaryOutput: canaryResult.output
+      })
+    }
+
+    if (canaryResult.code === 2 && process.env.ALLOW_PROVISIONAL_CONFIG !== '1' && req.body.allowProvisional !== true) {
+      logger.warn('validation_failed', { reason: 'canary provisional failure', canaryOutput: canaryResult.output })
+      if (previousVersion) {
+        try {
+          await rollbackSettings(previousVersion, false, 'system:auto-rollback')
+          logger.info('rollback_applied', { versionId: previousVersion })
+        } catch (rollbackErr) {
+          logger.error('Auto-rollback failed', { error: rollbackErr.message })
+          return res.status(500).json({ error: 'Canary validation provisional failure and auto-rollback failed. Operator intervention required.', canaryOutput: canaryResult.output })
+        }
+      }
+      return res.status(400).json({
+        error: 'Canary validation provisional failure (MB unreachable). Automatically rolled back. Set allowProvisional: true or ALLOW_PROVISIONAL_CONFIG=1 to force.',
+        canaryOutput: canaryResult.output
+      })
+    }
+
+    await markLastKnownGood()
+  }
 
   return res.json({
     ok: true,
@@ -260,6 +368,52 @@ function updateSettings (req, res) {
     cleared: result.cleared || {},
     skipped: result.skipped
   })
+}
+
+async function listVersions (req, res) {
+  const index = await getSettingsVersions()
+  res.json({
+    current: index.current,
+    lastKnownGood: index.lastKnownGood,
+    versions: index.versions.slice().reverse()
+  })
+}
+
+async function getVersion (req, res) {
+  const { id } = req.params
+  try {
+    const version = await getSettingsVersion(id)
+    res.json(version)
+  } catch (err) {
+    const status = err.message === 'Invalid versionId' ? 400 : 404
+    res.status(status).json({ error: err.message })
+  }
+}
+
+async function applyRollback (req, res) {
+  const { versionId } = req.body
+  const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true'
+
+  if (!versionId) {
+    return res.status(400).json({ error: 'versionId is required' })
+  }
+
+  const currentVersion = await getCurrentSettingsVersion()
+  if (versionId === currentVersion) {
+    return res.status(400).json({ error: 'Cannot rollback to the current active version' })
+  }
+
+  try {
+    const actor = `operator (${req.ip || 'unknown'})`
+    const result = await rollbackSettings(versionId, dryRun, actor)
+    if (!dryRun) {
+      logger.info('rollback_applied', { versionId, actor })
+      await markLastKnownGood()
+    }
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
 }
 
 function clearRuntimeSetting (req, res) {
@@ -327,6 +481,31 @@ async function testSettingsProvider (req, res) {
   }
 }
 
+async function getCurrentVersionMeta (req, res) {
+  const index = await getSettingsVersions()
+  if (!index.current) {
+    return res.status(404).json({ error: 'No current version' })
+  }
+  const meta = index.versions.find(v => v.id === index.current)
+  res.json({ meta })
+}
+
+async function validateSettingsEndpoint (req, res) {
+  const updates = req.body
+  if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Provide at least one setting to validate' })
+  }
+
+  try {
+    const result = await validateConfigInMemory(updates, async () => {
+      return await runCanaryValidator('config')
+    })
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 module.exports = {
   clearRuntimeSetting,
   generateName,
@@ -342,5 +521,11 @@ module.exports = {
   requireSettingsCsrfIfSession,
   setupSettings,
   testSettingsProvider,
-  updateSettings
+  updateSettings,
+  listVersions,
+  getVersion,
+  applyRollback,
+  getCurrentVersionMeta,
+  validateSettingsEndpoint,
+  setValidator
 }

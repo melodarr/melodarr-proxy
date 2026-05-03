@@ -47,3 +47,14 @@ test('pathAuthMiddleware skips route when path key is missing', () => {
   assert.equal(nextArg, 'route')
   assert.equal(req.query.api_key, undefined)
 })
+
+test('settings rollback route requires settings auth and CSRF before handler', () => {
+  const router = require('./api.routes')
+  const layer = router.stack.find((layer) => layer.route?.path === '/settings/rollback' && layer.route.methods.post)
+
+  assert.ok(layer, 'expected POST /settings/rollback route to be registered')
+  assert.deepEqual(
+    layer.route.stack.map((stackLayer) => stackLayer.handle.name),
+    ['requireSettingsAuth', 'requireSettingsCsrf', 'applyRollback']
+  )
+})

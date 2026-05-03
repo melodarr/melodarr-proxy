@@ -48,13 +48,30 @@ function loadController ({
   getRuntimeConfig = () => ({}),
   updateRuntimeConfig = () => ({ applied: {}, cleared: {}, skipped: {} }),
   clearRuntimeOverride = () => ({ ok: true, cleared: true, key: 'unspecified', newValue: null, newSource: 'default' }),
-  generateRandomName = () => 'Test Name 42'
+  generateRandomName = () => 'Test Name 42',
+  validateConfigInMemory = async (updates, fn) => { const result = await fn(); return { ...result, diff: {} } },
+  getCurrentSettingsVersion = async () => '12345',
+  getSettingsVersions = async () => ({ current: '12345', lastKnownGood: '12345', versions: [] }),
+  getSettingsVersion = async (id) => ({ meta: { id }, settings: {} }),
+  rollbackSettings = async () => ({ ok: true }),
+  validator = () => Promise.resolve({ code: 0, output: 'mocked test', failedChecks: [] })
 } = {}) {
   const controllerPath = require.resolve('./settings.controller')
   const storePath = require.resolve('../settings/store')
 
   delete require.cache[controllerPath]
   delete require.cache[storePath]
+
+  const healthControllerPath = require.resolve('./health.controller')
+  delete require.cache[healthControllerPath]
+  require.cache[healthControllerPath] = {
+    id: healthControllerPath,
+    filename: healthControllerPath,
+    loaded: true,
+    exports: {
+      getHealthStatus: async () => ({ status: 'ok' })
+    }
+  }
 
   require.cache[storePath] = {
     id: storePath,
@@ -69,11 +86,21 @@ function loadController ({
       getRuntimeConfig,
       updateRuntimeConfig,
       clearRuntimeOverride,
-      generateRandomName
+      generateRandomName,
+      getCurrentSettingsVersion,
+      getSettingsVersions,
+      getSettingsVersion,
+      markLastKnownGood: async () => {},
+      rollbackSettings,
+      flushSettingsWrites: async () => {},
+      setInternalValidatorKey: () => {},
+      validateConfigInMemory
     }
   }
 
-  return require('./settings.controller')
+  const controller = require('./settings.controller')
+  controller.setValidator(validator)
+  return controller
 }
 
 // ── isAuthenticated ───────────────────────────────────────────────
@@ -255,21 +282,21 @@ test('requireSettingsCsrfIfSession bypasses API-key style requests without setti
 
 // ── updateSettings ────────────────────────────────────────────────
 
-test('updateSettings returns 400 when no updates provided', () => {
+test('updateSettings returns 400 when no updates provided', async () => {
   const c = loadController()
   const res = makeRes()
-  c.updateSettings({ body: {} }, res)
+  await c.updateSettings({ body: {} }, res)
   assert.equal(res.statusCode, 400)
 })
 
-test('updateSettings returns 400 when body is null', () => {
+test('updateSettings returns 400 when body is null', async () => {
   const c = loadController()
   const res = makeRes()
-  c.updateSettings({ body: null }, res)
+  await c.updateSettings({ body: null }, res)
   assert.equal(res.statusCode, 400)
 })
 
-test('updateSettings calls updateRuntimeConfig and returns applied/skipped', () => {
+test('updateSettings calls updateRuntimeConfig and returns applied/skipped', async () => {
   const c = loadController({
     updateRuntimeConfig: () => ({
       applied: { cacheTtlSeconds: 7200 },
@@ -277,7 +304,7 @@ test('updateSettings calls updateRuntimeConfig and returns applied/skipped', () 
     })
   })
   const res = makeRes()
-  c.updateSettings({ body: { cacheTtlSeconds: 7200 } }, res)
+  await c.updateSettings({ body: { cacheTtlSeconds: 7200 } }, res)
   assert.equal(res.body.ok, true)
   assert.deepEqual(res.body.applied, { cacheTtlSeconds: 7200 })
 })
@@ -347,7 +374,7 @@ test('clearRuntimeSetting returns cleared=false when no override existed', () =>
 
 // ── updateSettings null-clear ─────────────────────────────────────
 
-test('updateSettings exposes cleared map alongside applied', () => {
+test('updateSettings exposes cleared map alongside applied', async () => {
   const c = loadController({
     updateRuntimeConfig: () => ({
       applied: { appName: 'New Name' },
@@ -356,8 +383,208 @@ test('updateSettings exposes cleared map alongside applied', () => {
     })
   })
   const res = makeRes()
-  c.updateSettings({ body: { appName: 'New Name', metadataProviders: null } }, res)
+  await c.updateSettings({ body: { appName: 'New Name', metadataProviders: null } }, res)
   assert.equal(res.body.ok, true)
   assert.deepEqual(res.body.applied, { appName: 'New Name' })
   assert.deepEqual(res.body.cleared, { metadataProviders: true })
+})
+
+// ── validateSettingsEndpoint ──────────────────────────────────────
+
+test('validateSettingsEndpoint returns 400 when no updates provided', async () => {
+  const c = loadController()
+  const res = makeRes()
+  await c.validateSettingsEndpoint({ body: {} }, res)
+  assert.equal(res.statusCode, 400)
+})
+
+test('validateSettingsEndpoint returns validation result', async () => {
+  const c = loadController({
+    validateConfigInMemory: async (updates, fn) => {
+      return { code: 0, output: 'mocked test', diff: { modified: true } }
+    }
+  })
+  const res = makeRes()
+  await c.validateSettingsEndpoint({ body: { cacheTtlSeconds: 100 } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.code, 0)
+  assert.equal(res.body.output, 'mocked test')
+  assert.deepEqual(res.body.diff, { modified: true })
+})
+
+// ── Versioning and Rollback ──────────────────────────────────────
+
+test('listVersions returns current, lastKnownGood, and reversed versions', async () => {
+  const c = loadController({
+    getSettingsVersions: async () => ({
+      current: '2',
+      lastKnownGood: '1',
+      versions: [{ id: '1' }, { id: '2' }]
+    })
+  })
+  const res = makeRes()
+  await c.listVersions({}, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.current, '2')
+  assert.equal(res.body.lastKnownGood, '1')
+  assert.deepEqual(res.body.versions, [{ id: '2' }, { id: '1' }])
+})
+
+test('getCurrentVersionMeta returns 404 when no current version', async () => {
+  const c = loadController({
+    getSettingsVersions: async () => ({ current: null, lastKnownGood: null, versions: [] })
+  })
+  const res = makeRes()
+  await c.getCurrentVersionMeta({}, res)
+  assert.equal(res.statusCode, 404)
+})
+
+test('getCurrentVersionMeta returns meta for current version', async () => {
+  const c = loadController({
+    getSettingsVersions: async () => ({
+      current: '123',
+      lastKnownGood: '123',
+      versions: [{ id: '123', actor: 'system' }]
+    })
+  })
+  const res = makeRes()
+  await c.getCurrentVersionMeta({}, res)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.meta, { id: '123', actor: 'system' })
+})
+
+test('getVersion returns version metadata and settings', async () => {
+  const c = loadController({
+    getSettingsVersion: async (id) => ({
+      meta: { id, actor: 'system' },
+      settings: { runtime: { appVersion: '1.0.0' } }
+    })
+  })
+  const res = makeRes()
+  await c.getVersion({ params: { id: '1700000000000-1234567890abcdef' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, {
+    meta: { id: '1700000000000-1234567890abcdef', actor: 'system' },
+    settings: { runtime: { appVersion: '1.0.0' } }
+  })
+})
+
+test('getVersion returns 400 for malformed version ids', async () => {
+  const c = loadController({
+    getSettingsVersion: async () => { throw new Error('Invalid versionId') }
+  })
+  const res = makeRes()
+  await c.getVersion({ params: { id: '../settings.json' } }, res)
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.body.error, 'Invalid versionId')
+})
+
+test('getVersion returns 404 for missing versions', async () => {
+  const c = loadController({
+    getSettingsVersion: async () => { throw new Error('Version 1700000000000-1234567890abcdef not found') }
+  })
+  const res = makeRes()
+  await c.getVersion({ params: { id: '1700000000000-1234567890abcdef' } }, res)
+  assert.equal(res.statusCode, 404)
+})
+
+test('applyRollback returns 400 when versionId is missing', async () => {
+  const c = loadController()
+  const res = makeRes()
+  await c.applyRollback({ body: {}, query: {} }, res)
+  assert.equal(res.statusCode, 400)
+})
+
+test('applyRollback calls rollbackSettings with correct parameters', async () => {
+  let calledVersionId, calledDryRun, calledActor
+  const c = loadController({
+    rollbackSettings: async (vid, dryRun, actor) => {
+      calledVersionId = vid
+      calledDryRun = dryRun
+      calledActor = actor
+      return { ok: true, rolledBackTo: vid }
+    }
+  })
+  const res = makeRes()
+  await c.applyRollback({ body: { versionId: '456' }, query: { dryRun: '1' }, ip: '127.0.0.1' }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(calledVersionId, '456')
+  assert.equal(calledDryRun, true)
+  assert.equal(calledActor, 'operator (127.0.0.1)')
+  assert.equal(res.body.rolledBackTo, '456')
+})
+
+test('applyRollback handles rollback errors', async () => {
+  const c = loadController({
+    rollbackSettings: async () => { throw new Error('Rollback failed') }
+  })
+  const res = makeRes()
+  await c.applyRollback({ body: { versionId: '456' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.body.error, 'Rollback failed')
+})
+
+test('applyRollback surfaces malformed version ids as 400', async () => {
+  const c = loadController({
+    rollbackSettings: async () => { throw new Error('Invalid versionId') }
+  })
+  const res = makeRes()
+  await c.applyRollback({ body: { versionId: '../settings.json' }, query: {} }, res)
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.body.error, 'Invalid versionId')
+})
+
+test('updateSettings triggers rollback on canary failure (code 1)', async () => {
+  let rolledBack = false
+  const c = loadController({
+    getCurrentSettingsVersion: async () => 'prev-version',
+    updateRuntimeConfig: () => ({ applied: { someKey: 'val' }, cleared: {}, skipped: {} }),
+    rollbackSettings: async () => { rolledBack = true; return { ok: true } }
+  })
+
+  c.setValidator(() => Promise.resolve({ code: 1, output: 'canary failed' }))
+
+  const res = makeRes()
+  await c.updateSettings({ body: { someKey: 'val' } }, res)
+
+  assert.equal(res.statusCode, 400)
+  assert.equal(res.body.error, 'Canary validation failed. Automatically rolled back.')
+  assert.equal(rolledBack, true)
+})
+
+test('updateSettings triggers rollback on provisional failure (code 2)', async () => {
+  let rolledBack = false
+  const c = loadController({
+    getCurrentSettingsVersion: async () => 'prev-version',
+    updateRuntimeConfig: () => ({ applied: { someKey: 'val' }, cleared: {}, skipped: {} }),
+    rollbackSettings: async () => { rolledBack = true; return { ok: true } }
+  })
+
+  c.setValidator(() => Promise.resolve({ code: 2, output: 'provisional failed' }))
+
+  const res = makeRes()
+  await c.updateSettings({ body: { someKey: 'val' } }, res)
+
+  assert.equal(res.statusCode, 400)
+  assert.match(res.body.error, /Canary validation provisional failure/)
+  assert.equal(rolledBack, true)
+})
+
+test('updateSettings skips rollback on provisional failure if allowProvisional is true', async () => {
+  let rolledBack = false
+  const c = loadController({
+    getCurrentSettingsVersion: async () => 'prev-version',
+    updateRuntimeConfig: () => ({ applied: { someKey: 'val' }, cleared: {}, skipped: {} }),
+    rollbackSettings: async () => { rolledBack = true; return { ok: true } }
+  })
+
+  c.setValidator(() => Promise.resolve({ code: 2, output: 'provisional failed' }))
+
+  const res = makeRes()
+  await c.updateSettings({ body: { someKey: 'val', allowProvisional: true } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(rolledBack, false)
 })
