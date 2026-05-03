@@ -49,6 +49,10 @@ function resolveFamily () {
   return undefined
 }
 
+function familyLabel (family) {
+  return family === 4 || family === 6 ? String(family) : 'auto'
+}
+
 async function resolveAddresses (hostname) {
   const result = { v4: [], v6: [], errors: {} }
   const [v4, v6] = await Promise.allSettled([
@@ -90,6 +94,103 @@ function timings (phaseAt) {
   }
 }
 
+function errorDetails (err, fallback = {}) {
+  if (!err && !fallback) return null
+
+  return {
+    code: err?.code || fallback.code || 'UNKNOWN',
+    message: err?.message || fallback.message || String(err || fallback),
+    syscall: err?.syscall || null,
+    errno: err?.errno || null,
+    address: err?.address || fallback.address || null,
+    port: err?.port || fallback.port || null,
+    hostname: err?.hostname || err?.host || fallback.hostname || null,
+    reason: err?.reason || null,
+    library: err?.library || null,
+    function: err?.function || null
+  }
+}
+
+function summarizeFailure ({ failedStep, error, selectedFamily, configuredFamily }) {
+  if (!failedStep) {
+    return {
+      summary: 'MusicBrainz responded successfully.',
+      likelyCause: null,
+      recommendations: []
+    }
+  }
+
+  const code = error?.code || 'UNKNOWN'
+
+  if (failedStep === 'dns') {
+    return {
+      summary: 'DNS resolution failed before any socket connection was attempted.',
+      likelyCause: 'The runtime cannot resolve MusicBrainz host records from its current DNS configuration.',
+      recommendations: [
+        'Check container/LXC DNS servers and outbound DNS policy.',
+        'Compare host DNS resolution with container DNS resolution.'
+      ]
+    }
+  }
+
+  if (failedStep === 'tcp') {
+    const familyHint = selectedFamily ? `IPv${selectedFamily}` : configuredFamily && configuredFamily !== 'auto' ? `IPv${configuredFamily}` : 'the selected IP family'
+    const recommendations = [
+      `Check outbound TCP/443 routing for ${familyHint} from the proxy container.`,
+      'Run the report with auto, IPv4, and IPv6 results side by side and set MUSICBRAINZ_IP_FAMILY to the working family.'
+    ]
+
+    if (code === 'ENETUNREACH' || code === 'EHOSTUNREACH') {
+      recommendations.unshift('This is usually a routing problem, not a MusicBrainz application response.')
+    }
+
+    return {
+      summary: `TCP connection failed before TLS completed (${code}).`,
+      likelyCause: 'The selected address is unreachable or blocked from the proxy runtime.',
+      recommendations
+    }
+  }
+
+  if (failedStep === 'tls') {
+    return {
+      summary: `TCP connected, but TLS did not complete (${code}).`,
+      likelyCause: 'The connection is being reset or interrupted during the TLS handshake.',
+      recommendations: [
+        'Compare IPv4 and IPv6 results; TLS resets on both families often point to upstream/network filtering or middlebox behavior.',
+        'Check whether another host on the same Docker/LXC network can complete `curl -v https://musicbrainz.org/`.',
+        'If only one IP family fails, pin MUSICBRAINZ_IP_FAMILY to the working family.'
+      ]
+    }
+  }
+
+  if (failedStep === 'http') {
+    return {
+      summary: `MusicBrainz returned an HTTP error (${code}).`,
+      likelyCause: 'The socket and TLS path worked, but MusicBrainz rejected or rate-limited the request.',
+      recommendations: [
+        'Inspect the returned HTTP status and rate-limit headers.',
+        'Verify APP_NAME, APP_VERSION, and APP_CONTACT produce a valid MusicBrainz User-Agent.'
+      ]
+    }
+  }
+
+  if (failedStep === 'parse') {
+    return {
+      summary: 'MusicBrainz returned HTTP 2xx, but the body was not valid JSON.',
+      likelyCause: 'The upstream response body is not the expected MusicBrainz JSON payload.',
+      recommendations: [
+        'Inspect content-type, body byte count, and any proxy/CDN response headers.'
+      ]
+    }
+  }
+
+  return {
+    summary: `MusicBrainz probe failed at ${failedStep}.`,
+    likelyCause: 'Unknown diagnostic state.',
+    recommendations: ['Inspect the raw error object and recent /debug/upstream entries.']
+  }
+}
+
 function performRequest ({ url, headers, family, timeout }) {
   return new Promise((resolve) => {
     const phaseAt = { start: Date.now(), lookup: 0, connect: 0, secure: 0, response: 0, end: 0 }
@@ -100,6 +201,13 @@ function performRequest ({ url, headers, family, timeout }) {
     let selectedAddress = literalFamily ? url.hostname : null
     let selectedFamily = literalFamily || null
     let lookupError = null
+    const resultTls = {
+      authorized: null,
+      authorizationError: null,
+      protocol: null,
+      cipher: null,
+      servername: null
+    }
     if (literalFamily) phaseAt.lookup = phaseAt.start
 
     const req = https.request({
@@ -127,7 +235,14 @@ function performRequest ({ url, headers, family, timeout }) {
         }
       })
       socket.on('connect', () => { phaseAt.connect = Date.now() })
-      socket.on('secureConnect', () => { phaseAt.secure = Date.now() })
+      socket.on('secureConnect', () => {
+        phaseAt.secure = Date.now()
+        resultTls.authorized = socket.authorized
+        resultTls.authorizationError = socket.authorizationError || null
+        resultTls.protocol = socket.getProtocol ? socket.getProtocol() : null
+        resultTls.cipher = socket.getCipher ? socket.getCipher() : null
+        resultTls.servername = socket.servername || null
+      })
     })
 
     req.on('response', (res) => {
@@ -155,11 +270,12 @@ function performRequest ({ url, headers, family, timeout }) {
           selectedAddress,
           selectedFamily,
           lookupError,
+          tls: resultTls,
           phaseAt
         })
       })
       res.on('error', (err) => {
-        resolve({ status: 'response_error', error: err, selectedAddress, selectedFamily, lookupError, phaseAt })
+        resolve({ status: 'response_error', error: err, selectedAddress, selectedFamily, lookupError, tls: resultTls, phaseAt })
       })
     })
 
@@ -176,12 +292,84 @@ function performRequest ({ url, headers, family, timeout }) {
         selectedAddress,
         selectedFamily,
         lookupError,
+        tls: resultTls,
         phaseAt
       })
     })
 
     req.end()
   })
+}
+
+function buildProbeReport ({ label, configuredIpFamily, target, dnsBlock, result }) {
+  const t = timings(result.phaseAt)
+  const failedStep = classifyFailedStep(result)
+  const ok = !failedStep
+
+  const common = {
+    label,
+    ok,
+    failedStep,
+    target,
+    dns: {
+      ...dnsBlock,
+      selectedAddress: result.selectedAddress,
+      selectedFamily: result.selectedFamily
+    },
+    tcp: {
+      connected: Boolean(result.phaseAt.connect),
+      selectedAddress: result.selectedAddress,
+      selectedFamily: result.selectedFamily
+    },
+    tls: result.tls || {
+      authorized: null,
+      authorizationError: null,
+      protocol: null,
+      cipher: null,
+      servername: null
+    },
+    timingsMs: t
+  }
+
+  if (result.status === 'http_complete') {
+    const httpHeaders = pickHeaders(result.headers, RELEVANT_HEADER_NAMES)
+    const rateLimit = pickHeaders(result.headers, RATE_LIMIT_HEADER_NAMES)
+    const error = ok
+      ? null
+      : failedStep === 'parse'
+        ? errorDetails(null, { code: 'JSON_PARSE_ERROR', message: result.parseError })
+        : errorDetails(null, { code: `HTTP_${result.httpStatus}`, message: `HTTP ${result.httpStatus} ${result.httpStatusText || ''}`.trim() })
+
+    return {
+      ...common,
+      error,
+      diagnosis: summarizeFailure({ failedStep, error, selectedFamily: result.selectedFamily, configuredFamily: configuredIpFamily }),
+      http: {
+        status: result.httpStatus,
+        statusText: result.httpStatusText,
+        bodyBytes: result.bodyBytes,
+        headers: httpHeaders,
+        rateLimit,
+        parsedKeys: result.parsed && typeof result.parsed === 'object' && !Array.isArray(result.parsed)
+          ? Object.keys(result.parsed).slice(0, 10)
+          : null
+      }
+    }
+  }
+
+  const err = result.error || result.lookupError || new Error('Unknown error')
+  const error = errorDetails(err, {
+    code: result.lookupError?.code,
+    message: result.lookupError?.message,
+    address: result.selectedAddress,
+    hostname: target.hostname
+  })
+
+  return {
+    ...common,
+    error,
+    diagnosis: summarizeFailure({ failedStep, error, selectedFamily: result.selectedFamily, configuredFamily: configuredIpFamily })
+  }
 }
 
 async function diagnoseMusicBrainz () {
@@ -192,6 +380,7 @@ async function diagnoseMusicBrainz () {
   const startedAt = Date.now()
 
   const url = new URL(`${baseUrl}/artist/?query=test&fmt=json&limit=1`)
+  const target = { url: url.toString(), hostname: url.hostname, configuredIpFamily: ipFamilyConfig }
 
   const headers = { 'User-Agent': getUserAgent() }
   const apiKey = getConfigValue('musicbrainzApiKey')
@@ -205,8 +394,9 @@ async function diagnoseMusicBrainz () {
       provider: 'musicbrainz',
       ok: false,
       failedStep: 'dns',
-      error: { code: err.code || 'EDNS', message: err.message },
-      target: { url: url.toString(), hostname: url.hostname, configuredIpFamily: ipFamilyConfig },
+      error: errorDetails(err, { code: 'EDNS', message: err.message, hostname: url.hostname }),
+      diagnosis: summarizeFailure({ failedStep: 'dns', error: errorDetails(err, { code: 'EDNS', message: err.message }), configuredFamily: ipFamilyConfig }),
+      target,
       dns: { addresses: [], errors: { all: err.message } },
       timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt }
     }
@@ -222,67 +412,45 @@ async function diagnoseMusicBrainz () {
       provider: 'musicbrainz',
       ok: false,
       failedStep: 'dns',
-      error: { code: 'ENOTFOUND', message: 'No A or AAAA records resolved' },
-      target: { url: url.toString(), hostname: url.hostname, configuredIpFamily: ipFamilyConfig },
+      error: errorDetails(null, { code: 'ENOTFOUND', message: 'No A or AAAA records resolved', hostname: url.hostname }),
+      diagnosis: summarizeFailure({ failedStep: 'dns', error: { code: 'ENOTFOUND' }, configuredFamily: ipFamilyConfig }),
+      target,
       dns: { addresses: [], errors: resolved.errors },
       timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt }
     }
   }
 
-  const result = await performRequest({ url, headers, family, timeout })
-  const t = timings(result.phaseAt)
-
   const dnsBlock = {
     addresses: dnsAddresses,
-    selectedAddress: result.selectedAddress,
-    selectedFamily: result.selectedFamily,
     configuredFamily: ipFamilyConfig,
     errors: resolved.errors
   }
 
-  if (result.status === 'http_complete') {
-    const failedStep = classifyFailedStep(result)
-    const ok = !failedStep
-    const httpHeaders = pickHeaders(result.headers, RELEVANT_HEADER_NAMES)
-    const rateLimit = pickHeaders(result.headers, RATE_LIMIT_HEADER_NAMES)
-    return {
-      provider: 'musicbrainz',
-      ok,
-      failedStep,
-      error: ok
-        ? null
-        : failedStep === 'parse'
-          ? { code: 'JSON_PARSE_ERROR', message: result.parseError }
-          : { code: `HTTP_${result.httpStatus}`, message: `HTTP ${result.httpStatus} ${result.httpStatusText || ''}`.trim() },
-      target: { url: url.toString(), hostname: url.hostname, configuredIpFamily: ipFamilyConfig },
-      dns: dnsBlock,
-      http: {
-        status: result.httpStatus,
-        statusText: result.httpStatusText,
-        bodyBytes: result.bodyBytes,
-        headers: httpHeaders,
-        rateLimit,
-        parsedKeys: result.parsed && typeof result.parsed === 'object' && !Array.isArray(result.parsed)
-          ? Object.keys(result.parsed).slice(0, 10)
-          : null
-      },
-      timingsMs: t
-    }
-  }
+  const probeDefinitions = [
+    { label: 'auto', family: undefined },
+    { label: '4', family: 4 },
+    { label: '6', family: 6 }
+  ]
 
-  const err = result.error || new Error('Unknown error')
-  const failedStep = classifyFailedStep(result)
+  const reports = await Promise.all(probeDefinitions.map(async (probe) => {
+    const result = await performRequest({ url, headers, family: probe.family, timeout })
+    return buildProbeReport({
+      label: probe.label,
+      configuredIpFamily: ipFamilyConfig,
+      target: { ...target, probeFamily: probe.label },
+      dnsBlock,
+      result
+    })
+  }))
+
+  const primaryLabel = familyLabel(family)
+  const primary = reports.find((probe) => probe.label === primaryLabel) || reports[0]
+
   return {
+    ...primary,
     provider: 'musicbrainz',
-    ok: false,
-    failedStep,
-    error: {
-      code: err.code || result.lookupError?.code || 'UNKNOWN',
-      message: err.message || result.lookupError?.message || String(err)
-    },
-    target: { url: url.toString(), hostname: url.hostname, configuredIpFamily: ipFamilyConfig },
-    dns: dnsBlock,
-    timingsMs: t
+    checkedAt: new Date().toISOString(),
+    probes: reports
   }
 }
 
@@ -292,6 +460,8 @@ module.exports = {
   classifyFailedStep,
   timings,
   pickHeaders,
+  errorDetails,
+  summarizeFailure,
   RATE_LIMIT_HEADER_NAMES,
   RELEVANT_HEADER_NAMES
 }

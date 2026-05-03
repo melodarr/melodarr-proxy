@@ -12,6 +12,7 @@
 #   health                       GET /api/health
 #   ready                        GET /api/ready
 #   version                      GET /api/version
+#   diagnose                     GET /debug/diagnose?provider=musicbrainz
 #   mb [4|6|auto]                Direct TLS probe to MusicBrainz
 #   search <query>               GET /api/search?q=...
 #   login                        Interactive login, store cookie at /tmp/melodarr-proxy.cookie
@@ -74,6 +75,7 @@ probe () {
 cmd_health ()  { probe /api/health  | pretty; }
 cmd_ready ()   { probe /api/ready   | pretty; }
 cmd_version () { probe /api/version | pretty; }
+cmd_diagnose () { probe "/debug/diagnose?provider=musicbrainz" | pretty; }
 
 cmd_mb () {
   local family="${1:-auto}"
@@ -186,6 +188,7 @@ cmd_all () {
   echo "=== /api/health ===";  cmd_health
   echo "=== /api/ready ===";   cmd_ready
   echo "=== /api/version ==="; cmd_version
+  echo "=== /debug/diagnose?provider=musicbrainz ==="; cmd_diagnose
   echo "=== mb (auto) ===";    cmd_mb auto
   echo "=== mb (4) ===";       cmd_mb 4
   echo "=== mb (6) ===";       cmd_mb 6
@@ -199,7 +202,7 @@ main () {
   local cmd="${1:-help}"
   shift || true
   case "$cmd" in
-    health|ready|version|stats|settings|login|all|help) cmd_${cmd} "$@" ;;
+    health|ready|version|diagnose|stats|settings|login|all|help) cmd_${cmd} "$@" ;;
     mb) cmd_mb "$@" ;;
     search) cmd_search "$@" ;;
     logs) cmd_logs "$@" ;;

@@ -109,6 +109,34 @@ test('diagnose.service helpers', async (t) => {
     assert.deepStrictEqual(out, { 'retry-after': '120', 'x-ratelimit-remaining': '0' })
     assert.strictEqual(out.authorization, undefined)
   })
+
+  await t.test('errorDetails — preserves low-level socket fields', () => {
+    const err = new Error('connect ENETUNREACH 2a01:4f8:c011:f68::1:443')
+    err.code = 'ENETUNREACH'
+    err.errno = -51
+    err.syscall = 'connect'
+    err.address = '2a01:4f8:c011:f68::1'
+    err.port = 443
+
+    const out = svc.errorDetails(err)
+    assert.strictEqual(out.code, 'ENETUNREACH')
+    assert.strictEqual(out.syscall, 'connect')
+    assert.strictEqual(out.address, '2a01:4f8:c011:f68::1')
+    assert.strictEqual(out.port, 443)
+  })
+
+  await t.test('summarizeFailure — explains TLS handshake failures', () => {
+    const out = svc.summarizeFailure({
+      failedStep: 'tls',
+      error: { code: 'ECONNRESET' },
+      selectedFamily: 4,
+      configuredFamily: 'auto'
+    })
+
+    assert.match(out.summary, /TLS/)
+    assert.match(out.likelyCause, /handshake/)
+    assert.ok(out.recommendations.some((item) => item.includes('IPv4 and IPv6')))
+  })
 })
 
 test('diagnoseMusicBrainz — DNS failure path returns failedStep dns and no http section', async () => {
@@ -122,6 +150,7 @@ test('diagnoseMusicBrainz — DNS failure path returns failedStep dns and no htt
   assert.strictEqual(result.ok, false)
   assert.strictEqual(result.failedStep, 'dns')
   assert.strictEqual(result.error.code, 'ENOTFOUND')
+  assert.match(result.diagnosis.summary, /DNS/)
   assert.deepStrictEqual(result.dns.addresses, [])
   assert.strictEqual(result.dns.errors.v4, 'ENOTFOUND')
   assert.strictEqual(result.dns.errors.v6, 'ENOTFOUND')
@@ -144,6 +173,9 @@ test('diagnoseMusicBrainz — surfaces partial DNS (v4 ok, v6 fails)', async () 
   const result = await svc.diagnoseMusicBrainz()
   // Hostname is a literal IP, so v4 resolution returned the IP and v6 errored.
   assert.strictEqual(Array.isArray(result.dns.addresses), true)
+  assert.strictEqual(Array.isArray(result.probes), true)
+  assert.ok(result.probes.some((probe) => probe.label === '4'))
+  assert.ok(result.probes.some((probe) => probe.label === '6'))
   assert.ok(result.dns.addresses.some((a) => a.address === '192.0.2.1' && a.family === 4))
   assert.strictEqual(result.dns.errors.v6, 'ENODATA')
   // We expect the request itself to fail (timeout / unreachable) — failedStep

@@ -437,10 +437,13 @@ curl -s http://localhost:3055/api/ready
 Run targeted diagnostics:
 
 ```bash
+curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
+scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
 scripts/proxy-diag.sh mb 4
-curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
 ```
+
+The diagnose response includes DNS results, selected address/family, TCP/TLS phase timings, low-level socket error fields, and side-by-side `auto`, IPv4, and IPv6 probes. Use `failedStep` to distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
 
 Then set:
 
