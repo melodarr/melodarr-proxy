@@ -1,5 +1,6 @@
 const express = require('express')
 const router = express.Router()
+const { normalizeLidarrArtistResponse } = require('../utils/lidarrArtist')
 
 const { getLiveness, getReadiness } = require('../controllers/health.controller')
 const { getStats, getHistory } = require('../controllers/stats.controller')
@@ -30,6 +31,12 @@ const {
 
 const proxyStateMiddleware = require('../middleware/proxy.middleware')
 const rateLimit = require('../middleware/rateLimit.middleware')
+
+router.use((req, res, next) => {
+  const originalJson = res.json.bind(res)
+  res.json = (body) => originalJson(normalizeLidarrArtistResponse(body))
+  next()
+})
 
 // Public monitoring
 router.get('/health', getLiveness)

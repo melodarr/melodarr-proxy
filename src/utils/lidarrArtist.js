@@ -56,6 +56,34 @@ function normalizeAliases (artist) {
   return normalizeStringArray(artist.aliases ?? artist.Aliases)
 }
 
+function isArtistLike (value) {
+  return value && typeof value === 'object' && (
+    Object.prototype.hasOwnProperty.call(value, 'artistName') ||
+    Object.prototype.hasOwnProperty.call(value, 'foreignArtistId')
+  )
+}
+
+function normalizeLidarrArtistResponse (value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeLidarrArtistResponse)
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  const normalized = {}
+  for (const [key, item] of Object.entries(value)) {
+    normalized[key] = normalizeLidarrArtistResponse(item)
+  }
+
+  if (isArtistLike(normalized)) {
+    normalized.aliases = normalizeAliases(normalized)
+  }
+
+  return normalized
+}
+
 function withArtistLookupDefaults (artist = {}) {
   return {
     ...artist,
@@ -94,6 +122,7 @@ module.exports = {
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   asString,
   normalizeAliases,
+  normalizeLidarrArtistResponse,
   normalizeStringArray,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults
