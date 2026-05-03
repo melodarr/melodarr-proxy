@@ -94,6 +94,7 @@ function loadController ({
       rollbackSettings,
       flushSettingsWrites: async () => {},
       setInternalValidatorKey: () => {},
+      clearInternalValidatorKey: () => {},
       validateConfigInMemory
     }
   }

@@ -16,6 +16,7 @@ const {
   flushSettingsWrites,
   verifyPassword,
   setInternalValidatorKey,
+  clearInternalValidatorKey,
   validateConfigInMemory
 } = require('../settings/store')
 const { testProvider } = require('../providers')
@@ -299,7 +300,7 @@ function runCanaryValidator (mode = 'deploy') {
       timeout: 30000,
       maxBuffer: 1024 * 1024
     }, (error, stdout, stderr) => {
-      setInternalValidatorKey(null)
+      clearInternalValidatorKey(tempKey)
       const rawOutput = stdout + (stderr ? '\n' + stderr : '')
       const failedChecks = rawOutput
         .split('\n')
