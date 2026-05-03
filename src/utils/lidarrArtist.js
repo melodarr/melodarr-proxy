@@ -57,7 +57,7 @@ function withArtistLookupDefaults (artist = {}) {
     ...artist,
     artistName: asString(artist.artistName),
     id: asString(artist.id),
-    foreignArtistId: asString(artist.foreignArtistId),
+    foreignArtistId: asString(artist.foreignArtistId || artist.id),
     status: asString(artist.status || LIDARR_LOOKUP_ARTIST_DEFAULTS.status),
     aliases: normalizeStringArray(artist.aliases),
     links: normalizeArray(artist.links),

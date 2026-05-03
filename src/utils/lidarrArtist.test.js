@@ -28,6 +28,18 @@ test('withArtistLookupDefaults supplies Lidarr-safe lookup fields', () => {
   assert.deepEqual(artist.albums, [])
 })
 
+test('withArtistLookupDefaults falls back foreignArtistId from id for legacy/cached payloads', () => {
+  const artist = withArtistLookupDefaults({ artistName: 'Lorde', id: 'mb-legacy-1' })
+  assert.equal(artist.id, 'mb-legacy-1')
+  assert.equal(artist.foreignArtistId, 'mb-legacy-1')
+})
+
+test('withArtistLookupDefaults does not override an explicit foreignArtistId with id', () => {
+  const artist = withArtistLookupDefaults({ artistName: 'Lorde', id: 'id-value', foreignArtistId: 'faid-value' })
+  assert.equal(artist.id, 'id-value')
+  assert.equal(artist.foreignArtistId, 'faid-value')
+})
+
 test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
   const artist = withSkyhookArtistDefaults({ artistName: 'Radiohead', aliases: ['On a Friday'] })
 

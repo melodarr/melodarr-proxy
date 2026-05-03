@@ -335,6 +335,38 @@ test('artist lookup returns cached response without debug data by default', asyn
   assert.equal(res.body[0].debug, undefined)
 })
 
+test('artist lookup normalizes foreignArtistId from id for legacy cached payloads', async () => {
+  // Older cached entries may only have `id` and lack `foreignArtistId`.
+  // withArtistLookupDefaults should backfill foreignArtistId from id so
+  // isValidArtist accepts the entry rather than returning [].
+  const cacheStore = new Map([
+    ['artist:legacy artist', {
+      data: {
+        artistName: 'Legacy Artist',
+        id: 'legacy-id',
+        // no foreignArtistId — simulates a pre-fix cache entry
+        providers: [{ name: 'musicbrainz', albumCount: 2 }],
+        albums: [{ title: 'Old Album', id: '1' }]
+      },
+      generatedAt: '2026-04-28T00:00:00.000Z'
+    }]
+  ])
+  const { controller } = loadController({
+    cacheStore,
+    aggregateArtist: async () => {
+      throw new Error('cache hit should not call upstream')
+    }
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'legacy artist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Cache'], 'HIT')
+  assert.equal(res.body[0].artistName, 'Legacy Artist')
+  assert.equal(res.body[0].foreignArtistId, 'legacy-id')
+})
+
 test('artist lookup returns partial error response when all providers fail', async () => {
   const { controller, lockCalls } = loadController({
     aggregateArtist: async () => {
