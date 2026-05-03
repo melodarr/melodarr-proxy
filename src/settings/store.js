@@ -726,36 +726,29 @@ function getEnvShadowedKeys () {
 }
 
 async function validateConfigInMemory (updates, validatorFn) {
-  const originalSettings = settings
-  try {
-    const applied = {}
-    for (const [key, value] of Object.entries(updates)) {
-      const spec = EDITABLE_KEYS[key]
-      if (!spec) continue
-      if (value === null) {
-        applied[key] = null
-      } else {
-        const coerced = spec.type === 'number' ? Number(value) : String(value)
-        if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) continue
-        applied[key] = coerced
-      }
+  const applied = {}
+  for (const [key, value] of Object.entries(updates)) {
+    const spec = EDITABLE_KEYS[key]
+    if (!spec) continue
+    if (value === null) {
+      applied[key] = null
+    } else {
+      const coerced = spec.type === 'number' ? Number(value) : String(value)
+      if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) continue
+      applied[key] = coerced
     }
-
-    const nextRuntime = { ...settings.runtime }
-    for (const [key, value] of Object.entries(applied)) {
-      if (value === null) delete nextRuntime[key]
-      else nextRuntime[key] = value
-    }
-
-    const nextSettings = { ...settings, runtime: nextRuntime }
-    const diff = computeDiff(settings, nextSettings)
-
-    settings = nextSettings
-    const result = await validatorFn()
-    return { ...result, diff }
-  } finally {
-    settings = originalSettings
   }
+
+  const nextRuntime = { ...settings.runtime }
+  for (const [key, value] of Object.entries(applied)) {
+    if (value === null) delete nextRuntime[key]
+    else nextRuntime[key] = value
+  }
+
+  const nextSettings = { ...settings, runtime: nextRuntime }
+  const diff = computeDiff(settings, nextSettings)
+  const result = await validatorFn(nextSettings, diff)
+  return { ...result, diff }
 }
 
 module.exports = {
