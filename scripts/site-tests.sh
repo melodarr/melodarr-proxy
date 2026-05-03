@@ -51,6 +51,7 @@ REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
 EXPECTED_REV="${EXPECTED_REV:-}"
 BRANCHES_LISTED=0
+declare -a BRANCH_CHOICES=()
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Branch listing/deploy helpers ────────────────────────────────
@@ -64,7 +65,7 @@ resolve_host_deploy_ref () {
     "$BRANCH_REMOTE"/*) remote_branch="${ref#"$BRANCH_REMOTE"/}" ;;
   esac
 
-  git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null
+  git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null 2>&1
   if git -C "$BASE_DIR" show-ref --verify --quiet "refs/remotes/$BRANCH_REMOTE/$remote_branch"; then
     git -C "$BASE_DIR" rev-parse "$BRANCH_REMOTE/$remote_branch^{commit}"
   else
@@ -92,12 +93,12 @@ resolve_lxc_repo_path () {
 
 list_remote_branches () {
   if host_git_available; then
-    git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null
+    git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null 2>&1
     git -C "$BASE_DIR" for-each-ref \
       --sort=-committerdate \
-      --format="%(refname:short)  %(committerdate:short)  %(subject)" \
+      --format="%(refname:short)%09%(committerdate:short)%09%(subject)" \
       "refs/remotes/$BRANCH_REMOTE" \
-      | awk -v head="$BRANCH_REMOTE/HEAD" '$1 != head { print }' \
+      | awk -F "\t" -v head="$BRANCH_REMOTE/HEAD" -v remote="$BRANCH_REMOTE" '$1 != head && $1 != remote { print }' \
       | sed -n "1,${BRANCH_LIMIT}p"
     return
   fi
@@ -113,24 +114,55 @@ list_remote_branches () {
   pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" BRANCH_LIMIT="$BRANCH_LIMIT" LXC_REPO_PATH="$lxc_repo_path" bash -lc '
     set -euo pipefail
     cd "$LXC_REPO_PATH"
-    git fetch --prune "$BRANCH_REMOTE" >/dev/null
+    git fetch --prune "$BRANCH_REMOTE" >/dev/null 2>&1
     git for-each-ref \
       --sort=-committerdate \
-      --format="%(refname:short)  %(committerdate:short)  %(subject)" \
+      --format="%(refname:short)%09%(committerdate:short)%09%(subject)" \
       "refs/remotes/$BRANCH_REMOTE" \
-      | awk -v head="$BRANCH_REMOTE/HEAD" "\$1 != head { print }" \
+      | awk -F "\t" -v head="$BRANCH_REMOTE/HEAD" -v remote="$BRANCH_REMOTE" "\$1 != head && \$1 != remote { print }" \
       | sed -n "1,${BRANCH_LIMIT}p"
   '
 }
 
 show_remote_branches () {
+  local rows branch date subject display i
   echo
   echo "## Available deploy branches ($BRANCH_REMOTE, newest first)"
-  if ! list_remote_branches; then
+  if ! rows="$(list_remote_branches)"; then
     echo "ERROR: unable to list branches."
     exit 1
   fi
+
+  BRANCH_CHOICES=()
+  i=1
+  while IFS=$'\t' read -r branch date subject; do
+    [ -z "$branch" ] && continue
+    display="$branch"
+    case "$display" in
+      "$BRANCH_REMOTE"/*) display="${display#"$BRANCH_REMOTE"/}" ;;
+    esac
+    BRANCH_CHOICES+=("$display")
+    printf "  %2d) %-42s %s  %s\n" "$i" "$display" "$date" "$subject"
+    i=$((i + 1))
+  done <<< "$rows"
+
+  if [ "${#BRANCH_CHOICES[@]}" -eq 0 ]; then
+    echo "ERROR: no remote branches found for $BRANCH_REMOTE."
+    exit 1
+  fi
   BRANCHES_LISTED=1
+}
+
+resolve_branch_selection () {
+  local selection="$1"
+  if [[ "$selection" =~ ^[0-9]+$ ]] && [ "${#BRANCH_CHOICES[@]}" -gt 0 ]; then
+    if [ "$selection" -lt 1 ] || [ "$selection" -gt "${#BRANCH_CHOICES[@]}" ]; then
+      echo "ERROR: branch selection $selection is out of range 1-${#BRANCH_CHOICES[@]}."
+      exit 1
+    fi
+    DEPLOY_BRANCH="${BRANCH_CHOICES[$((selection - 1))]}"
+    echo "Selected branch: $DEPLOY_BRANCH"
+  fi
 }
 
 deploy_branch_from_host_archive () {
@@ -295,7 +327,8 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
       exit 0
     fi
   fi
-  ask    DEPLOY_BRANCH "Branch/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
+  ask    DEPLOY_BRANCH "Branch number/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
+  resolve_branch_selection "$DEPLOY_BRANCH"
   ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
   if [ "$REENABLE_MB" = "1" ]; then
     ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
@@ -309,6 +342,10 @@ if [ "$LIST_BRANCHES" = "1" ] && [ "$BRANCHES_LISTED" = "0" ]; then
   if [ "$BRANCH_LIST_ONLY" = "1" ]; then
     exit 0
   fi
+fi
+
+if [ -n "$DEPLOY_BRANCH" ]; then
+  resolve_branch_selection "$DEPLOY_BRANCH"
 fi
 
 # ── API key required for auth-gated test paths ───────────────────
