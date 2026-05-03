@@ -41,48 +41,7 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH:-}"
 REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
 EXPECTED_REV="${EXPECTED_REV:-}"
-
-# ── Optional interactive wizard ──────────────────────────────────
-# Prompts for each knob when stdin is a TTY.  Users can:
-#   - press Enter to accept the default shown in [brackets]
-#   - pre-set any var via env to skip that prompt's default
-#   - pass INTERACTIVE=0 to bypass the wizard entirely (CI use)
-ask () {
-  local var="$1" prompt="$2" default="$3" reply
-  read -rp "$prompt [$default]: " reply
-  printf -v "$var" '%s' "${reply:-$default}"
-}
-ask_yn () {
-  local var="$1" prompt="$2" default="$3" reply hint="(y/N)"
-  [ "$default" = "1" ] && hint="(Y/n)"
-  read -rp "$prompt $hint: " reply
-  case "${reply:-$default}" in
-    1|y|Y|yes|YES) printf -v "$var" '%s' "1" ;;
-    *)             printf -v "$var" '%s' "0" ;;
-  esac
-}
-
-if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
-  echo "Melodarr verification harness — interactive setup"
-  echo "Press Enter for the default; set INTERACTIVE=0 to skip the wizard."
-  echo
-  ask    CTID         "Proxmox CTID"                          "$CTID"
-  ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
-  ask    API_KEY      "Proxy API key"                         "$API_KEY"
-  ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
-  ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
-  ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
-  if [ "$LIST_BRANCHES" = "1" ]; then
-    ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
-  fi
-  ask    DEPLOY_BRANCH "Branch/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
-  ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
-  if [ "$REENABLE_MB" = "1" ]; then
-    ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
-  fi
-  ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
-  echo
-fi
+BRANCHES_LISTED=0
 
 # ── Branch listing/deploy helpers ────────────────────────────────
 list_remote_branches () {
@@ -97,6 +56,16 @@ list_remote_branches () {
       | awk -v head="$BRANCH_REMOTE/HEAD" "\$1 != head { print }" \
       | sed -n "1,${BRANCH_LIMIT}p"
   '
+}
+
+show_remote_branches () {
+  echo
+  echo "## Available deploy branches ($BRANCH_REMOTE, newest first)"
+  if ! list_remote_branches; then
+    echo "ERROR: unable to list branches from /opt/melodarr-proxy in CTID=$CTID"
+    exit 1
+  fi
+  BRANCHES_LISTED=1
 }
 
 deploy_branch_ref () {
@@ -133,13 +102,54 @@ current_deploy_revision () {
   pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && git rev-parse HEAD' 2>/dev/null || true
 }
 
-if [ "$LIST_BRANCHES" = "1" ]; then
+# ── Optional interactive wizard ──────────────────────────────────
+# Prompts for each knob when stdin is a TTY.  Users can:
+#   - press Enter to accept the default shown in [brackets]
+#   - pre-set any var via env to skip that prompt's default
+#   - pass INTERACTIVE=0 to bypass the wizard entirely (CI use)
+ask () {
+  local var="$1" prompt="$2" default="$3" reply
+  read -rp "$prompt [$default]: " reply
+  printf -v "$var" '%s' "${reply:-$default}"
+}
+ask_yn () {
+  local var="$1" prompt="$2" default="$3" reply hint="(y/N)"
+  [ "$default" = "1" ] && hint="(Y/n)"
+  read -rp "$prompt $hint: " reply
+  case "${reply:-$default}" in
+    1|y|Y|yes|YES) printf -v "$var" '%s' "1" ;;
+    *)             printf -v "$var" '%s' "0" ;;
+  esac
+}
+
+if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
+  echo "Melodarr verification harness — interactive setup"
+  echo "Press Enter for the default; set INTERACTIVE=0 to skip the wizard."
   echo
-  echo "## Available deploy branches ($BRANCH_REMOTE, newest first)"
-  if ! list_remote_branches; then
-    echo "ERROR: unable to list branches from /opt/melodarr-proxy in CTID=$CTID"
-    exit 1
+  ask    CTID         "Proxmox CTID"                          "$CTID"
+  ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
+  ask    API_KEY      "Proxy API key"                         "$API_KEY"
+  ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
+  ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
+  ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
+  if [ "$LIST_BRANCHES" = "1" ]; then
+    ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
+    show_remote_branches
+    if [ "$BRANCH_LIST_ONLY" = "1" ]; then
+      exit 0
+    fi
   fi
+  ask    DEPLOY_BRANCH "Branch/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
+  ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
+  if [ "$REENABLE_MB" = "1" ]; then
+    ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
+  fi
+  ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
+  echo
+fi
+
+if [ "$LIST_BRANCHES" = "1" ] && [ "$BRANCHES_LISTED" = "0" ]; then
+  show_remote_branches
   if [ "$BRANCH_LIST_ONLY" = "1" ]; then
     exit 0
   fi
