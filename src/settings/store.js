@@ -489,23 +489,37 @@ function deleteApiKey (id) {
   return true
 }
 
+let lastInternalValidatorKey = null
 const INTERNAL_VALIDATOR_KEY_TTL_MS = 15 * 60 * 1000
 const internalValidatorKeys = new Map()
 
 function pruneExpiredInternalValidatorKeys (now = Date.now()) {
   for (const [key, expiresAt] of internalValidatorKeys.entries()) {
+      if (lastInternalValidatorKey === key) {
+        lastInternalValidatorKey = null
+      }
     if (expiresAt <= now) {
       internalValidatorKeys.delete(key)
     }
   }
 }
+  const now = Date.now()
+  pruneExpiredInternalValidatorKeys(now)
+
+  if (key === null) {
+    if (lastInternalValidatorKey) {
+      internalValidatorKeys.delete(lastInternalValidatorKey)
+      lastInternalValidatorKey = null
+    }
+    return
+  }
+
 
 function setInternalValidatorKey (key) {
   if (!key) {
     return
-  }
-
   const now = Date.now()
+  lastInternalValidatorKey = key
   pruneExpiredInternalValidatorKeys(now)
   internalValidatorKeys.set(key, now + INTERNAL_VALIDATOR_KEY_TTL_MS)
 }
