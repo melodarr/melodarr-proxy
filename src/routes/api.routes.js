@@ -32,11 +32,11 @@ const {
 const proxyStateMiddleware = require('../middleware/proxy.middleware')
 const rateLimit = require('../middleware/rateLimit.middleware')
 
-router.use((req, res, next) => {
+const lidarrArtistResponseMiddleware = (req, res, next) => {
   const originalJson = res.json.bind(res)
   res.json = (body) => originalJson(normalizeLidarrArtistResponse(body))
   next()
-})
+}
 
 // Public monitoring
 router.get('/health', getLiveness)
