@@ -148,4 +148,76 @@ test('MusicBrainz Provider', async (t) => {
     assert.deepStrictEqual(result.artistAliases, ['On a Friday'])
     assert.deepStrictEqual(withArtistLookupDefaults(result).artistAliases, ['On a Friday'])
   })
+
+  await t.test('lookupAlbumById - returns release group metadata for Lidarr album refetch', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path, params) => {
+      if (path === '/release-group/rg1') {
+        assert.strictEqual(params.inc, 'artist-credits')
+        return {
+          id: 'rg1',
+          title: 'OK Computer',
+          'first-release-date': '1997-05-21',
+          'primary-type': 'Album',
+          'secondary-types': [],
+          'artist-credit': [{
+            artist: {
+              id: 'a74b1b7f',
+              name: 'Radiohead',
+              'sort-name': 'Radiohead'
+            }
+          }]
+        }
+      }
+      if (path === '/release') {
+        assert.strictEqual(params['release-group'], 'rg1')
+        assert.strictEqual(params.inc, 'media+recordings+artist-credits')
+        return {
+          releases: [{
+            id: 'rel1',
+            title: 'OK Computer',
+            date: '1997-05-21',
+            status: 'Official',
+            country: 'GB',
+            media: [{
+              title: 'CD 1',
+              format: 'CD',
+              position: 1,
+              tracks: [{
+                id: 'track1',
+                title: 'Airbag',
+                number: '1',
+                position: 1,
+                length: 284000,
+                recording: {
+                  id: 'rec1',
+                  title: 'Airbag',
+                  length: 284000,
+                  'artist-credit': [{
+                    artist: {
+                      id: 'a74b1b7f',
+                      name: 'Radiohead'
+                    }
+                  }]
+                }
+              }]
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupAlbumById('rg1')
+    assert.strictEqual(result.id, 'rg1')
+    assert.strictEqual(result.title, 'OK Computer')
+    assert.strictEqual(result.artistId, 'a74b1b7f')
+    assert.strictEqual(result.artist.artistName, 'Radiohead')
+    assert.strictEqual(result.releaseDate, '1997-05-21')
+    assert.strictEqual(result.type, 'Album')
+    assert.deepStrictEqual(result.secondaryTypes, [])
+    assert.deepStrictEqual(result.releaseStatuses, ['Official'])
+    assert.strictEqual(result.releases.length, 1)
+    assert.strictEqual(result.releases[0].tracks.length, 1)
+    assert.strictEqual(result.releases[0].tracks[0].artistId, 'a74b1b7f')
+  })
 })

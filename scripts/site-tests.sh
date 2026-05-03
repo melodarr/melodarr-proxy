@@ -846,7 +846,8 @@ fi
 echo
 echo "### Lidarr path-segment route diagnostics"
 RADIOHEAD_MBID="a74b1b7f-71a5-4011-9441-d0b5e4122711"
-ARTIST_SEGMENT_STATUS=$(chomp "$(remote_status_line "/api/v0.4/artist/$RADIOHEAD_MBID")")
+ARTIST_SEGMENT_PATH="/api/v0.4/artist/$RADIOHEAD_MBID"
+ARTIST_SEGMENT_STATUS=$(chomp "$(remote_status_line "$ARTIST_SEGMENT_PATH")")
 RECENT_ARTIST_STATUS=$(chomp "$(remote_status_line '/api/v0.4/recent/artist?since=2026-01-01T00:00:00Z')")
 RECENT_ALBUM_STATUS=$(chomp "$(remote_status_line '/api/v0.4/recent/album?since=2026-01-01T00:00:00Z')")
 echo "artist/:mbid:  $ARTIST_SEGMENT_STATUS"
@@ -866,6 +867,95 @@ if echo "$RECENT_ALBUM_STATUS" | grep -q ' 200'; then
   record_pass "/api/v0.4/recent/album returns 200"
 else
   record_fail "/api/v0.4/recent/album status: $RECENT_ALBUM_STATUS"
+fi
+
+echo
+echo "### Validate /api/v0.4/artist/<mbid> album metadata contract"
+ARTIST_SEGMENT_BODY=$(remote_get "$ARTIST_SEGMENT_PATH")
+ARTIST_ALBUM_SUMMARY=$(echo "$ARTIST_SEGMENT_BODY" | jq '
+  {
+    artistName: (.artistName // null),
+    foreignArtistId: (.foreignArtistId // null),
+    albumCount: (.albums // [] | length),
+    firstAlbum: ((.albums // [])[0] // {}),
+    firstAlbumId: (((.albums // [])[0] // {}).id // ""),
+    firstAlbumTitle: (((.albums // [])[0] // {}).title // ""),
+    firstAlbumType: (((.albums // [])[0] // {}).type // ""),
+    firstAlbumSecondaryTypes: (((.albums // [])[0] // {}).secondaryTypes // null),
+    firstAlbumReleaseStatuses: (((.albums // [])[0] // {}).releaseStatuses // null)
+  }
+' 2>/dev/null || echo '{}')
+echo "$ARTIST_ALBUM_SUMMARY" | jq
+
+if echo "$ARTIST_ALBUM_SUMMARY" | jq -e '.albumCount > 0' > /dev/null; then
+  ALBUM_COUNT=$(echo "$ARTIST_ALBUM_SUMMARY" | jq -r '.albumCount')
+  record_pass "/api/v0.4/artist/<mbid> includes albums (count=$ALBUM_COUNT)"
+else
+  record_fail "/api/v0.4/artist/<mbid> includes no albums - Lidarr artist page will show missing-albums metadata message"
+fi
+
+FIRST_ALBUM_ID=$(echo "$ARTIST_ALBUM_SUMMARY" | jq -r '.firstAlbumId // ""')
+
+if echo "$ARTIST_ALBUM_SUMMARY" | jq -e '.firstAlbumId != "" and .firstAlbumTitle != ""' > /dev/null; then
+  record_pass "artist metadata first album has id and title"
+else
+  record_fail "artist metadata first album is missing id/title - Lidarr cannot persist a usable album row"
+fi
+
+if echo "$ARTIST_ALBUM_SUMMARY" | jq -e '
+  .firstAlbumType == "Album" and
+  (.firstAlbumSecondaryTypes | type == "array") and
+  (.firstAlbumReleaseStatuses | type == "array") and
+  (.firstAlbumReleaseStatuses | index("Official") != null)
+' > /dev/null; then
+  record_pass "artist metadata first album passes Lidarr default metadata-profile filters"
+else
+  record_fail "artist metadata first album does not match Lidarr default metadata-profile filters"
+fi
+
+if [[ -n "$FIRST_ALBUM_ID" ]]; then
+  ALBUM_SEGMENT_PATH="/api/v0.4/album/$FIRST_ALBUM_ID"
+  ALBUM_SEGMENT_HEADERS=$(remote_get_full "$ALBUM_SEGMENT_PATH" | sed -n '1,60p')
+  ALBUM_SEGMENT_STATUS=$(echo "$ALBUM_SEGMENT_HEADERS" | head -1 | tr -d '\r')
+  echo "album/:releaseGroupId: $ALBUM_SEGMENT_STATUS"
+  if [[ "$ALBUM_SEGMENT_STATUS" =~ 200 ]]; then
+    record_pass "/api/v0.4/album/<releaseGroupId> returns album metadata"
+  else
+    echo "$ALBUM_SEGMENT_HEADERS"
+    record_fail "/api/v0.4/album/<releaseGroupId> status: $ALBUM_SEGMENT_STATUS"
+  fi
+
+  ALBUM_SEGMENT_BODY=$(remote_get "$ALBUM_SEGMENT_PATH")
+  ALBUM_RELEASE_SUMMARY=$(echo "$ALBUM_SEGMENT_BODY" | jq '
+    {
+      releaseCount: (.releases // [] | length),
+      firstReleaseTrackCount: (((.releases // [])[0] // {}).tracks // [] | length)
+    }
+  ' 2>/dev/null || echo '{}')
+  echo "$ALBUM_RELEASE_SUMMARY" | jq
+  if echo "$ALBUM_RELEASE_SUMMARY" | jq -e '.releaseCount > 0 and .firstReleaseTrackCount > 0' > /dev/null; then
+    record_pass "/api/v0.4/album/<releaseGroupId> includes release and track metadata"
+  else
+    record_fail "/api/v0.4/album/<releaseGroupId> missing release/track metadata - Lidarr deletes albums with zero valid releases"
+  fi
+
+  ALBUM_SEGMENT_CACHE_HEADERS=$(remote_get_full "$ALBUM_SEGMENT_PATH" | sed -n '1,60p')
+  if echo "$ALBUM_SEGMENT_CACHE_HEADERS" | grep -qi '^X-Cache: HIT'; then
+    record_pass "/api/v0.4/album/<releaseGroupId> repeated metadata fetch is served from cache"
+  else
+    echo "$ALBUM_SEGMENT_CACHE_HEADERS"
+    record_fail "/api/v0.4/album/<releaseGroupId> repeated metadata fetch did not return X-Cache: HIT"
+  fi
+else
+  record_fail "/api/v0.4/album/<releaseGroupId> cannot be tested because artist metadata had no first album id"
+fi
+
+ARTIST_SEGMENT_CACHE_HEADERS=$(remote_get_full "$ARTIST_SEGMENT_PATH" | sed -n '1,40p')
+if echo "$ARTIST_SEGMENT_CACHE_HEADERS" | grep -qi '^X-Cache: HIT'; then
+  record_pass "/api/v0.4/artist/<mbid> repeated metadata fetch is served from cache"
+else
+  echo "$ARTIST_SEGMENT_CACHE_HEADERS"
+  record_fail "/api/v0.4/artist/<mbid> repeated metadata fetch did not return X-Cache: HIT"
 fi
 
 # ── 11. Lidarr/Skyhook shape conformance ─────────────────────────

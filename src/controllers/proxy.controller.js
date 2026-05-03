@@ -22,6 +22,29 @@ const withTimeout = (promise, ms) => {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer))
 }
 
+function normalizeAlbumResponse (album = {}) {
+  const normalized = normalizeAlbum(album)
+  const artist = normalized.artist ? withSkyhookArtistDefaults(normalized.artist) : null
+  const artists = Array.isArray(normalized.artists)
+    ? normalized.artists.map(item => withSkyhookArtistDefaults(item))
+    : []
+
+  return {
+    ...normalized,
+    firstReleaseDate: toIsoDate(normalized.firstReleaseDate || normalized.releaseDate),
+    releaseDate: toIsoDate(normalized.releaseDate),
+    artist: artist || normalized.artist,
+    artists: artists.length > 0 ? artists : (artist ? [artist] : [])
+  }
+}
+
+async function cacheAlbumResponses (albums = []) {
+  await Promise.all(albums
+    .map(album => normalizeAlbumResponse(album))
+    .filter(album => album.id && album.releases.length > 0)
+    .map(album => cache.set(`album-id:${album.id}`, album, 86400 * 30)))
+}
+
 async function handleSearch (req, res) {
   const q = req.query.q || req.query.query || req.query.term
   if (!q) {
@@ -494,6 +517,7 @@ async function handleArtistById (req, res) {
     }
 
     await cache.set(cacheKey, response, 86400 * 30)
+    await cacheAlbumResponses(response.albums)
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
 
     res.set('X-Cache', 'MISS')
@@ -519,6 +543,105 @@ async function handleArtistById (req, res) {
       error: 'Failed to fetch artist from upstream API',
       details: { message: error.message, code: error.code || null }
     })
+  }
+}
+
+async function handleAlbumById (req, res) {
+  const foreignAlbumId = String(req.params.foreignAlbumId || req.params.albumId || '').trim()
+
+  if (!foreignAlbumId) {
+    return res.status(400).json({ error: 'Missing required path parameter: foreignAlbumId' })
+  }
+
+  const cacheKey = `album-id:${foreignAlbumId}`
+  const trace = tracer.createTrace(`albumById:${foreignAlbumId}`)
+
+  const startCache = Date.now()
+  const cachedData = await cache.get(cacheKey)
+  if (cachedData) {
+    const isStale = (Date.now() - new Date(cachedData.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
+    tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
+    metrics.recordCache(true, isStale)
+    await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: ['musicbrainz'] })
+    res.set('X-Cache', 'HIT')
+    res.set('X-Providers', 'musicbrainz')
+    res.set('X-Cache-Generated-At', cachedData.generatedAt)
+    return res.json(normalizeAlbumResponse({ ...cachedData.data, _generatedAt: cachedData.generatedAt }))
+  }
+
+  tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
+  metrics.recordCache(false)
+
+  const lockKey = `lock:${cacheKey}`
+  let lockToken = null
+  const startWait = Date.now()
+  const ttlMs = 15000
+  let attempt = 0
+
+  while (Date.now() - startWait < ttlMs) {
+    lockToken = await cache.acquireLock(lockKey, ttlMs)
+    if (lockToken) break
+
+    attempt++
+    const waitTime = Math.min(100 * Math.pow(2, attempt - 1), 2000) + Math.floor(Math.random() * 50)
+    tracer.addStep(trace, 'coalesceWait', waitTime, 'wait')
+    metrics.recordLockWait(waitTime)
+    await new Promise(resolve => setTimeout(resolve, waitTime))
+
+    const cachedDataAfterWait = await cache.get(cacheKey)
+    if (cachedDataAfterWait) {
+      metrics.recordCache(true, false)
+      await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: ['musicbrainz'] })
+      res.set('X-Cache', 'HIT')
+      res.set('X-Providers', 'musicbrainz')
+      res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
+      return res.json(normalizeAlbumResponse({ ...cachedDataAfterWait.data, _generatedAt: cachedDataAfterWait.generatedAt }))
+    }
+  }
+
+  if (!lockToken) {
+    tracer.addStep(trace, 'error', 0, 'timeout')
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
+    return res.status(502).json({
+      error: 'Failed to fetch album from upstream API',
+      details: { message: 'Upstream request failed during coalescing (lock timeout)', code: 'LOCK_TIMEOUT' }
+    })
+  }
+
+  try {
+    const startedAt = Date.now()
+    const data = await withTimeout(musicbrainzProvider.lookupAlbumById(foreignAlbumId), 15000)
+    tracer.addStep(trace, 'lookupAlbumById', Date.now() - startedAt, 'success')
+    const response = normalizeAlbumResponse(data)
+
+    await cache.set(cacheKey, response, 86400 * 30)
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
+
+    res.set('X-Cache', 'MISS')
+    res.set('X-Upstream-Calls', '1')
+    res.set('X-Providers', 'musicbrainz')
+    res.set('X-Cache-Generated-At', new Date().toISOString())
+    return res.json({ ...response, _generatedAt: new Date().toISOString() })
+  } catch (error) {
+    tracer.addStep(trace, 'error', 0, 'error')
+    logger.error('Album by ID lookup failed', {
+      context: 'Proxy',
+      foreignAlbumId,
+      error: error.message,
+      code: error.code
+    })
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
+
+    if (error.code === 'ALBUM_NOT_FOUND' || error.response?.status === 404) {
+      return res.status(404).json({ error: 'Album not found', id: foreignAlbumId })
+    }
+
+    return res.status(502).json({
+      error: 'Failed to fetch album from upstream API',
+      details: { message: error.message, code: error.code || null }
+    })
+  } finally {
+    await cache.releaseLock(lockKey, lockToken)
   }
 }
 
@@ -600,4 +723,4 @@ async function handleSongAlbums (req, res) {
   }
 }
 
-module.exports = { handleArtistById, handleArtistDiscover, handleArtistLookup, handleRecentFeed, handleSearch, handleSongAlbums }
+module.exports = { handleAlbumById, handleArtistById, handleArtistDiscover, handleArtistLookup, handleRecentFeed, handleSearch, handleSongAlbums }
