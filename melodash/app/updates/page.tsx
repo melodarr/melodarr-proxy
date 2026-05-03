@@ -48,7 +48,7 @@ function Changelog({ body }: { body?: string }) {
   }
 
   return (
-    <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-background p-4 text-sm leading-6 text-gray-300">
+    <pre className="whitespace-pre-wrap rounded-lg border border-border/60 bg-background p-4 text-sm leading-6 text-gray-300">
       {body}
     </pre>
   );

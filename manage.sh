@@ -140,6 +140,15 @@ while true; do
       ;;
     4)
       echo "Rebuilding proxy, Redis, and Melodash..."
+      echo "Syncing local package.json version with latest git tag..."
+      VERSION=$(git tag --sort=-v:refname | head -n 1 | sed 's/^v//')
+      
+      if [ -z "$VERSION" ]; then
+        echo "ERROR: No git tags found. Cannot determine version."
+        exit 1
+      fi
+      
+      npm version --no-git-tag-version --allow-same-version "$VERSION"
       compose_cmd down --remove-orphans
       ensure_network
       compose_cmd up -d --build --remove-orphans proxy redis melodash

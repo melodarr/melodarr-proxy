@@ -6,6 +6,8 @@ const {
   LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
   LIDARR_SKYHOOK_ARTIST_DEFAULTS,
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
+  normalizeAliases,
+  normalizeLidarrArtistResponse,
   normalizeStringArray,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults
@@ -40,6 +42,29 @@ test('withArtistLookupDefaults does not override an explicit foreignArtistId wit
   assert.equal(artist.foreignArtistId, 'faid-value')
 })
 
+test('withArtistLookupDefaults backfills aliases for Lidarr add-artist payloads', () => {
+  const artist = withArtistLookupDefaults({
+    status: 'continuing',
+    ended: false,
+    artistName: 'The Beach Boys',
+    foreignArtistId: 'ebfc1398-8d96-47e3-82c3-f782abcdb13d',
+    qualityProfileId: 1,
+    metadataProfileId: 1,
+    monitored: true,
+    monitorNewItems: 'all',
+    folder: 'The Beach Boys',
+    rootFolderPath: '/mnt/shared/Music',
+    addOptions: { monitor: 'all', searchForMissingAlbums: false }
+  })
+
+  assert.ok(Object.prototype.hasOwnProperty.call(artist, 'aliases'))
+  assert.deepEqual(artist.aliases, [])
+  assert.equal(artist.qualityProfileId, 1)
+  assert.equal(artist.metadataProfileId, 1)
+  assert.equal(artist.rootFolderPath, '/mnt/shared/Music')
+  assert.deepEqual(artist.addOptions, { monitor: 'all', searchForMissingAlbums: false })
+})
+
 test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
   const artist = withSkyhookArtistDefaults({ artistName: 'Radiohead', aliases: ['On a Friday'] })
 
@@ -62,4 +87,29 @@ test('withSkyhookArtistDefaults supplies SkyHook artist fields', () => {
 test('normalizeStringArray trims values and drops blanks', () => {
   assert.deepEqual(normalizeStringArray([' One ', '', null, 42]), ['One', '42'])
   assert.deepEqual(normalizeStringArray('not-array'), [])
+})
+
+test('normalizeAliases accepts Lidarr PascalCase input and trims while preserving alias casing', () => {
+  assert.deepEqual(normalizeAliases({ Aliases: [' Surf ', '', null] }), ['Surf'])
+  assert.deepEqual(withArtistLookupDefaults({ artistName: 'The Beach Boys', Aliases: ['Beach Boys'] }).aliases, ['Beach Boys'])
+})
+
+test('normalizeLidarrArtistResponse injects aliases into artist-shaped responses', () => {
+  const response = normalizeLidarrArtistResponse({
+    status: 'continuing',
+    ended: false,
+    artistName: 'The Beach Boys',
+    foreignArtistId: 'ebfc1398-8d96-47e3-82c3-f782abcdb13d',
+    rootFolderPath: '/mnt/shared/Music',
+    addOptions: { monitor: 'all', searchForMissingAlbums: false }
+  })
+
+  assert.deepEqual(response.aliases, [])
+  assert.equal(response.rootFolderPath, '/mnt/shared/Music')
+  assert.deepEqual(response.addOptions, { monitor: 'all', searchForMissingAlbums: false })
+})
+
+test('normalizeLidarrArtistResponse injects aliases into nested SkyHook artists', () => {
+  const response = normalizeLidarrArtistResponse([{ artist: { artistName: 'Radiohead', foreignArtistId: 'mb-1' } }])
+  assert.deepEqual(response[0].artist.aliases, [])
 })

@@ -52,6 +52,38 @@ function normalizeArray (value) {
   return Array.isArray(value) ? value : []
 }
 
+function normalizeAliases (artist) {
+  return normalizeStringArray(artist.aliases ?? artist.Aliases)
+}
+
+function isArtistLike (value) {
+  return value && typeof value === 'object' && (
+    Object.prototype.hasOwnProperty.call(value, 'artistName') ||
+    Object.prototype.hasOwnProperty.call(value, 'foreignArtistId')
+  )
+}
+
+function normalizeLidarrArtistResponse (value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeLidarrArtistResponse)
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  const normalized = {}
+  for (const [key, item] of Object.entries(value)) {
+    normalized[key] = normalizeLidarrArtistResponse(item)
+  }
+
+  if (isArtistLike(normalized)) {
+    normalized.aliases = normalizeAliases(normalized)
+  }
+
+  return normalized
+}
+
 function withArtistLookupDefaults (artist = {}) {
   return {
     ...artist,
@@ -59,7 +91,7 @@ function withArtistLookupDefaults (artist = {}) {
     id: asString(artist.id),
     foreignArtistId: asString(artist.foreignArtistId || artist.id),
     status: asString(artist.status || LIDARR_LOOKUP_ARTIST_DEFAULTS.status),
-    aliases: normalizeStringArray(artist.aliases),
+    aliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums)
@@ -76,7 +108,7 @@ function withSkyhookArtistDefaults (artist = {}) {
     overview: asString(artist.overview),
     type: asString(artist.type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     status: asString(artist.status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
-    aliases: normalizeStringArray(artist.aliases),
+    aliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums)
@@ -89,6 +121,8 @@ module.exports = {
   LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   asString,
+  normalizeAliases,
+  normalizeLidarrArtistResponse,
   normalizeStringArray,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults
