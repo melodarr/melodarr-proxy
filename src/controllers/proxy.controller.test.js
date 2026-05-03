@@ -307,7 +307,7 @@ test('artist lookup returns cached response without debug data by default', asyn
     ['artist:cached artist', {
       data: {
         artistName: 'Cached Artist',
-        id: '',
+        id: 'mock-foreign-id',
         foreignArtistId: 'mock-foreign-id',
         providers: [{ name: 'itunes', albumCount: 1 }],
         albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020' }],
