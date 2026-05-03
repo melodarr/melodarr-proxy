@@ -46,6 +46,11 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "CREATED=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
+      - name: Sync package.json version with tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version --no-git-tag-version --allow-same-version "$VERSION"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
