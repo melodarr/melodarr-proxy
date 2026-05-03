@@ -428,14 +428,15 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.artistName, 'Radiohead')
   assert.equal(res.body.id, 'a74b1b7f')
-  assert.equal(res.body.foreignArtistId, 'a74b1b7f')
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body, 'foreignArtistId'), false)
   assert.equal(res.body.status, 'continuing')
   assert.deepEqual(res.body.oldIds, [])
-  assert.deepEqual(res.body.aliases, ['On a Friday'])
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body, 'aliases'), false)
   assert.deepEqual(res.body.artistAliases, ['On a Friday'])
   assert.deepEqual(res.body.links, [])
   assert.equal(res.body.albums[0].id, 'rg-ok')
-  assert.equal(res.body.albums[0].firstReleaseDate, '1997-05-21T00:00:00Z')
+  assert.equal(res.body.albums[0].releaseDate, '1997-05-21T00:00:00Z')
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body.albums[0], 'firstReleaseDate'), false)
 })
 
 test('recent feed returns empty array for unsupported update feed', async () => {

@@ -244,11 +244,25 @@ describe('API E2E Tests', () => {
       const res = await client.get(`/api/artist/${mbid}`)
 
       assert.strictEqual(res.status, 200)
+      assert.deepStrictEqual(Object.keys(res.data).sort(), [
+        'albums',
+        'aristUrl',
+        'artistAliases',
+        'artistName',
+        'disambiguation',
+        'genres',
+        'id',
+        'images',
+        'links',
+        'oldIds',
+        'overview',
+        'rating',
+        'status',
+        'type'
+      ].sort())
       assert.strictEqual(res.data.artistName, 'Backstreet Boys')
       assert.strictEqual(res.data.id, mbid)
-      assert.strictEqual(res.data.foreignArtistId, mbid)
       assert.deepStrictEqual(res.data.oldIds, [])
-      assert.deepStrictEqual(res.data.aliases, ['BSB', 'Back Street Boys'])
       assert.deepStrictEqual(res.data.artistAliases, ['BSB', 'Back Street Boys'])
       assert.ok(Array.isArray(res.data.images))
       assert.ok(Array.isArray(res.data.albums))
@@ -260,9 +274,9 @@ describe('API E2E Tests', () => {
       assert.strictEqual(album.type, 'Album')
       assert.deepStrictEqual(album.secondaryTypes, [])
       assert.deepStrictEqual(album.releaseStatuses, ['Official'])
-      assert.strictEqual(album.firstReleaseDate, '1999-05-18T00:00:00Z')
+      assert.strictEqual(album.releaseDate, '1999-05-18T00:00:00Z')
       assert.ok(Array.isArray(album.artists))
-      assert.strictEqual(album.artists[0].foreignArtistId, mbid)
+      assert.strictEqual(album.artists[0].id, mbid)
     })
 
     it('GET /api/album/{releaseGroupId} → returns and caches Lidarr album refetch metadata with tracks', async () => {
@@ -274,15 +288,33 @@ describe('API E2E Tests', () => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.headers['x-cache'], 'MISS')
+      assert.deepStrictEqual(Object.keys(res.data).sort(), [
+        'artistId',
+        'artists',
+        'disambiguation',
+        'genres',
+        'id',
+        'images',
+        'links',
+        'oldIds',
+        'overview',
+        'rating',
+        'releaseDate',
+        'releaseStatuses',
+        'releases',
+        'secondaryTypes',
+        'title',
+        'type'
+      ].sort())
       assert.strictEqual(res.data.id, releaseGroupId)
       assert.strictEqual(res.data.artistId, mbid)
       assert.strictEqual(res.data.title, 'Millennium')
       assert.strictEqual(res.data.type, 'Album')
       assert.deepStrictEqual(res.data.secondaryTypes, [])
       assert.deepStrictEqual(res.data.releaseStatuses, ['Official'])
-      assert.strictEqual(res.data.firstReleaseDate, '1999-05-18T00:00:00Z')
+      assert.strictEqual(res.data.releaseDate, '1999-05-18T00:00:00Z')
       assert.ok(Array.isArray(res.data.artists))
-      assert.strictEqual(res.data.artists[0].foreignArtistId, mbid)
+      assert.strictEqual(res.data.artists[0].id, mbid)
       assert.ok(Array.isArray(res.data.releases))
       assert.strictEqual(res.data.releases.length, 1)
       assert.strictEqual(res.data.releases[0].tracks.length, 1)
@@ -342,7 +374,7 @@ describe('API E2E Tests', () => {
       assert.strictEqual(album.id, '920a68fe-7b93-3d0e-bf73-44ac72f03dd2')
       assert.strictEqual(album.artistId, lidarrAddArtistRequest.foreignArtistId)
       assert.strictEqual(album.title, 'Millennium')
-      assert.strictEqual(album.firstReleaseDate, '1999-05-18T00:00:00Z')
+      assert.strictEqual(album.releaseDate, '1999-05-18T00:00:00Z')
       assert.deepStrictEqual(album.oldIds, [])
       assert.strictEqual(album.type, 'Album')
       assert.deepStrictEqual(album.secondaryTypes, [])
@@ -353,7 +385,7 @@ describe('API E2E Tests', () => {
       assert.ok(Array.isArray(album.images))
       assert.ok(Array.isArray(album.links))
       assert.ok(Array.isArray(album.artists))
-      assert.strictEqual(album.artists[0].foreignArtistId, lidarrAddArtistRequest.foreignArtistId)
+      assert.strictEqual(album.artists[0].id, lidarrAddArtistRequest.foreignArtistId)
       assert.deepStrictEqual(album.artists[0].artistAliases, ['BSB', 'Back Street Boys'])
       assert.ok(Array.isArray(album.artists[0].images))
       assert.ok(Array.isArray(album.artists[0].links))

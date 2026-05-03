@@ -9,6 +9,8 @@ const {
   normalizeAliases,
   normalizeLidarrArtistResponse,
   normalizeStringArray,
+  toSkyhookAlbumResource,
+  toSkyhookArtistResource,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults
 } = require('./lidarrArtist')
@@ -220,4 +222,97 @@ test('normalizeLidarrArtistResponse injects aliases into nested SkyHook artists'
   assert.deepEqual(response[0].artist.aliases, [])
   assert.deepEqual(response[0].artist.artistAliases, [])
   assert.deepEqual(response[0].artist.oldIds, [])
+})
+
+test('toSkyhookArtistResource emits only Lidarr ArtistResource fields', () => {
+  const artist = toSkyhookArtistResource({
+    id: 'mb-1',
+    foreignArtistId: 'extra-id',
+    artistName: 'Radiohead',
+    aliases: ['On a Friday'],
+    providerErrors: [],
+    _generatedAt: '2026-05-03T00:00:00Z',
+    albums: []
+  })
+
+  assert.deepEqual(Object.keys(artist).sort(), [
+    'albums',
+    'aristUrl',
+    'artistAliases',
+    'artistName',
+    'disambiguation',
+    'genres',
+    'id',
+    'images',
+    'links',
+    'oldIds',
+    'overview',
+    'rating',
+    'status',
+    'type'
+  ].sort())
+  assert.equal(artist.id, 'mb-1')
+  assert.deepEqual(artist.artistAliases, ['On a Friday'])
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, 'foreignArtistId'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, 'aliases'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, 'providerErrors'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, '_generatedAt'), false)
+})
+
+test('toSkyhookAlbumResource emits only Lidarr AlbumResource fields', () => {
+  const album = toSkyhookAlbumResource({
+    id: 'rg-1',
+    foreignAlbumId: 'extra-album-id',
+    title: 'OK Computer',
+    artistId: 'artist-1',
+    firstReleaseDate: '1997-05-21T00:00:00Z',
+    releaseDate: '1997-05-21T00:00:00Z',
+    remoteCover: 'https://example.com/cover.jpg',
+    provider: 'musicbrainz',
+    ids: { musicbrainzReleaseGroupId: 'rg-1' },
+    artists: [{ id: 'artist-1', artistName: 'Radiohead' }],
+    releases: [{
+      id: 'rel-1',
+      title: 'OK Computer',
+      releaseDate: '1997-05-21T00:00:00Z',
+      media: [{ name: 'CD 1', format: 'CD', position: 1 }],
+      tracks: [{
+        artistId: 'artist-1',
+        durationMs: 240000,
+        id: 'track-1',
+        recordingId: 'rec-1',
+        trackName: 'Airbag',
+        trackNumber: '1',
+        trackPosition: 1,
+        mediumNumber: 1
+      }]
+    }]
+  })
+
+  assert.deepEqual(Object.keys(album).sort(), [
+    'artistId',
+    'artists',
+    'disambiguation',
+    'genres',
+    'id',
+    'images',
+    'links',
+    'oldIds',
+    'overview',
+    'rating',
+    'releaseDate',
+    'releaseStatuses',
+    'releases',
+    'secondaryTypes',
+    'title',
+    'type'
+  ].sort())
+  assert.equal(album.id, 'rg-1')
+  assert.equal(album.releaseDate, '1997-05-21T00:00:00Z')
+  assert.equal(album.releases[0].tracks[0].trackName, 'Airbag')
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'foreignAlbumId'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'firstReleaseDate'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'remoteCover'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'provider'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'ids'), false)
 })

@@ -12,7 +12,7 @@ const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
 const { isValidArtist } = require('../utils/validateArtist')
-const { normalizeAlbum, normalizeStringArray, withArtistLookupDefaults, withSkyhookArtistDefaults } = require('../utils/lidarrArtist')
+const { normalizeAlbum, normalizeStringArray, toSkyhookAlbumResource, toSkyhookArtistResource, withArtistLookupDefaults, withSkyhookArtistDefaults } = require('../utils/lidarrArtist')
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -29,13 +29,13 @@ function normalizeAlbumResponse (album = {}) {
     ? normalized.artists.map(item => withSkyhookArtistDefaults(item))
     : []
 
-  return {
+  return toSkyhookAlbumResource({
     ...normalized,
     firstReleaseDate: toIsoDate(normalized.firstReleaseDate || normalized.releaseDate),
     releaseDate: toIsoDate(normalized.releaseDate),
     artist: artist || normalized.artist,
     artists: artists.length > 0 ? artists : (artist ? [artist] : [])
-  }
+  })
 }
 
 async function cacheAlbumResponses (albums = []) {
@@ -465,7 +465,6 @@ async function handleArtistLookup (req, res) {
 
 async function handleArtistById (req, res) {
   const foreignArtistId = String(req.params.foreignArtistId || req.params.artistId || '').trim()
-  const isDebug = req.query.debug === 'true'
 
   if (!foreignArtistId) {
     return res.status(400).json({ error: 'Missing required path parameter: foreignArtistId' })
@@ -480,8 +479,7 @@ async function handleArtistById (req, res) {
     const isStale = (Date.now() - new Date(cachedData.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
     tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
     metrics.recordCache(true, isStale)
-    const response = withArtistLookupDefaults({ ...cachedData.data, _generatedAt: cachedData.generatedAt })
-    if (!isDebug && response.debug) delete response.debug
+    const response = toSkyhookArtistResource(cachedData.data)
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: ['musicbrainz'] })
     res.set('X-Cache', 'HIT')
     res.set('X-Providers', 'musicbrainz')
@@ -498,23 +496,16 @@ async function handleArtistById (req, res) {
     tracer.addStep(trace, 'lookupArtistById', Date.now() - startedAt, 'success')
 
     const rankingStartTime = Date.now()
-    const { results: rankedResults, debug: rankingDebug } = rankResults(buildArtistLookupRankingInput(data.artistName || foreignArtistId, data))
+    const { results: rankedResults } = rankResults(buildArtistLookupRankingInput(data.artistName || foreignArtistId, data))
     const rankingTimeMs = Date.now() - rankingStartTime
     tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
 
     const topResult = rankedResults[0]
     const startEnrich = Date.now()
-    const enrichedTopResult = await enrichResult(topResult, isDebug)
+    const enrichedTopResult = await enrichResult(topResult, false)
     tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
 
-    const response = buildArtistLookupResponse(data, enrichedTopResult, rankedResults)
-    if (isDebug) {
-      response.debug = {
-        ranking: rankingDebug,
-        enrichment: enrichedTopResult._enrichmentDebug
-      }
-      delete enrichedTopResult._enrichmentDebug
-    }
+    const response = toSkyhookArtistResource(buildArtistLookupResponse(data, enrichedTopResult, rankedResults))
 
     await cache.set(cacheKey, response, 86400 * 30)
     await cacheAlbumResponses(response.albums)
@@ -524,7 +515,7 @@ async function handleArtistById (req, res) {
     res.set('X-Upstream-Calls', '1')
     res.set('X-Providers', 'musicbrainz')
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json({ ...response, _generatedAt: new Date().toISOString() })
+    return res.json(response)
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist by ID lookup failed', {
@@ -621,7 +612,7 @@ async function handleAlbumById (req, res) {
     res.set('X-Upstream-Calls', '1')
     res.set('X-Providers', 'musicbrainz')
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json({ ...response, _generatedAt: new Date().toISOString() })
+    return res.json(response)
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Album by ID lookup failed', {
