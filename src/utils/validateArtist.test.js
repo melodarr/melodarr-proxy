@@ -19,8 +19,8 @@ test('isValidArtist — empty object → false', () => {
 
 // ── SkyHook wrapped artist ────────────────────────────────────────
 
-test('isValidArtist — wrapped artist with artistName → true', () => {
-  assert.equal(isValidArtist({ artist: { artistName: 'Whitesnake' } }), true)
+test('isValidArtist — wrapped artist with artistName and foreignArtistId → true', () => {
+  assert.equal(isValidArtist({ artist: { artistName: 'Whitesnake', foreignArtistId: 'mb-1' } }), true)
 })
 
 test('isValidArtist — wrapped artist with empty artistName → false', () => {
@@ -35,20 +35,32 @@ test('isValidArtist — wrapped artist with null artistName → false', () => {
   assert.equal(isValidArtist({ artist: { artistName: null } }), false)
 })
 
-test('isValidArtist — wrapped artist with empty id still valid', () => {
-  // id is intentionally NOT validated — empty MBID is a
-  // legitimate signal that no canonical id exists. Lidarr's search UI
-  // displays these; the add path is what fails downstream.
-  assert.equal(isValidArtist({ artist: { artistName: 'X', id: '' } }), true)
+test('isValidArtist — wrapped artist with missing or empty foreignArtistId is invalid', () => {
+  assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: '' } }), false)
+  assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: '   ' } }), false)
+  assert.equal(isValidArtist({ artist: { artistName: 'X' } }), false)
+  assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: undefined } }), false)
 })
 
 // ── SkyHook wrapped album ─────────────────────────────────────────
 
-test('isValidArtist — wrapped album with title → true', () => {
+test('isValidArtist — wrapped album with title and artistId → true', () => {
   // The spec's combined check would have falsely rejected this because
   // album.artistName is undefined and `undefined == null` is true.
   // This test guards against that regression.
-  assert.equal(isValidArtist({ album: { title: 'OK Computer' } }), true)
+  assert.equal(isValidArtist({ album: { title: 'OK Computer', artistId: 'mb-1' } }), true)
+})
+
+test('isValidArtist — wrapped album with missing artistId → false', () => {
+  assert.equal(isValidArtist({ album: { title: 'OK Computer' } }), false)
+})
+
+test('isValidArtist — wrapped album with empty artistId → false', () => {
+  assert.equal(isValidArtist({ album: { title: 'OK Computer', artistId: '' } }), false)
+})
+
+test('isValidArtist — wrapped album with whitespace artistId → false', () => {
+  assert.equal(isValidArtist({ album: { title: 'OK Computer', artistId: '   ' } }), false)
 })
 
 test('isValidArtist — wrapped album with empty title → false', () => {
@@ -61,8 +73,14 @@ test('isValidArtist — wrapped album with no title → false', () => {
 
 // ── Unwrapped lookup-shape artist ─────────────────────────────────
 
-test('isValidArtist — unwrapped lookup artist with artistName → true', () => {
-  assert.equal(isValidArtist({ artistName: 'Radiohead', albums: [] }), true)
+test('isValidArtist — unwrapped lookup artist with artistName and foreignArtistId → true', () => {
+  assert.equal(isValidArtist({ artistName: 'Radiohead', foreignArtistId: 'mb-1', albums: [] }), true)
+})
+
+test('isValidArtist — unwrapped lookup artist with missing/empty/whitespace foreignArtistId → false', () => {
+  assert.equal(isValidArtist({ artistName: 'X', albums: [] }), false)
+  assert.equal(isValidArtist({ artistName: 'X', foreignArtistId: '', albums: [] }), false)
+  assert.equal(isValidArtist({ artistName: 'X', foreignArtistId: '   ', albums: [] }), false)
 })
 
 test('isValidArtist — unwrapped lookup artist with empty artistName → false', () => {
