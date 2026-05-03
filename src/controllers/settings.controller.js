@@ -438,7 +438,18 @@ async function applyRollback (req, res) {
     }
     res.json(result)
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    const message = err && err.message ? err.message : 'Rollback failed'
+
+    if (message === 'Invalid versionId') {
+      return res.status(400).json({ error: message })
+    }
+
+    if (/^Version .+ not found$/.test(message)) {
+      return res.status(404).json({ error: message })
+    }
+
+    logger.error('rollback_failed', { versionId, dryRun, error: message })
+    return res.status(500).json({ error: message })
   }
 }
 
