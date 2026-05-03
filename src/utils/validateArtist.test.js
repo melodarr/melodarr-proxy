@@ -35,8 +35,10 @@ test('isValidArtist — wrapped artist with null artistName → false', () => {
   assert.equal(isValidArtist({ artist: { artistName: null } }), false)
 })
 
-test('isValidArtist — wrapped artist with empty foreignArtistId is invalid', () => {
+test('isValidArtist — wrapped artist with missing or empty foreignArtistId is invalid', () => {
   assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: '' } }), false)
+  assert.equal(isValidArtist({ artist: { artistName: 'X' } }), false)
+  assert.equal(isValidArtist({ artist: { artistName: 'X', foreignArtistId: undefined } }), false)
 })
 
 // ── SkyHook wrapped album ─────────────────────────────────────────
