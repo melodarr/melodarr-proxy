@@ -640,6 +640,10 @@ function handleRecentFeed (_req, res) {
   return res.json([])
 }
 
+function handleReleaseSearch (_req, res) {
+  return res.json([])
+}
+
 async function handleArtistDiscover (req, res) {
   const query = String(req.query.q || req.query.term || '').trim()
   const type = String(req.query.type || 'artist').trim().toLowerCase()
@@ -714,4 +718,4 @@ async function handleSongAlbums (req, res) {
   }
 }
 
-module.exports = { handleAlbumById, handleArtistById, handleArtistDiscover, handleArtistLookup, handleRecentFeed, handleSearch, handleSongAlbums }
+module.exports = { handleAlbumById, handleArtistById, handleArtistDiscover, handleArtistLookup, handleRecentFeed, handleReleaseSearch, handleSearch, handleSongAlbums }
