@@ -11,6 +11,7 @@ function isStrictSkyhookMetadataRoute (req) {
 
   if (normalizedLast === 'search') return routeName !== 'artist'
   if (normalizedLast === 'release') return true
+  if (normalizedLast === 'details' && routeName === 'queue') return true
   if (normalizedLast === 'discover') return routeName === 'artist'
   if (normalizedLast === 'lookup') return false
 

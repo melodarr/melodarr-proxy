@@ -1,0 +1,84 @@
+[
+  {
+    "id": 101,
+    "artistId": 700,
+    "albumId": 6271,
+    "artist": null,
+    "album": {
+      "id": 6271,
+      "title": "Millennium",
+      "disambiguation": "",
+      "overview": "",
+      "artistId": 700,
+      "foreignAlbumId": "920a68fe-7b93-3d0e-bf73-44ac72f03dd2",
+      "monitored": true,
+      "anyReleaseOk": false,
+      "profileId": 1,
+      "duration": 2820,
+      "albumType": "Album",
+      "secondaryTypes": [],
+      "mediumCount": 1,
+      "ratings": {
+        "votes": 0,
+        "value": 0
+      },
+      "releaseDate": "1999-05-18T00:00:00Z",
+      "releases": [],
+      "genres": [],
+      "media": [],
+      "artist": null,
+      "images": [],
+      "links": [],
+      "lastSearchTime": null,
+      "statistics": {
+        "trackFileCount": 0,
+        "trackCount": 12,
+        "totalTrackCount": 12,
+        "sizeOnDisk": 0,
+        "percentOfTracks": 0
+      },
+      "addOptions": {},
+      "remoteCover": null
+    },
+    "quality": {
+      "quality": {
+        "id": 1,
+        "name": "MP3-320"
+      },
+      "revision": {
+        "version": 1,
+        "real": 0,
+        "isRepack": false
+      }
+    },
+    "customFormats": [],
+    "customFormatScore": 0,
+    "size": 123456789,
+    "title": "Backstreet Boys - Millennium",
+    "sizeleft": 456789,
+    "timeleft": "00:12:34",
+    "estimatedCompletionTime": "2026-05-04T05:00:00Z",
+    "added": "2026-05-04T04:30:00Z",
+    "status": "downloading",
+    "trackedDownloadStatus": "ok",
+    "trackedDownloadState": "downloading",
+    "statusMessages": [
+      {
+        "title": "Import pending",
+        "messages": [
+          "Waiting for download client to finish"
+        ]
+      }
+    ],
+    "errorMessage": null,
+    "downloadId": "transmission-queue-id-101",
+    "protocol": "torrent",
+    "downloadClient": "Transmission",
+    "downloadClientHasPostImportCategory": false,
+    "indexer": "Manual",
+    "outputPath": "/downloads/Backstreet Boys - Millennium",
+    "trackFileCount": 12,
+    "trackHasFileCount": 0,
+    "downloadForced": false
+  }
+]

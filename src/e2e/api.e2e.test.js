@@ -256,6 +256,20 @@ describe('API E2E Tests', () => {
       assert.deepStrictEqual(res.data, [])
     })
 
+    it('GET /api/v1/queue/details?artistId=700 → returns empty Lidarr QueueResource list when no queue records exist', async () => {
+      const res = await client.get('/api/v1/queue/details?artistId=700')
+
+      assert.strictEqual(res.status, 200)
+      assert.deepStrictEqual(res.data, [])
+    })
+
+    it('GET /api/v1/queue/details?albumIds=6271 → returns empty Lidarr QueueResource list when no queue records exist', async () => {
+      const res = await client.get('/api/v1/queue/details?albumIds=6271')
+
+      assert.strictEqual(res.status, 200)
+      assert.deepStrictEqual(res.data, [])
+    })
+
     it('GET /api/v1/artist/lookup?term=Backstreet%20Boys → returns Lidarr artistAliases from MusicBrainz aliases', async () => {
       const res = await client.get('/api/v1/artist/lookup?term=Backstreet%20Boys')
 
