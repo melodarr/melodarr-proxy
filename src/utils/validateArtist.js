@@ -10,8 +10,8 @@
 // An item is valid iff its shape-appropriate display field
 // (artistName/title) is a non-empty trimmed string. For shapes that
 // carry an upstream identifier, that identifier must also be non-empty:
-//   - All artist shapes require a non-empty foreignArtistId (Lidarr
-//     rejects artists with an empty ForeignArtistId).
+//   - Legacy lookup artist shapes require a non-empty foreignArtistId. Strict
+//     SkyHook metadata-source shapes use id instead.
 //   - SkyHook-wrapped albums ({ album: { title, artistId } }) require a
 //     non-empty artistId; albums without an upstream artist linkage would
 //     be orphaned inside Lidarr.
@@ -27,7 +27,7 @@ function isValidArtist (item) {
 
   // SkyHook wrapped artist.
   if (item.artist && typeof item.artist === 'object') {
-    return nonEmptyString(item.artist.artistName) && nonEmptyString(item.artist.foreignArtistId)
+    return nonEmptyString(item.artist.artistName) && nonEmptyString(item.artist.id || item.artist.foreignArtistId)
   }
 
   // SkyHook wrapped album.
@@ -37,7 +37,7 @@ function isValidArtist (item) {
 
   // Unwrapped lookup-shape artist (the /api/v1/artist/lookup contract).
   if ('artistName' in item) {
-    return nonEmptyString(item.artistName) && nonEmptyString(item.foreignArtistId)
+    return nonEmptyString(item.artistName) && nonEmptyString(item.foreignArtistId || item.id)
   }
 
   // Unwrapped lookup-shape album.

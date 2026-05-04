@@ -17,6 +17,8 @@ const {
   asString,
   normalizeAlbum,
   normalizeStringArray,
+  toSkyhookAlbumResource,
+  toSkyhookArtistResource,
   withSkyhookArtistDefaults
 } = require('./lidarrArtist')
 
@@ -73,7 +75,8 @@ function buildNestedArtist (candidate, artistId) {
 
 function wrapArtist (candidate) {
   return {
-    artist: withSkyhookArtistDefaults({
+    score: Number(candidate.score ?? 0) || 0,
+    artist: toSkyhookArtistResource({
       id: pickArtistMbid(candidate),
       foreignArtistId: pickArtistMbid(candidate),
       artistName: asString(candidate.artistName || candidate.match),
@@ -81,7 +84,8 @@ function wrapArtist (candidate) {
       overview: '',
       images: normalizeImages(candidate, 'poster'),
       aliases: candidate.aliases
-    })
+    }),
+    album: null
   }
 }
 
@@ -93,7 +97,9 @@ function wrapAlbum (candidate) {
   const type = asString(candidate.albumType || candidate.primaryType || candidate.typeName || 'Album')
   const nestedArtist = buildNestedArtist(candidate, artistId)
   return {
-    album: normalizeAlbum({
+    score: Number(candidate.score ?? 0) || 0,
+    artist: null,
+    album: toSkyhookAlbumResource(normalizeAlbum({
       id: albumId,
       oldIds: normalizeStringArray(candidate.oldIds || candidate.OldIds),
       title: asString(candidate.match || candidate.albumName || candidate.title),
@@ -130,8 +136,14 @@ function wrapAlbum (candidate) {
       artists: [
         nestedArtist
       ]
-    })
+    }))
   }
+}
+
+function unwrapEntityResource (item, branch) {
+  if (branch === 'artist') return item.artist
+  if (branch === 'album') return item.album
+  return item
 }
 
 // Wrap an array of internal candidate objects into the SkyHook search
@@ -148,9 +160,9 @@ function toSkyhookSearchShape (candidates, requestedType = 'all') {
       if (t === 'artist') out.push(wrapArtist(c))
       else if (t === 'album') out.push(wrapAlbum(c))
     } else if (typeFilter === 'artist' && t === 'artist') {
-      out.push(wrapArtist(c))
+      out.push(unwrapEntityResource(wrapArtist(c), 'artist'))
     } else if (typeFilter === 'album' && t === 'album') {
-      out.push(wrapAlbum(c))
+      out.push(unwrapEntityResource(wrapAlbum(c), 'album'))
     }
   }
   return out

@@ -215,17 +215,31 @@ describe('API E2E Tests', () => {
       }
     })
 
-    it('GET /api/search?type=artist&query=Backstreet%20Boys → returns Lidarr search artist metadata lists', async () => {
+    it('GET /api/search?type=artist&query=Backstreet%20Boys → returns strict Lidarr ArtistResource lists', async () => {
       const res = await client.get('/api/search?type=artist&query=Backstreet%20Boys')
 
       assert.strictEqual(res.status, 200)
       assert.ok(Array.isArray(res.data))
-      assert.ok(res.data[0].artist)
-      assert.strictEqual(res.data[0].artist.artistName, 'Backstreet Boys')
-      assert.deepStrictEqual(res.data[0].artist.oldIds, [])
-      assert.deepStrictEqual(res.data[0].artist.aliases, ['BSB', 'Back Street Boys'])
-      assert.deepStrictEqual(res.data[0].artist.artistAliases, ['BSB', 'Back Street Boys'])
-      assert.ok(Array.isArray(res.data[0].artist.images))
+      assert.deepStrictEqual(Object.keys(res.data[0]).sort(), [
+        'albums',
+        'artistAliases',
+        'artistName',
+        'artistUrl',
+        'disambiguation',
+        'genres',
+        'id',
+        'images',
+        'links',
+        'oldIds',
+        'overview',
+        'rating',
+        'status',
+        'type'
+      ].sort())
+      assert.strictEqual(res.data[0].artistName, 'Backstreet Boys')
+      assert.deepStrictEqual(res.data[0].oldIds, [])
+      assert.deepStrictEqual(res.data[0].artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(res.data[0].images))
     })
 
     it('GET /api/v1/artist/lookup?term=Backstreet%20Boys → returns Lidarr artistAliases from MusicBrainz aliases', async () => {
