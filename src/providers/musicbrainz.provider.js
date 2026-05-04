@@ -29,6 +29,73 @@ class MusicBrainzProvider {
       .filter(Boolean)
   }
 
+  mapReleaseTracks (media = [], fallbackArtistId = '') {
+    const tracks = []
+
+    for (const medium of media) {
+      const mediumNumber = Number(medium.position || 1) || 1
+      const mediumTracks = Array.isArray(medium.tracks) ? medium.tracks : []
+
+      mediumTracks.forEach((track, index) => {
+        const recording = track.recording || {}
+        const artistCredit = Array.isArray(recording['artist-credit'])
+          ? recording['artist-credit'].find(credit => credit?.artist)?.artist
+          : null
+        const artistId = artistCredit?.id || fallbackArtistId
+        const title = track.title || recording.title || ''
+
+        if (!title) {
+          return
+        }
+
+        tracks.push({
+          artistId,
+          durationMs: Number(track.length || recording.length || 0) || 0,
+          id: track.id || recording.id || `${mediumNumber}-${index + 1}`,
+          oldIds: [],
+          recordingId: recording.id || track.recording?.id || '',
+          oldRecordingIds: [],
+          trackName: title,
+          trackNumber: String(track.number || index + 1),
+          trackPosition: Number(track.position || index + 1) || index + 1,
+          explicit: false,
+          mediumNumber
+        })
+      })
+    }
+
+    return tracks
+  }
+
+  mapReleases (releaseResult = {}, fallbackArtistId = '') {
+    const releases = Array.isArray(releaseResult.releases) ? releaseResult.releases : []
+
+    return releases
+      .map((release) => {
+        const media = Array.isArray(release.media) ? release.media : []
+        const tracks = this.mapReleaseTracks(media, fallbackArtistId)
+
+        return {
+          id: release.id || '',
+          oldIds: [],
+          title: release.title || '',
+          status: release.status || 'Official',
+          label: [],
+          disambiguation: release.disambiguation || '',
+          country: release.country ? [release.country] : [],
+          releaseDate: release.date || null,
+          media: media.map((medium, index) => ({
+            name: medium.title || medium.format || 'Unknown',
+            format: medium.format || 'Unknown',
+            position: Number(medium.position || index + 1) || index + 1
+          })),
+          trackCount: tracks.length,
+          tracks
+        }
+      })
+      .filter(release => release.id && release.tracks.length > 0)
+  }
+
   async searchArtist (term) {
     const artistSearch = await upstreamService.musicBrainzGet('/artist', {
       query: `artist:"${this.mbQueryValue(term)}"`,
@@ -76,7 +143,9 @@ class MusicBrainzProvider {
       id: artist.id || '',
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
+      oldIds: [],
       aliases: this.extractAliases(artist),
+      artistAliases: this.extractAliases(artist),
       images: [],
       albums
     }
@@ -128,7 +197,9 @@ class MusicBrainzProvider {
       id: artist.id || '',
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
+      oldIds: [],
       aliases: this.extractAliases(artist),
+      artistAliases: this.extractAliases(artist),
       images: [],
       albums,
       partial: false,
@@ -137,6 +208,73 @@ class MusicBrainzProvider {
       providers: [{ name: 'musicbrainz', score: 100, albumCount: albums.length }],
       providerErrors: [],
       confidence: 100
+    }
+  }
+
+  async lookupAlbumById (releaseGroupId) {
+    const group = await upstreamService.musicBrainzGet(`/release-group/${encodeURIComponent(releaseGroupId)}`, {
+      inc: 'artist-credits'
+    })
+
+    if (!group?.id) {
+      const err = new Error('MusicBrainz release group not found')
+      err.code = 'ALBUM_NOT_FOUND'
+      throw err
+    }
+
+    const artistCredit = Array.isArray(group['artist-credit'])
+      ? group['artist-credit'].find(credit => credit?.artist)?.artist
+      : null
+    const artistId = artistCredit?.id || ''
+    const artistName = artistCredit?.name || artistCredit?.['sort-name'] || ''
+    const rawDate = group['first-release-date'] || ''
+    const releaseResult = await upstreamService.musicBrainzGet('/release', {
+      'release-group': group.id || releaseGroupId,
+      inc: 'media+recordings+artist-credits',
+      limit: 10,
+      offset: 0
+    })
+    const releases = this.mapReleases(releaseResult, artistId)
+
+    return {
+      id: group.id || releaseGroupId,
+      title: group.title || '',
+      name: group.title || '',
+      artistId,
+      artist: {
+        id: artistId,
+        foreignArtistId: artistId,
+        artistName,
+        aliases: [],
+        artistAliases: []
+      },
+      artists: artistId
+        ? [{
+            id: artistId,
+            foreignArtistId: artistId,
+            artistName,
+            aliases: [],
+            artistAliases: []
+          }]
+        : [],
+      releaseDate: rawDate || null,
+      imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
+      images: group.id
+        ? [{
+            coverType: 'cover',
+            url: `https://coverartarchive.org/release-group/${group.id}/front-250`,
+            remoteUrl: `https://coverartarchive.org/release-group/${group.id}/front-250`
+          }]
+        : [],
+      ids: {
+        musicbrainzReleaseGroupId: group.id || releaseGroupId
+      },
+      provider: 'musicbrainz',
+      type: group['primary-type'] || 'Album',
+      albumType: group['primary-type'] || 'Album',
+      secondaryTypes: group['secondary-types'] || [],
+      releaseStatuses: ['Official'],
+      releases
     }
   }
 }

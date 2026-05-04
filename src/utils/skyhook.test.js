@@ -37,7 +37,9 @@ test('toSkyhookSearchShape — artist candidate is wrapped under "artist" key', 
   assert.equal(a.overview, '')
   assert.equal(a.type, 'Group')
   assert.equal(a.status, 'active')
+  assert.deepEqual(a.oldIds, [])
   assert.deepEqual(a.aliases, [])
+  assert.deepEqual(a.artistAliases, [])
   assert.deepEqual(a.links, [])
   assert.deepEqual(a.images, [{
     coverType: 'poster',
@@ -98,6 +100,7 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
 
   const al = out[0].album
   assert.equal(al.id, 'b1392450-e666-3926-a536-22c65f834433')
+  assert.deepEqual(al.oldIds, [])
   assert.equal(al.title, 'OK Computer')
   assert.equal(al.disambiguation, '')
   assert.equal(al.overview, '')
@@ -107,8 +110,11 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   assert.equal(al.profileId, 0)
   assert.equal(al.duration, 0)
   assert.equal(al.albumType, 'Album')
+  assert.equal(al.type, 'Album')
   assert.deepEqual(al.secondaryTypes, ['Studio'])
+  assert.deepEqual(al.releaseStatuses, ['Official'])
   assert.equal(al.mediumCount, 0)
+  assert.deepEqual(al.rating, { count: 0, value: 0 })
   assert.deepEqual(al.ratings, { votes: 0, value: 0 })
   assert.equal(al.releaseDate, '1997-05-21T00:00:00Z')
   assert.deepEqual(al.releases, [])
@@ -117,6 +123,8 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   assert.equal(al.artist.id, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
   assert.equal(al.artist.artistName, 'Radiohead')
   assert.deepEqual(al.artist.aliases, [])
+  assert.deepEqual(al.artist.artistAliases, [])
+  assert.deepEqual(al.artist.oldIds, [])
   assert.deepEqual(al.links, [])
   assert.equal(al.lastSearchTime, null)
   assert.deepEqual(al.statistics, {
@@ -134,6 +142,11 @@ test('toSkyhookSearchShape — album candidate is wrapped under "album" key', ()
   }])
   assert.equal(al.artists[0].id, 'a74b1b7f-71a5-4011-9441-d0b5e4122711')
   assert.equal(al.artists[0].artistName, 'Radiohead')
+  assert.deepEqual(al.artists[0].aliases, [])
+  assert.deepEqual(al.artists[0].artistAliases, [])
+  assert.deepEqual(al.artists[0].oldIds, [])
+  assert.deepEqual(al.artists[0].images, [])
+  assert.deepEqual(al.artists[0].links, [])
 })
 
 test('toSkyhookSearchShape — artist images default to [] when candidate has none', () => {
@@ -175,13 +188,13 @@ test('toSkyhookSearchShape — output has stable required Lidarr fields (deseria
   // keys; missing keys break the JSON contract even if every value is empty.
   const REQUIRED_ARTIST_KEYS = [
     'id', 'artistName', 'disambiguation', 'overview',
-    'type', 'status', 'aliases', 'links', 'images', 'albums'
+    'type', 'status', 'oldIds', 'aliases', 'artistAliases', 'links', 'images', 'albums'
   ]
   const REQUIRED_ALBUM_KEYS = [
-    'id', 'title', 'disambiguation', 'overview', 'artistId',
+    'id', 'oldIds', 'title', 'disambiguation', 'overview', 'artistId',
     'monitored', 'anyReleaseOk', 'profileId',
-    'duration', 'albumType', 'secondaryTypes', 'mediumCount',
-    'ratings', 'releaseDate', 'releases', 'genres', 'media',
+    'duration', 'albumType', 'type', 'secondaryTypes', 'releaseStatuses', 'mediumCount',
+    'rating', 'ratings', 'releaseDate', 'releases', 'genres', 'media',
     'artist', 'images', 'links', 'lastSearchTime', 'statistics',
     'addOptions', 'remoteCover', 'artists'
   ]

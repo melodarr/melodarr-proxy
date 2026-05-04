@@ -225,6 +225,9 @@ test('artist lookup normalizes provider data and caches the response', async () 
         artistName: term.toUpperCase(),
         id: 'mock-mbid',
         foreignArtistId: 'mock-mbid',
+        oldIds: ['old-mock-mbid'],
+        aliases: ['Provider Alias'],
+        artistAliases: ['Provider Alias'],
         albums: [
           {
             name: 'First Album',
@@ -254,7 +257,9 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.headers['X-Providers'], 'musicbrainz')
   assert.equal(res.body[0].artistName, 'TEST ARTIST')
   assert.equal(res.body[0].id, 'mock-mbid')
-  assert.deepEqual(res.body[0].aliases, [])
+  assert.deepEqual(res.body[0].oldIds, ['old-mock-mbid'])
+  assert.deepEqual(res.body[0].aliases, ['Provider Alias'])
+  assert.deepEqual(res.body[0].artistAliases, ['Provider Alias'])
   assert.equal(res.body[0].albums[0].title, 'First Album')
   assert.equal(res.body[0].albums[0].id, 'rg-1')
   // v0.3.36: year-only is now padded to ISO 8601 (Skyhook-compatible).
@@ -398,6 +403,8 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
       id,
       disambiguation: '',
       overview: '',
+      aliases: ['On a Friday'],
+      artistAliases: ['On a Friday'],
       images: [],
       albums: [{
         name: 'OK Computer',
@@ -421,12 +428,15 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.artistName, 'Radiohead')
   assert.equal(res.body.id, 'a74b1b7f')
-  assert.equal(res.body.foreignArtistId, 'a74b1b7f')
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body, 'foreignArtistId'), false)
   assert.equal(res.body.status, 'continuing')
-  assert.deepEqual(res.body.aliases, [])
+  assert.deepEqual(res.body.oldIds, [])
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body, 'aliases'), false)
+  assert.deepEqual(res.body.artistAliases, ['On a Friday'])
   assert.deepEqual(res.body.links, [])
   assert.equal(res.body.albums[0].id, 'rg-ok')
-  assert.equal(res.body.albums[0].firstReleaseDate, '1997-05-21T00:00:00Z')
+  assert.equal(res.body.albums[0].releaseDate, '1997-05-21T00:00:00Z')
+  assert.equal(Object.prototype.hasOwnProperty.call(res.body.albums[0], 'firstReleaseDate'), false)
 })
 
 test('recent feed returns empty array for unsupported update feed', async () => {

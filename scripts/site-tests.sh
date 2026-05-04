@@ -7,6 +7,22 @@
 #   BASE_URL     — proxy URL inside the LXC     (default: http://127.0.0.1:3055)
 #   API_KEY      — proxy API key                (default: empty; prompt in interactive mode)
 #   SKIP_DEPLOY  — set to 1 to skip pull+up     (default: 0)
+#   BRANCH_REMOTE — git remote to fetch/list     (default: origin)
+#   LIST_BRANCHES — set to 1 to print deployable remote branches before checks
+#   BRANCH_LIST_ONLY — set to 1 with LIST_BRANCHES=1 to list branches and exit
+#   BRANCH_LIMIT — max branches to print         (default: 80)
+#   LXC_REPO_PATH — source git checkout inside the LXC for branch deploys.
+#                  Empty auto-detects /opt/melodarr-proxy/src, then
+#                  /opt/melodarr-proxy. Branch listing uses the host checkout
+#                  that runs this script first, then falls back to this path.
+#   LXC_BRANCH_SOURCE_PATH — scratch source path used for host-branch archive
+#                  deploys when the LXC has no source git checkout
+#                  (default: /opt/melodarr-proxy/src-branch-build)
+#   DEPLOY_BRANCH — branch/ref to deploy before verification.
+#                  Empty keeps the old pull+recreate deployment behavior.
+#                  When set, the script switches the LXC source checkout,
+#                  builds proxy from source, and verifies /api/version against
+#                  that checked-out revision.
 #   REENABLE_MB  — set to 1 to clear saved metadataProviders/providerPriority
 #                  overrides and restart the proxy (re-enables MusicBrainz)
 #                  (default: 0 — verify-only, never mutate)
@@ -24,9 +40,254 @@ CTID="${CTID:-163}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:3055}"
 API_KEY="${API_KEY:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-0}"
+BRANCH_REMOTE="${BRANCH_REMOTE:-origin}"
+LIST_BRANCHES="${LIST_BRANCHES:-0}"
+BRANCH_LIST_ONLY="${BRANCH_LIST_ONLY:-0}"
+BRANCH_LIMIT="${BRANCH_LIMIT:-80}"
+LXC_REPO_PATH="${LXC_REPO_PATH:-}"
+LXC_BRANCH_SOURCE_PATH="${LXC_BRANCH_SOURCE_PATH:-/opt/melodarr-proxy/src-branch-build}"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-}"
 REENABLE_MB="${REENABLE_MB:-0}"
 SETTINGS_PATH="${SETTINGS_PATH:-}"
 EXPECTED_REV="${EXPECTED_REV:-}"
+BRANCHES_LISTED=0
+declare -a BRANCH_CHOICES=()
+BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# ── Branch listing/deploy helpers ────────────────────────────────
+host_git_available () {
+  git -C "$BASE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+resolve_host_deploy_ref () {
+  local ref="$DEPLOY_BRANCH" remote_branch="$DEPLOY_BRANCH"
+  case "$ref" in
+    "$BRANCH_REMOTE"/*) remote_branch="${ref#"$BRANCH_REMOTE"/}" ;;
+  esac
+
+  git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null 2>&1
+  if git -C "$BASE_DIR" show-ref --verify --quiet "refs/remotes/$BRANCH_REMOTE/$remote_branch"; then
+    git -C "$BASE_DIR" rev-parse "$BRANCH_REMOTE/$remote_branch^{commit}"
+  else
+    git -C "$BASE_DIR" rev-parse "$ref^{commit}"
+  fi
+}
+
+resolve_lxc_repo_path () {
+  if [ -n "$LXC_REPO_PATH" ]; then
+    pct exec "$CTID" -- env LXC_REPO_PATH="$LXC_REPO_PATH" bash -lc '
+      [ -d "$LXC_REPO_PATH/.git" ] && printf "%s" "$LXC_REPO_PATH"
+    ' 2>/dev/null || true
+    return
+  fi
+
+  pct exec "$CTID" -- bash -lc '
+    for path in /opt/melodarr-proxy/src /opt/melodarr-proxy; do
+      if [ -d "$path/.git" ]; then
+        printf "%s" "$path"
+        exit 0
+      fi
+    done
+  ' 2>/dev/null || true
+}
+
+list_remote_branches () {
+  if host_git_available; then
+    git -C "$BASE_DIR" fetch --prune "$BRANCH_REMOTE" >/dev/null 2>&1
+    git -C "$BASE_DIR" for-each-ref \
+      --sort=-committerdate \
+      --format="%(refname:short)%09%(committerdate:short)%09%(subject)" \
+      "refs/remotes/$BRANCH_REMOTE" \
+      | awk -F "\t" -v head="$BRANCH_REMOTE/HEAD" -v remote="$BRANCH_REMOTE" '$1 != head && $1 != remote { print }' \
+      | sed -n "1,${BRANCH_LIMIT}p"
+    return
+  fi
+
+  local lxc_repo_path
+  lxc_repo_path="$(resolve_lxc_repo_path)"
+  if [ -z "$lxc_repo_path" ]; then
+    echo "ERROR: no git checkout found on the host or inside CTID=$CTID."
+    echo "Run this script from the Proxmox-host repo checkout, or set LXC_REPO_PATH to an in-LXC source checkout."
+    return 1
+  fi
+
+  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" BRANCH_LIMIT="$BRANCH_LIMIT" LXC_REPO_PATH="$lxc_repo_path" bash -lc '
+    set -euo pipefail
+    cd "$LXC_REPO_PATH"
+    git fetch --prune "$BRANCH_REMOTE" >/dev/null 2>&1
+    git for-each-ref \
+      --sort=-committerdate \
+      --format="%(refname:short)%09%(committerdate:short)%09%(subject)" \
+      "refs/remotes/$BRANCH_REMOTE" \
+      | awk -F "\t" -v head="$BRANCH_REMOTE/HEAD" -v remote="$BRANCH_REMOTE" "\$1 != head && \$1 != remote { print }" \
+      | sed -n "1,${BRANCH_LIMIT}p"
+  '
+}
+
+show_remote_branches () {
+  local rows branch date subject display i
+  echo
+  echo "## Available deploy branches ($BRANCH_REMOTE, newest first)"
+  if ! rows="$(list_remote_branches)"; then
+    echo "ERROR: unable to list branches."
+    exit 1
+  fi
+
+  BRANCH_CHOICES=()
+  i=1
+  while IFS=$'\t' read -r branch date subject; do
+    [ -z "$branch" ] && continue
+    display="$branch"
+    case "$display" in
+      "$BRANCH_REMOTE"/*) display="${display#"$BRANCH_REMOTE"/}" ;;
+    esac
+    BRANCH_CHOICES+=("$display")
+    printf "  %2d) %-42s %s  %s\n" "$i" "$display" "$date" "$subject"
+    i=$((i + 1))
+  done <<< "$rows"
+
+  if [ "${#BRANCH_CHOICES[@]}" -eq 0 ]; then
+    echo "ERROR: no remote branches found for $BRANCH_REMOTE."
+    exit 1
+  fi
+  BRANCHES_LISTED=1
+}
+
+resolve_branch_selection () {
+  local selection="$1"
+  if [[ "$selection" =~ ^[0-9]+$ ]] && [ "${#BRANCH_CHOICES[@]}" -gt 0 ]; then
+    if [ "$selection" -lt 1 ] || [ "$selection" -gt "${#BRANCH_CHOICES[@]}" ]; then
+      echo "ERROR: branch selection $selection is out of range 1-${#BRANCH_CHOICES[@]}."
+      exit 1
+    fi
+    DEPLOY_BRANCH="${BRANCH_CHOICES[$((selection - 1))]}"
+    echo "Selected branch: $DEPLOY_BRANCH"
+  fi
+}
+
+deploy_branch_from_host_archive () {
+  if ! host_git_available; then
+    return 1
+  fi
+
+  local resolved_ref archive rc
+  if ! resolved_ref="$(resolve_host_deploy_ref)"; then
+    echo "ERROR: unable to resolve DEPLOY_BRANCH=$DEPLOY_BRANCH from host repo $BASE_DIR"
+    return 1
+  fi
+
+  archive="$(mktemp "${TMPDIR:-/tmp}/melodarr-site-test-source.XXXXXX.tar")" || return 1
+  if ! git -C "$BASE_DIR" archive --format=tar "$resolved_ref" > "$archive"; then
+    rm -f "$archive"
+    return 1
+  fi
+
+  pct exec "$CTID" -- mkdir -p /opt/melodarr-proxy || {
+    rm -f "$archive"
+    return 1
+  }
+  pct push "$CTID" "$archive" /tmp/melodarr-site-test-source.tar >/dev/null || {
+    rm -f "$archive"
+    return 1
+  }
+  rm -f "$archive"
+
+  pct exec "$CTID" -- env DEPLOY_REV="$resolved_ref" LXC_BRANCH_SOURCE_PATH="$LXC_BRANCH_SOURCE_PATH" bash -lc '
+    set -euo pipefail
+    cd /opt/melodarr-proxy
+    compose_file="compose.yml"
+    if [ ! -f "$compose_file" ]; then
+      compose_file="docker-compose.yml"
+    fi
+    if [ ! -f "$compose_file" ]; then
+      echo "ERROR: no compose.yml or docker-compose.yml found in /opt/melodarr-proxy"
+      exit 1
+    fi
+
+    rm -rf "$LXC_BRANCH_SOURCE_PATH"
+    mkdir -p "$LXC_BRANCH_SOURCE_PATH"
+    tar -xf /tmp/melodarr-site-test-source.tar -C "$LXC_BRANCH_SOURCE_PATH"
+
+    docker build \
+      -t melodarr-proxy:branch \
+      --target production \
+      --build-arg APP_REVISION="$DEPLOY_REV" \
+      --build-arg APP_CREATED="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+      "$LXC_BRANCH_SOURCE_PATH"
+
+    cat > compose.site-test-branch.yml <<COMPOSE
+services:
+  proxy:
+    image: melodarr-proxy:branch
+COMPOSE
+
+    docker compose -f "$compose_file" -f compose.site-test-branch.yml up -d --force-recreate proxy
+    printf "%s" "$DEPLOY_REV" > /opt/melodarr-proxy/.site-test-deployed-revision
+    rm -f /tmp/melodarr-site-test-source.tar
+  '
+}
+
+deploy_branch_ref () {
+  local lxc_repo_path
+  lxc_repo_path="$(resolve_lxc_repo_path)"
+  if [ -z "$lxc_repo_path" ]; then
+    echo "No source git checkout found inside CTID=$CTID; deploying DEPLOY_BRANCH from host repo archive instead."
+    deploy_branch_from_host_archive
+    return
+  fi
+
+  pct exec "$CTID" -- env BRANCH_REMOTE="$BRANCH_REMOTE" DEPLOY_BRANCH="$DEPLOY_BRANCH" LXC_REPO_PATH="$lxc_repo_path" bash -lc '
+    set -euo pipefail
+    cd "$LXC_REPO_PATH"
+
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "ERROR: $LXC_REPO_PATH has uncommitted changes; refusing to switch branches."
+      echo "Commit, stash, or clean that deployment checkout before using DEPLOY_BRANCH."
+      git status --short
+      exit 2
+    fi
+
+    git fetch --prune "$BRANCH_REMOTE"
+
+    ref="$DEPLOY_BRANCH"
+    remote_branch="$ref"
+    case "$ref" in
+      "$BRANCH_REMOTE"/*) remote_branch="${ref#"$BRANCH_REMOTE"/}" ;;
+    esac
+
+    if git show-ref --verify --quiet "refs/remotes/$BRANCH_REMOTE/$remote_branch"; then
+      git switch -C "$remote_branch" "$BRANCH_REMOTE/$remote_branch"
+    else
+      git switch --detach "$ref"
+    fi
+
+    deploy_rev="$(git rev-parse HEAD)"
+    if [ "$(basename "$LXC_REPO_PATH")" = "src" ] && [ -f "$(dirname "$LXC_REPO_PATH")/compose.yml" ]; then
+      cd "$(dirname "$LXC_REPO_PATH")"
+      docker build \
+        -t melodarr-proxy:local \
+        --target production \
+        --build-arg APP_REVISION="$deploy_rev" \
+        --build-arg APP_CREATED="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+        src/
+      docker compose up -d --force-recreate proxy
+      printf "%s" "$deploy_rev" > /opt/melodarr-proxy/.site-test-deployed-revision
+    else
+      docker compose up -d --build --force-recreate proxy
+      printf "%s" "$deploy_rev" > "$LXC_REPO_PATH/.site-test-deployed-revision"
+    fi
+  '
+}
+
+current_deploy_revision () {
+  local lxc_repo_path
+  lxc_repo_path="$(resolve_lxc_repo_path)"
+  if [ -n "$lxc_repo_path" ]; then
+    pct exec "$CTID" -- env LXC_REPO_PATH="$lxc_repo_path" bash -lc 'cd "$LXC_REPO_PATH" && git rev-parse HEAD' 2>/dev/null || true
+  else
+    pct exec "$CTID" -- cat /opt/melodarr-proxy/.site-test-deployed-revision 2>/dev/null || true
+  fi
+}
 
 # ── Optional interactive wizard ──────────────────────────────────
 # Prompts for each knob when stdin is a TTY.  Users can:
@@ -56,12 +317,35 @@ if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
   ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
   ask    API_KEY      "Proxy API key"                         "$API_KEY"
   ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
+  ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
+  ask    LXC_REPO_PATH "LXC source repo path for branch deploys (blank = auto)" "$LXC_REPO_PATH"
+  ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
+  if [ "$LIST_BRANCHES" = "1" ]; then
+    ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
+    show_remote_branches
+    if [ "$BRANCH_LIST_ONLY" = "1" ]; then
+      exit 0
+    fi
+  fi
+  ask    DEPLOY_BRANCH "Branch number/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
+  resolve_branch_selection "$DEPLOY_BRANCH"
   ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
   if [ "$REENABLE_MB" = "1" ]; then
     ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
   fi
   ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
   echo
+fi
+
+if [ "$LIST_BRANCHES" = "1" ] && [ "$BRANCHES_LISTED" = "0" ]; then
+  show_remote_branches
+  if [ "$BRANCH_LIST_ONLY" = "1" ]; then
+    exit 0
+  fi
+fi
+
+if [ -n "$DEPLOY_BRANCH" ]; then
+  resolve_branch_selection "$DEPLOY_BRANCH"
 fi
 
 # ── API key required for auth-gated test paths ───────────────────
@@ -142,7 +426,7 @@ remote_post () {
 }
 
 echo "Melodarr verification harness"
-echo "CTID=$CTID  BASE_URL=$BASE_URL  SKIP_DEPLOY=$SKIP_DEPLOY"
+echo "CTID=$CTID  BASE_URL=$BASE_URL  SKIP_DEPLOY=$SKIP_DEPLOY  DEPLOY_BRANCH=${DEPLOY_BRANCH:-<none>}"
 
 # ── 1. Disk + deploy ─────────────────────────────────────────────
 echo
@@ -152,8 +436,21 @@ pct exec "$CTID" -- bash -lc 'df -h /var/lib/docker 2>/dev/null; docker system d
 if [ "$SKIP_DEPLOY" = "0" ]; then
   echo
   echo "## Deploy proxy only"
-  if pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && docker compose pull proxy && docker compose up -d --force-recreate proxy'; then
-    record_pass "deploy succeeded"
+  if [ -n "$DEPLOY_BRANCH" ]; then
+    echo "Deploying branch/ref: $DEPLOY_BRANCH"
+    DEPLOY_OK=0
+    deploy_branch_ref && DEPLOY_OK=1
+  else
+    DEPLOY_OK=0
+    pct exec "$CTID" -- bash -lc 'cd /opt/melodarr-proxy && docker compose pull proxy && docker compose up -d --force-recreate proxy' && DEPLOY_OK=1
+  fi
+
+  if [ "$DEPLOY_OK" = "1" ]; then
+    DEPLOYED_REV="$(current_deploy_revision)"
+    if [ -n "$DEPLOY_BRANCH" ] && [ -n "$DEPLOYED_REV" ] && [ -z "$EXPECTED_REV" ]; then
+      EXPECTED_REV="$DEPLOYED_REV"
+    fi
+    record_pass "deploy succeeded${DEPLOYED_REV:+ (checkout revision=$DEPLOYED_REV)}"
     sleep 5
   else
     record_fail "deploy failed — aborting verification"
@@ -196,10 +493,11 @@ fi
 # Optional override: SETTINGS_PATH=/your/path forces a specific file
 # (must exist either on the LXC or inside the proxy container).
 #
-# We verify BEHAVIOR not just config — the action is only considered
-# successful when MB is in active providers AND the settings file no
-# longer shadows them AND a real lookup populates foreignArtistId AND
-# /debug/upstream shows MB activity.
+# We verify BEHAVIOR not just config — the action is considered
+# successful when MB is in active providers, the settings file no longer
+# shadows providers, and a real lookup populates foreignArtistId.
+# /debug/upstream is useful diagnostics, but it is not part of Lidarr's
+# contract and may be empty after restarts/cache paths.
 if [ "$REENABLE_MB" = "1" ]; then
   echo
   echo "## Re-enable MusicBrainz (REENABLE_MB=1)"
@@ -319,8 +617,8 @@ cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
   fi
 
   # ── PASS gate 4: lookup returns a non-empty foreignArtistId (MBID) ──
-  # This both verifies the merge sees MB AND populates /debug/upstream
-  # for the next gate.
+  # This verifies the merge sees MB. /debug/upstream is checked below as
+  # diagnostics only; the Lidarr contract is the returned artist shape.
   LOOKUP_AFTER=$(remote_get '/api/v0.4/artist/lookup?term=radiohead')
   MBID_AFTER=$(echo "$LOOKUP_AFTER" | jq -r '.[0].foreignArtistId // ""')
   if [ -n "$MBID_AFTER" ] && [ "$MBID_AFTER" != "null" ]; then
@@ -329,12 +627,15 @@ cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
     record_fail "MB re-enable: foreignArtistId still empty after re-enable"
   fi
 
-  # ── PASS gate 5: /debug/upstream shows MB activity from the lookup ──
+  # ── Diagnostic gate 5: /debug/upstream shows MB activity from the lookup ──
   UPSTREAM_AFTER=$(remote_get '/debug/upstream?provider=musicbrainz&limit=20')
   UPSTREAM_COUNT=$(echo "$UPSTREAM_AFTER" | jq -r '.filteredCount // 0' 2>/dev/null)
   [ -z "$UPSTREAM_COUNT" ] && UPSTREAM_COUNT=0
   if [ "$UPSTREAM_COUNT" -gt 0 ] 2>/dev/null; then
     record_pass "MB re-enable: /debug/upstream shows musicbrainz activity (filteredCount=$UPSTREAM_COUNT)"
+  elif [ -n "$MBID_AFTER" ] && [ "$MBID_AFTER" != "null" ]; then
+    echo "  WARN: /debug/upstream has no musicbrainz entries, but lookup returned MBID=$MBID_AFTER"
+    record_pass "MB re-enable: lookup returned MBID; /debug/upstream empty (diagnostic only)"
   else
     record_fail "MB re-enable: /debug/upstream shows no musicbrainz activity (filteredCount=$UPSTREAM_COUNT)"
   fi
@@ -545,7 +846,8 @@ fi
 echo
 echo "### Lidarr path-segment route diagnostics"
 RADIOHEAD_MBID="a74b1b7f-71a5-4011-9441-d0b5e4122711"
-ARTIST_SEGMENT_STATUS=$(chomp "$(remote_status_line "/api/v0.4/artist/$RADIOHEAD_MBID")")
+ARTIST_SEGMENT_PATH="/api/v0.4/artist/$RADIOHEAD_MBID"
+ARTIST_SEGMENT_STATUS=$(chomp "$(remote_status_line "$ARTIST_SEGMENT_PATH")")
 RECENT_ARTIST_STATUS=$(chomp "$(remote_status_line '/api/v0.4/recent/artist?since=2026-01-01T00:00:00Z')")
 RECENT_ALBUM_STATUS=$(chomp "$(remote_status_line '/api/v0.4/recent/album?since=2026-01-01T00:00:00Z')")
 echo "artist/:mbid:  $ARTIST_SEGMENT_STATUS"
@@ -565,6 +867,95 @@ if echo "$RECENT_ALBUM_STATUS" | grep -q ' 200'; then
   record_pass "/api/v0.4/recent/album returns 200"
 else
   record_fail "/api/v0.4/recent/album status: $RECENT_ALBUM_STATUS"
+fi
+
+echo
+echo "### Validate /api/v0.4/artist/<mbid> album metadata contract"
+ARTIST_SEGMENT_BODY=$(remote_get "$ARTIST_SEGMENT_PATH")
+ARTIST_ALBUM_SUMMARY=$(echo "$ARTIST_SEGMENT_BODY" | jq '
+  {
+    artistName: (.artistName // null),
+    foreignArtistId: (.foreignArtistId // null),
+    albumCount: (.albums // [] | length),
+    firstAlbum: ((.albums // [])[0] // {}),
+    firstAlbumId: (((.albums // [])[0] // {}).id // ""),
+    firstAlbumTitle: (((.albums // [])[0] // {}).title // ""),
+    firstAlbumType: (((.albums // [])[0] // {}).type // ""),
+    firstAlbumSecondaryTypes: (((.albums // [])[0] // {}).secondaryTypes // null),
+    firstAlbumReleaseStatuses: (((.albums // [])[0] // {}).releaseStatuses // null)
+  }
+' 2>/dev/null || echo '{}')
+echo "$ARTIST_ALBUM_SUMMARY" | jq
+
+if echo "$ARTIST_ALBUM_SUMMARY" | jq -e '.albumCount > 0' > /dev/null; then
+  ALBUM_COUNT=$(echo "$ARTIST_ALBUM_SUMMARY" | jq -r '.albumCount')
+  record_pass "/api/v0.4/artist/<mbid> includes albums (count=$ALBUM_COUNT)"
+else
+  record_fail "/api/v0.4/artist/<mbid> includes no albums - Lidarr artist page will show missing-albums metadata message"
+fi
+
+FIRST_ALBUM_ID=$(echo "$ARTIST_ALBUM_SUMMARY" | jq -r '.firstAlbumId // ""')
+
+if echo "$ARTIST_ALBUM_SUMMARY" | jq -e '.firstAlbumId != "" and .firstAlbumTitle != ""' > /dev/null; then
+  record_pass "artist metadata first album has id and title"
+else
+  record_fail "artist metadata first album is missing id/title - Lidarr cannot persist a usable album row"
+fi
+
+if echo "$ARTIST_ALBUM_SUMMARY" | jq -e '
+  .firstAlbumType == "Album" and
+  (.firstAlbumSecondaryTypes | type == "array") and
+  (.firstAlbumReleaseStatuses | type == "array") and
+  (.firstAlbumReleaseStatuses | index("Official") != null)
+' > /dev/null; then
+  record_pass "artist metadata first album passes Lidarr default metadata-profile filters"
+else
+  record_fail "artist metadata first album does not match Lidarr default metadata-profile filters"
+fi
+
+if [[ -n "$FIRST_ALBUM_ID" ]]; then
+  ALBUM_SEGMENT_PATH="/api/v0.4/album/$FIRST_ALBUM_ID"
+  ALBUM_SEGMENT_HEADERS=$(remote_get_full "$ALBUM_SEGMENT_PATH" | sed -n '1,60p')
+  ALBUM_SEGMENT_STATUS=$(echo "$ALBUM_SEGMENT_HEADERS" | head -1 | tr -d '\r')
+  echo "album/:releaseGroupId: $ALBUM_SEGMENT_STATUS"
+  if [[ "$ALBUM_SEGMENT_STATUS" =~ 200 ]]; then
+    record_pass "/api/v0.4/album/<releaseGroupId> returns album metadata"
+  else
+    echo "$ALBUM_SEGMENT_HEADERS"
+    record_fail "/api/v0.4/album/<releaseGroupId> status: $ALBUM_SEGMENT_STATUS"
+  fi
+
+  ALBUM_SEGMENT_BODY=$(remote_get "$ALBUM_SEGMENT_PATH")
+  ALBUM_RELEASE_SUMMARY=$(echo "$ALBUM_SEGMENT_BODY" | jq '
+    {
+      releaseCount: (.releases // [] | length),
+      firstReleaseTrackCount: (((.releases // [])[0] // {}).tracks // [] | length)
+    }
+  ' 2>/dev/null || echo '{}')
+  echo "$ALBUM_RELEASE_SUMMARY" | jq
+  if echo "$ALBUM_RELEASE_SUMMARY" | jq -e '.releaseCount > 0 and .firstReleaseTrackCount > 0' > /dev/null; then
+    record_pass "/api/v0.4/album/<releaseGroupId> includes release and track metadata"
+  else
+    record_fail "/api/v0.4/album/<releaseGroupId> missing release/track metadata - Lidarr deletes albums with zero valid releases"
+  fi
+
+  ALBUM_SEGMENT_CACHE_HEADERS=$(remote_get_full "$ALBUM_SEGMENT_PATH" | sed -n '1,60p')
+  if echo "$ALBUM_SEGMENT_CACHE_HEADERS" | grep -qi '^X-Cache: HIT'; then
+    record_pass "/api/v0.4/album/<releaseGroupId> repeated metadata fetch is served from cache"
+  else
+    echo "$ALBUM_SEGMENT_CACHE_HEADERS"
+    record_fail "/api/v0.4/album/<releaseGroupId> repeated metadata fetch did not return X-Cache: HIT"
+  fi
+else
+  record_fail "/api/v0.4/album/<releaseGroupId> cannot be tested because artist metadata had no first album id"
+fi
+
+ARTIST_SEGMENT_CACHE_HEADERS=$(remote_get_full "$ARTIST_SEGMENT_PATH" | sed -n '1,40p')
+if echo "$ARTIST_SEGMENT_CACHE_HEADERS" | grep -qi '^X-Cache: HIT'; then
+  record_pass "/api/v0.4/artist/<mbid> repeated metadata fetch is served from cache"
+else
+  echo "$ARTIST_SEGMENT_CACHE_HEADERS"
+  record_fail "/api/v0.4/artist/<mbid> repeated metadata fetch did not return X-Cache: HIT"
 fi
 
 # ── 11. Lidarr/Skyhook shape conformance ─────────────────────────
@@ -587,7 +978,9 @@ LOOKUP_SUMMARY=$(echo "$LOOKUP_BODY" | jq '
       hasGenres: (.[0] | has("genres")),
       hasOverview: (.[0] | has("overview")),
       hasDisambiguation: (.[0] | has("disambiguation")),
+      hasOldIds: (.[0] | has("oldIds")),
       hasAliases: (.[0] | has("aliases")),
+      hasArtistAliases: (.[0] | has("artistAliases")),
       hasLinks: (.[0] | has("links")),
       hasPopularity: (.[0] | has("popularity")),
       hasStatus: (.[0] | has("status")),
@@ -624,7 +1017,7 @@ fi
 # harness. Optional enrichment fields are printed as diagnostics below so
 # they can be correlated with real Lidarr rejection logs before code adds
 # broad defaults.
-for field_check in hasAliases:aliases hasLinks:links hasStatus:status; do
+for field_check in hasOldIds:oldIds hasAliases:aliases hasArtistAliases:artistAliases hasLinks:links hasStatus:status; do
   field_key="${field_check%%:*}"
   field_label="${field_check##*:}"
   if echo "$LOOKUP_SUMMARY" | jq -e ".$field_key" > /dev/null; then
@@ -651,6 +1044,7 @@ echo
 echo "========================================"
 echo "Verification summary"
 echo "  Revision:         $ACTUAL_REV"
+echo "  Deploy branch:    ${DEPLOY_BRANCH:-<none>}"
 echo "  Active providers: $ACTIVE_PROVIDERS"
 echo "  Tests passed:     $PASSES"
 echo "  Tests failed:     $FAILS"

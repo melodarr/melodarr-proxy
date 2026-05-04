@@ -65,7 +65,100 @@ describe('API E2E Tests', () => {
       const axiosModule = require('axios')
       mock.method(axiosModule, 'get', async (url, config) => {
         if (url.includes('musicbrainz.org')) {
-          return { data: { artists: [{ id: '123', name: 'Test Artist' }] } }
+          if (url.includes('/release-group/920a68fe-7b93-3d0e-bf73-44ac72f03dd2')) {
+            return {
+              data: {
+                id: '920a68fe-7b93-3d0e-bf73-44ac72f03dd2',
+                title: 'Millennium',
+                'first-release-date': '1999-05-18',
+                'primary-type': 'Album',
+                'secondary-types': [],
+                'artist-credit': [{
+                  artist: {
+                    id: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+                    name: 'Backstreet Boys',
+                    'sort-name': 'Backstreet Boys'
+                  }
+                }]
+              }
+            }
+          }
+          if (url.includes('/release-group')) {
+            return {
+              data: {
+                'release-groups': [{
+                  id: '920a68fe-7b93-3d0e-bf73-44ac72f03dd2',
+                  title: 'Millennium',
+                  'first-release-date': '1999-05-18',
+                  'primary-type': 'Album',
+                  'secondary-types': []
+                }]
+              }
+            }
+          }
+          if (url.includes('/release')) {
+            return {
+              data: {
+                releases: [{
+                  id: '4b9b7b64-5555-4ec0-9b0f-000000000001',
+                  title: 'Millennium',
+                  date: '1999-05-18',
+                  status: 'Official',
+                  country: 'US',
+                  media: [{
+                    title: 'CD 1',
+                    format: 'CD',
+                    position: 1,
+                    tracks: [{
+                      id: '4b9b7b64-5555-4ec0-9b0f-000000000002',
+                      title: 'I Want It That Way',
+                      number: '1',
+                      position: 1,
+                      length: 213000,
+                      recording: {
+                        id: '4b9b7b64-5555-4ec0-9b0f-000000000003',
+                        title: 'I Want It That Way',
+                        length: 213000,
+                        'artist-credit': [{
+                          artist: {
+                            id: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+                            name: 'Backstreet Boys',
+                            'sort-name': 'Backstreet Boys'
+                          }
+                        }]
+                      }
+                    }]
+                  }]
+                }]
+              }
+            }
+          }
+          if (url.includes('/artist/')) {
+            return {
+              data: {
+                id: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+                name: 'Backstreet Boys',
+                'sort-name': 'Backstreet Boys',
+                aliases: [
+                  { name: ' BSB ' },
+                  { name: 'Back Street Boys' }
+                ]
+              }
+            }
+          }
+          return {
+            data: {
+              artists: [{
+                id: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+                name: 'Backstreet Boys',
+                'sort-name': 'Backstreet Boys',
+                aliases: [
+                  { name: ' BSB ' },
+                  { name: 'Back Street Boys' }
+                ]
+              }]
+            }
+          }
         }
         if (url.includes('itunes.apple.com')) {
           return { data: { results: [] } }
@@ -120,6 +213,182 @@ describe('API E2E Tests', () => {
         assert.strictEqual(res.status, 200)
         assert.ok(Array.isArray(res.data))
       }
+    })
+
+    it('GET /api/search?type=artist&query=Backstreet%20Boys → returns Lidarr search artist metadata lists', async () => {
+      const res = await client.get('/api/search?type=artist&query=Backstreet%20Boys')
+
+      assert.strictEqual(res.status, 200)
+      assert.ok(Array.isArray(res.data))
+      assert.ok(res.data[0].artist)
+      assert.strictEqual(res.data[0].artist.artistName, 'Backstreet Boys')
+      assert.deepStrictEqual(res.data[0].artist.oldIds, [])
+      assert.deepStrictEqual(res.data[0].artist.aliases, ['BSB', 'Back Street Boys'])
+      assert.deepStrictEqual(res.data[0].artist.artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(res.data[0].artist.images))
+    })
+
+    it('GET /api/v1/artist/lookup?term=Backstreet%20Boys → returns Lidarr artistAliases from MusicBrainz aliases', async () => {
+      const res = await client.get('/api/v1/artist/lookup?term=Backstreet%20Boys')
+
+      assert.strictEqual(res.status, 200)
+      assert.ok(Array.isArray(res.data))
+      assert.strictEqual(res.data[0].artistName, 'Backstreet Boys')
+      assert.deepStrictEqual(res.data[0].oldIds, [])
+      assert.deepStrictEqual(res.data[0].aliases, ['BSB', 'Back Street Boys'])
+      assert.deepStrictEqual(res.data[0].artistAliases, ['BSB', 'Back Street Boys'])
+    })
+
+    it('GET /api/artist/{mbid} → returns Lidarr add refetch metadata lists', async () => {
+      const mbid = '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad'
+      const res = await client.get(`/api/artist/${mbid}`)
+
+      assert.strictEqual(res.status, 200)
+      assert.deepStrictEqual(Object.keys(res.data).sort(), [
+        'albums',
+        'artistUrl',
+        'artistAliases',
+        'artistName',
+        'disambiguation',
+        'genres',
+        'id',
+        'images',
+        'links',
+        'oldIds',
+        'overview',
+        'rating',
+        'status',
+        'type'
+      ].sort())
+      assert.strictEqual(res.data.artistName, 'Backstreet Boys')
+      assert.strictEqual(res.data.id, mbid)
+      assert.deepStrictEqual(res.data.oldIds, [])
+      assert.deepStrictEqual(res.data.artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(res.data.images))
+      assert.ok(Array.isArray(res.data.albums))
+      assert.ok(res.data.albums.length > 0, 'artist metadata must include albums for Lidarr add persistence')
+
+      const album = res.data.albums[0]
+      assert.strictEqual(album.artistId, mbid)
+      assert.strictEqual(album.title, 'Millennium')
+      assert.strictEqual(album.type, 'Album')
+      assert.deepStrictEqual(album.secondaryTypes, [])
+      assert.deepStrictEqual(album.releaseStatuses, ['Official'])
+      assert.strictEqual(album.releaseDate, '1999-05-18T00:00:00Z')
+      assert.ok(Array.isArray(album.artists))
+      assert.strictEqual(album.artists[0].id, mbid)
+    })
+
+    it('GET /api/album/{releaseGroupId} → returns and caches Lidarr album refetch metadata with tracks', async () => {
+      const mbid = '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad'
+      const releaseGroupId = '920a68fe-7b93-3d0e-bf73-44ac72f03dd2'
+      await client.get(`/api/artist/${mbid}`)
+
+      const res = await client.get(`/api/album/${releaseGroupId}`)
+
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.headers['x-cache'], 'MISS')
+      assert.deepStrictEqual(Object.keys(res.data).sort(), [
+        'artistId',
+        'artists',
+        'disambiguation',
+        'genres',
+        'id',
+        'images',
+        'links',
+        'oldIds',
+        'overview',
+        'rating',
+        'releaseDate',
+        'releaseStatuses',
+        'releases',
+        'secondaryTypes',
+        'title',
+        'type'
+      ].sort())
+      assert.strictEqual(res.data.id, releaseGroupId)
+      assert.strictEqual(res.data.artistId, mbid)
+      assert.strictEqual(res.data.title, 'Millennium')
+      assert.strictEqual(res.data.type, 'Album')
+      assert.deepStrictEqual(res.data.secondaryTypes, [])
+      assert.deepStrictEqual(res.data.releaseStatuses, ['Official'])
+      assert.strictEqual(res.data.releaseDate, '1999-05-18T00:00:00Z')
+      assert.ok(Array.isArray(res.data.artists))
+      assert.strictEqual(res.data.artists[0].id, mbid)
+      assert.ok(Array.isArray(res.data.releases))
+      assert.strictEqual(res.data.releases.length, 1)
+      assert.strictEqual(res.data.releases[0].tracks.length, 1)
+      assert.strictEqual(res.data.releases[0].tracks[0].artistId, mbid)
+
+      const cached = await client.get(`/api/album/${releaseGroupId}`)
+      assert.strictEqual(cached.status, 200)
+      assert.strictEqual(cached.headers['x-cache'], 'HIT')
+    })
+
+    it('Lidarr POST /api/v1/artist add flow can refetch SkyHook metadata by foreignArtistId', async () => {
+      // Source of truth in Lidarr develop:
+      // ArtistController.AddArtist accepts this public resource, then
+      // AddArtistService calls SkyHookProxy.GetArtistInfo(foreignArtistId),
+      // which requests route artist/{foreignArtistId}.
+      const lidarrAddArtistRequest = {
+        status: 'continuing',
+        ended: false,
+        artistName: 'Backstreet Boys',
+        foreignArtistId: '2f569e60-0a1b-4fb9-95a4-3dc1525d1aad',
+        overview: '',
+        disambiguation: '',
+        links: [],
+        images: [],
+        qualityProfileId: 1,
+        metadataProfileId: 1,
+        monitored: true,
+        monitorNewItems: 'all',
+        rootFolderPath: '/mnt/shared/Music',
+        folder: 'Backstreet Boys',
+        genres: [],
+        tags: [],
+        ratings: { votes: 0, value: 0 },
+        addOptions: { monitor: 'all', searchForMissingAlbums: false }
+      }
+
+      const lidarrPublicEndpoint = '/api/v1/artist'
+      const proxyMetadataEndpoint = `/api/artist/${lidarrAddArtistRequest.foreignArtistId}`
+
+      assert.strictEqual(lidarrPublicEndpoint, '/api/v1/artist')
+      assert.strictEqual(proxyMetadataEndpoint, '/api/artist/2f569e60-0a1b-4fb9-95a4-3dc1525d1aad')
+
+      const res = await client.get(proxyMetadataEndpoint)
+
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data.id, lidarrAddArtistRequest.foreignArtistId)
+      assert.strictEqual(res.data.artistName, lidarrAddArtistRequest.artistName)
+      assert.deepStrictEqual(res.data.oldIds, [])
+      assert.deepStrictEqual(res.data.artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(res.data.images))
+      assert.ok(Array.isArray(res.data.links))
+      assert.ok(Array.isArray(res.data.genres))
+      assert.ok(Array.isArray(res.data.albums))
+
+      const album = res.data.albums[0]
+      assert.ok(album, 'metadata refetch should include mapped MusicBrainz albums when present')
+      assert.strictEqual(album.id, '920a68fe-7b93-3d0e-bf73-44ac72f03dd2')
+      assert.strictEqual(album.artistId, lidarrAddArtistRequest.foreignArtistId)
+      assert.strictEqual(album.title, 'Millennium')
+      assert.strictEqual(album.releaseDate, '1999-05-18T00:00:00Z')
+      assert.deepStrictEqual(album.oldIds, [])
+      assert.strictEqual(album.type, 'Album')
+      assert.deepStrictEqual(album.secondaryTypes, [])
+      assert.deepStrictEqual(album.releaseStatuses, ['Official'])
+      assert.strictEqual(album.releaseStatuses.includes('Official'), true)
+      assert.deepStrictEqual(album.rating, { count: 0, value: 0 })
+      assert.ok(Array.isArray(album.releases))
+      assert.ok(Array.isArray(album.images))
+      assert.ok(Array.isArray(album.links))
+      assert.ok(Array.isArray(album.artists))
+      assert.strictEqual(album.artists[0].id, lidarrAddArtistRequest.foreignArtistId)
+      assert.deepStrictEqual(album.artists[0].artistAliases, ['BSB', 'Back Street Boys'])
+      assert.ok(Array.isArray(album.artists[0].images))
+      assert.ok(Array.isArray(album.artists[0].links))
     })
   })
 

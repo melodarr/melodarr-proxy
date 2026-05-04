@@ -6,10 +6,6 @@
       "artistName": "Radiohead",
       "disambiguation": "",
       "overview": "",
-      "type": "Group",
-      "status": "active",
-      "aliases": [],
-      "links": [],
       "images": [
         {
           "coverType": "poster",
@@ -17,12 +13,19 @@
           "remoteUrl": "https://example.com/radiohead.jpg"
         }
       ],
+      "aliases": [],
+      "type": "Group",
+      "status": "active",
+      "oldIds": [],
+      "artistAliases": [],
+      "links": [],
       "albums": []
     }
   },
   {
     "album": {
       "id": "b1392450-e666-3926-a536-22c65f834433",
+      "oldIds": [],
       "title": "OK Computer",
       "disambiguation": "",
       "overview": "",
@@ -31,14 +34,22 @@
       "anyReleaseOk": false,
       "profileId": 0,
       "duration": 0,
+      "type": "Album",
       "albumType": "Album",
       "secondaryTypes": [],
+      "releaseStatuses": [
+        "Official"
+      ],
       "mediumCount": 0,
+      "rating": {
+        "count": 0,
+        "value": 0
+      },
       "ratings": {
         "votes": 0,
         "value": 0
       },
-      "releaseDate": "",
+      "releaseDate": null,
       "releases": [],
       "genres": [],
       "media": [],
@@ -48,9 +59,11 @@
         "artistName": "Radiohead",
         "disambiguation": "",
         "overview": "",
+        "aliases": [],
         "type": "Group",
         "status": "active",
-        "aliases": [],
+        "oldIds": [],
+        "artistAliases": [],
         "links": [],
         "images": [],
         "albums": []
@@ -75,8 +88,18 @@
       "artists": [
         {
           "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
           "artistName": "Radiohead",
-          "disambiguation": ""
+          "disambiguation": "",
+          "overview": "",
+          "aliases": [],
+          "type": "Group",
+          "status": "active",
+          "oldIds": [],
+          "artistAliases": [],
+          "links": [],
+          "images": [],
+          "albums": []
         }
       ]
     }

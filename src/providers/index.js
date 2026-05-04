@@ -4,6 +4,7 @@ const logger = require('../utils/logger')
 const { getProviderScore } = require('./scoring')
 const { safeProviderCall } = require('./safeProviderCall')
 const providerMetrics = require('../health/providerMetrics')
+const { normalizeAliases, normalizeStringArray } = require('../utils/lidarrArtist')
 
 const providers = {
   musicbrainz: require('./musicbrainz.provider'),
@@ -87,6 +88,8 @@ async function aggregateArtist (term) {
   let disambiguation = ''
   let overview = ''
   let images = []
+  let oldIds = []
+  let aliases = []
   const albumMap = new Map() // key: normalized name -> merged album
 
   let successfulProviders = 0
@@ -137,6 +140,14 @@ async function aggregateArtist (term) {
     }
     if (data.overview && !overview) {
       overview = data.overview
+    }
+    const providerAliases = normalizeAliases(data)
+    const providerOldIds = normalizeStringArray(data.oldIds || data.OldIds)
+    if (providerOldIds.length > 0 && oldIds.length === 0) {
+      oldIds = providerOldIds
+    }
+    if (providerAliases.length > 0 && aliases.length === 0) {
+      aliases = providerAliases
     }
     for (const album of data.albums) {
       // Simple deduplication by normalized name
@@ -301,6 +312,9 @@ async function aggregateArtist (term) {
     id,
     disambiguation,
     overview,
+    oldIds,
+    aliases,
+    artistAliases: aliases,
     images,
     imageDebug,
     albums: Array.from(albumMap.values()).map(a => ({

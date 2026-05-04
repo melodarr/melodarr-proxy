@@ -31,6 +31,8 @@ function setupMocks (providersStr, scoreFn) {
       name: 'dummy',
       searchArtist: async (term) => ({
         artistName: 'Dummy Artist',
+        oldIds: ['old-dummy'],
+        aliases: ['Dummy Alias'],
         albums: [{ name: 'Album 1', year: 2020, ids: { dummy: '1' } }]
       })
     },
@@ -81,6 +83,51 @@ test('Providers Index', async (t) => {
     assert.strictEqual(result.albums[0].imageUrl, 'http://img.com/1')
     assert.ok(result.albums[0].ids.dummy)
     assert.ok(result.albums[0].ids.dummy2)
+    assert.deepStrictEqual(result.oldIds, ['old-dummy'])
+    assert.deepStrictEqual(result.aliases, ['Dummy Alias'])
+    assert.deepStrictEqual(result.artistAliases, ['Dummy Alias'])
+  })
+
+  await t.test('aggregateArtist - preserves aliases from the highest scored provider with aliases', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Backstreet Boys',
+          oldIds: ['old-bsb'],
+          aliases: ['BSB', 'Back Street Boys'],
+          artistAliases: ['BSB', 'Back Street Boys'],
+          albums: []
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Backstreet Boys',
+          albums: []
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Backstreet Boys')
+
+    assert.deepStrictEqual(result.aliases, ['BSB', 'Back Street Boys'])
+    assert.deepStrictEqual(result.artistAliases, ['BSB', 'Back Street Boys'])
+    assert.deepStrictEqual(result.oldIds, ['old-bsb'])
   })
 
   await t.test('aggregateArtist - handles partial failures', async () => {

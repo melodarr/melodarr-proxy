@@ -46,6 +46,12 @@ Run the full Docker Compose smoke gate:
 yarn test:compose
 ```
 
+Run the opt-in real Lidarr add-artist smoke gate:
+
+```bash
+yarn test:lidarr-smoke
+```
+
 Run only the Melodash route smoke gate against an already-running dashboard:
 
 ```bash
@@ -118,6 +124,34 @@ Useful overrides:
 ```bash
 HOST_PORT=3055 MELODASH_HOST_PORT=55026 scripts/docker-compose-smoke.sh
 ```
+
+## Lidarr Add-Artist Smoke Test
+
+The Lidarr smoke script:
+
+```bash
+scripts/lidarr-add-artist-smoke.sh
+```
+
+It verifies the end-to-end add flow against a disposable Lidarr container:
+
+- starts a local deterministic MusicBrainz mock
+- starts the local proxy with `REQUIRE_API_KEY=false`
+- starts disposable Lidarr using `ghcr.io/hotio/lidarr:pr-plugins`
+- configures Lidarr's `metadatasource` to the local proxy
+- creates `/music` as a Lidarr root folder
+- calls Lidarr's real `POST /api/v1/artist`
+- fails if Lidarr returns `ArtistMetadata.Aliases` or any non-2xx add response
+
+Useful overrides:
+
+```bash
+LIDARR_IMAGE=ghcr.io/hotio/lidarr:pr-plugins \
+LIDARR_ARTIST_MBID=2f569e60-0a1b-4fb9-95a4-3dc1525d1aad \
+yarn test:lidarr-smoke
+```
+
+Set `KEEP_LIDARR_SMOKE=1` to keep the disposable container and temporary data directory for debugging.
 
 ## Melodash Route Smoke Test
 

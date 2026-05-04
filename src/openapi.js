@@ -76,7 +76,15 @@ const openApiDocument = {
           id: { type: 'string' },
           foreignArtistId: { type: 'string' },
           status: { type: 'string', example: LIDARR_LOOKUP_ARTIST_DEFAULTS.status },
+          oldIds: {
+            type: 'array',
+            items: { type: 'string' }
+          },
           aliases: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          artistAliases: {
             type: 'array',
             items: { type: 'string' }
           },

@@ -47,9 +47,18 @@ Run:
 ```bash
 curl -s "http://127.0.0.1:3055/debug/diagnose?provider=musicbrainz"
 curl -s http://127.0.0.1:3055/debug/upstream
+scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
 scripts/proxy-diag.sh mb 4
 ```
+
+Read the diagnose response this way:
+
+- `failedStep: "dns"` means name resolution failed before a socket was opened.
+- `failedStep: "tcp"` means DNS worked, but TCP/443 routing or firewalling failed.
+- `failedStep: "tls"` means TCP connected, but the TLS handshake was reset or interrupted.
+- `failedStep: "http"` means TLS worked, but MusicBrainz returned an HTTP error.
+- `probes[]` contains side-by-side `auto`, IPv4, and IPv6 results so you can see whether only one family is broken.
 
 Default to IPv6 first, then force IPv4 only if IPv6 is unavailable:
 

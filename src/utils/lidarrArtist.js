@@ -1,13 +1,17 @@
 const LIDARR_LOOKUP_ARTIST_DEFAULTS = Object.freeze({
   status: 'continuing',
+  oldIds: Object.freeze([]),
   aliases: Object.freeze([]),
+  artistAliases: Object.freeze([]),
   links: Object.freeze([])
 })
 
 const LIDARR_SKYHOOK_ARTIST_DEFAULTS = Object.freeze({
   type: 'Group',
   status: 'active',
+  oldIds: Object.freeze([]),
   aliases: Object.freeze([]),
+  artistAliases: Object.freeze([]),
   links: Object.freeze([]),
   images: Object.freeze([]),
   albums: Object.freeze([])
@@ -18,7 +22,9 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'id',
   'foreignArtistId',
   'status',
+  'oldIds',
   'aliases',
+  'artistAliases',
   'links',
   'images',
   'albums'
@@ -32,7 +38,9 @@ const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
   'overview',
   'type',
   'status',
+  'oldIds',
   'aliases',
+  'artistAliases',
   'links',
   'images',
   'albums'
@@ -52,8 +60,180 @@ function normalizeArray (value) {
   return Array.isArray(value) ? value : []
 }
 
+function normalizeReleaseStatuses (value) {
+  const statuses = normalizeStringArray(value)
+  return statuses.length > 0 ? statuses : ['Official']
+}
+
+function normalizeRating (value) {
+  if (!value || typeof value !== 'object') {
+    return { count: 0, value: 0 }
+  }
+
+  return {
+    count: Number(value.count ?? value.votes ?? 0) || 0,
+    value: Number(value.value ?? 0) || 0
+  }
+}
+
+function normalizeRatings (value) {
+  if (!value || typeof value !== 'object') {
+    return { votes: 0, value: 0 }
+  }
+
+  return {
+    votes: Number(value.votes ?? value.count ?? 0) || 0,
+    value: Number(value.value ?? 0) || 0
+  }
+}
+
+function normalizeRatingResource (value) {
+  const rating = normalizeRating(value)
+  return {
+    count: rating.count,
+    value: rating.value
+  }
+}
+
+function normalizeImageResource (image = {}) {
+  return {
+    coverType: asString(image.coverType || image.CoverType),
+    url: asString(image.url || image.remoteUrl || image.Url),
+    height: Number(image.height ?? image.Height ?? 0) || 0,
+    width: Number(image.width ?? image.Width ?? 0) || 0
+  }
+}
+
+function normalizeLinkResource (link = {}) {
+  return {
+    target: asString(link.target || link.Target || link.url || link.Url),
+    type: asString(link.type || link.Type || link.name || link.Name)
+  }
+}
+
+function normalizeMediumResource (medium = {}) {
+  return {
+    name: asString(medium.name || medium.Name),
+    format: asString(medium.format || medium.Format),
+    position: Number(medium.position ?? medium.Position ?? 0) || 0
+  }
+}
+
+function normalizeTrackResource (track = {}) {
+  return {
+    artistId: asString(track.artistId || track.ArtistId),
+    durationMs: Number(track.durationMs ?? track.DurationMs ?? 0) || 0,
+    id: asString(track.id || track.Id),
+    oldIds: normalizeStringArray(track.oldIds || track.OldIds),
+    recordingId: asString(track.recordingId || track.RecordingId),
+    oldRecordingIds: normalizeStringArray(track.oldRecordingIds || track.OldRecordingIds),
+    trackName: asString(track.trackName || track.TrackName),
+    trackNumber: asString(track.trackNumber || track.TrackNumber),
+    trackPosition: Number(track.trackPosition ?? track.TrackPosition ?? 0) || 0,
+    explicit: Boolean(track.explicit || track.Explicit),
+    mediumNumber: Number(track.mediumNumber ?? track.MediumNumber ?? 0) || 0
+  }
+}
+
+function normalizeReleaseResource (release = {}) {
+  return {
+    disambiguation: asString(release.disambiguation || release.Disambiguation),
+    country: normalizeStringArray(release.country || release.Country),
+    releaseDate: asString(release.releaseDate || release.ReleaseDate) || null,
+    id: asString(release.id || release.Id),
+    oldIds: normalizeStringArray(release.oldIds || release.OldIds),
+    label: normalizeStringArray(release.label || release.Label),
+    media: normalizeArray(release.media || release.Media).map(normalizeMediumResource),
+    title: asString(release.title || release.Title),
+    status: asString(release.status || release.Status || 'Official'),
+    trackCount: Number(release.trackCount ?? release.TrackCount ?? 0) || 0,
+    tracks: normalizeArray(release.tracks || release.Tracks).map(normalizeTrackResource)
+  }
+}
+
+function normalizeAlbum (album = {}) {
+  const type = asString(album.type || album.albumType || album.primaryType || 'Album')
+  const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
+  const images = normalizeArray(album.images)
+
+  return {
+    ...album,
+    id: asString(album.id || album.foreignAlbumId),
+    oldIds: normalizeStringArray(album.oldIds || album.OldIds),
+    title: asString(album.title || album.name || album.albumName),
+    type,
+    albumType: type,
+    secondaryTypes: normalizeStringArray(album.secondaryTypes || album.SecondaryTypes),
+    releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
+    rating: normalizeRating(album.rating || album.ratings),
+    ratings: normalizeRatings(album.ratings || album.rating),
+    releaseDate: releaseDate || null,
+    releases: normalizeArray(album.releases),
+    genres: normalizeStringArray(album.genres),
+    media: normalizeArray(album.media),
+    images,
+    links: normalizeArray(album.links),
+    remoteCover: asString(album.remoteCover || images[0]?.remoteUrl || images[0]?.url)
+  }
+}
+
+function toSkyhookArtistResource (artist = {}) {
+  return {
+    genres: normalizeStringArray(artist.genres || artist.Genres),
+    artistUrl: asString(artist.artistUrl || artist.ArtistUrl || artist.aristUrl || artist.AristUrl),
+    overview: asString(artist.overview || artist.Overview),
+    type: asString(artist.type || artist.Type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
+    disambiguation: asString(artist.disambiguation || artist.Disambiguation),
+    id: asString(artist.id || artist.Id || artist.foreignArtistId),
+    oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
+    images: normalizeArray(artist.images || artist.Images).map(normalizeImageResource),
+    links: normalizeArray(artist.links || artist.Links).map(normalizeLinkResource),
+    artistName: asString(artist.artistName || artist.ArtistName),
+    artistAliases: normalizeAliases(artist),
+    albums: normalizeArray(artist.albums || artist.Albums).map(toSkyhookAlbumResource),
+    status: asString(artist.status || artist.Status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
+    rating: normalizeRatingResource(artist.rating || artist.Rating || artist.ratings)
+  }
+}
+
+function toSkyhookAlbumResource (album = {}) {
+  const normalized = normalizeAlbum(album)
+  return {
+    artistId: asString(normalized.artistId),
+    artists: normalizeArray(normalized.artists).map(toSkyhookArtistResource),
+    disambiguation: asString(normalized.disambiguation),
+    overview: asString(normalized.overview),
+    id: asString(normalized.id),
+    oldIds: normalizeStringArray(normalized.oldIds),
+    images: normalizeArray(normalized.images).map(normalizeImageResource),
+    links: normalizeArray(normalized.links).map(normalizeLinkResource),
+    genres: normalizeStringArray(normalized.genres),
+    rating: normalizeRatingResource(normalized.rating || normalized.ratings),
+    releaseDate: asString(normalized.releaseDate) || null,
+    releases: normalizeArray(normalized.releases).map(normalizeReleaseResource),
+    secondaryTypes: normalizeStringArray(normalized.secondaryTypes),
+    title: asString(normalized.title),
+    type: asString(normalized.type || 'Album'),
+    releaseStatuses: normalizeReleaseStatuses(normalized.releaseStatuses)
+  }
+}
+
 function normalizeAliases (artist) {
-  return normalizeStringArray(artist.aliases ?? artist.Aliases)
+  const candidates = [
+    artist.artistAliases,
+    artist.ArtistAliases,
+    artist.aliases,
+    artist.Aliases
+  ]
+
+  for (const candidate of candidates) {
+    const aliases = normalizeStringArray(candidate)
+    if (aliases.length > 0) {
+      return aliases
+    }
+  }
+
+  return []
 }
 
 function isArtistLike (value) {
@@ -78,7 +258,10 @@ function normalizeLidarrArtistResponse (value) {
   }
 
   if (isArtistLike(normalized)) {
-    normalized.aliases = normalizeAliases(normalized)
+    const aliases = normalizeAliases(normalized)
+    normalized.oldIds = normalizeStringArray(normalized.oldIds || normalized.OldIds)
+    normalized.aliases = aliases
+    normalized.artistAliases = aliases
   }
 
   return normalized
@@ -91,10 +274,12 @@ function withArtistLookupDefaults (artist = {}) {
     id: asString(artist.id),
     foreignArtistId: asString(artist.foreignArtistId || artist.id),
     status: asString(artist.status || LIDARR_LOOKUP_ARTIST_DEFAULTS.status),
+    oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
     aliases: normalizeAliases(artist),
+    artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum)
   }
 }
 
@@ -108,10 +293,12 @@ function withSkyhookArtistDefaults (artist = {}) {
     overview: asString(artist.overview),
     type: asString(artist.type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     status: asString(artist.status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
+    oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
     aliases: normalizeAliases(artist),
+    artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum)
   }
 }
 
@@ -122,8 +309,11 @@ module.exports = {
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   asString,
   normalizeAliases,
+  normalizeAlbum,
   normalizeLidarrArtistResponse,
   normalizeStringArray,
+  toSkyhookAlbumResource,
+  toSkyhookArtistResource,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults
 }
