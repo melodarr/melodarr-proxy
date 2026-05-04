@@ -449,6 +449,16 @@ test('recent feed returns empty array for unsupported update feed', async () => 
   assert.deepEqual(res.body, [])
 })
 
+test('release search returns empty candidate list when no indexer backend is configured', async () => {
+  const { controller } = loadController()
+  const res = makeResponse()
+
+  await controller.handleReleaseSearch({ query: { artistId: '700' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
+})
+
 // handleSearch tests
 test('handleSearch requires a query parameter', async () => {
   const { controller } = loadController()
