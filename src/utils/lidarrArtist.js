@@ -180,7 +180,7 @@ function normalizeAlbum (album = {}) {
 function toSkyhookArtistResource (artist = {}) {
   return {
     genres: normalizeStringArray(artist.genres || artist.Genres),
-    aristUrl: asString(artist.aristUrl || artist.AristUrl),
+    artistUrl: asString(artist.artistUrl || artist.ArtistUrl || artist.aristUrl || artist.AristUrl),
     overview: asString(artist.overview || artist.Overview),
     type: asString(artist.type || artist.Type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     disambiguation: asString(artist.disambiguation || artist.Disambiguation),
