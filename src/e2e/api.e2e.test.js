@@ -246,7 +246,7 @@ describe('API E2E Tests', () => {
       assert.strictEqual(res.status, 200)
       assert.deepStrictEqual(Object.keys(res.data).sort(), [
         'albums',
-        'aristUrl',
+        'artistUrl',
         'artistAliases',
         'artistName',
         'disambiguation',
