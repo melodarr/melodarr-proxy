@@ -237,7 +237,7 @@ test('toSkyhookArtistResource emits only Lidarr ArtistResource fields', () => {
 
   assert.deepEqual(Object.keys(artist).sort(), [
     'albums',
-    'aristUrl',
+    'artistUrl',
     'artistAliases',
     'artistName',
     'disambiguation',
