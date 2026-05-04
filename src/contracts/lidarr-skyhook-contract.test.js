@@ -10,9 +10,9 @@ const fixturesDir = path.join(__dirname, '../fixtures/lidarr')
 const SKYHOOK_ENTITY_KEYS = ['album', 'artist', 'score']
 const SKYHOOK_ARTIST_KEYS = [
   'albums',
-  'aristUrl',
   'artistAliases',
   'artistName',
+  'artistUrl',
   'disambiguation',
   'genres',
   'id',

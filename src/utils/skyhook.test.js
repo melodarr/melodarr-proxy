@@ -5,9 +5,9 @@ const { toSkyhookSearchShape } = require('./skyhook')
 
 const STRICT_ARTIST_KEYS = [
   'albums',
-  'aristUrl',
   'artistAliases',
   'artistName',
+  'artistUrl',
   'disambiguation',
   'genres',
   'id',

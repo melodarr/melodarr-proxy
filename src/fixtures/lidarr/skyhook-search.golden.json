@@ -3,7 +3,7 @@
     "score": 0,
     "artist": {
       "genres": [],
-      "aristUrl": "",
+      "artistUrl": "",
       "overview": "",
       "type": "Group",
       "disambiguation": "",
@@ -37,7 +37,7 @@
       "artists": [
         {
           "genres": [],
-          "aristUrl": "",
+          "artistUrl": "",
           "overview": "",
           "type": "Group",
           "disambiguation": "",
