@@ -1,0 +1,54 @@
+[
+  {
+    "id": 0,
+    "guid": "indexer-1-guid-rejected",
+    "quality": {
+      "quality": {
+        "id": 4,
+        "name": "MP3-320"
+      },
+      "revision": {
+        "version": 1,
+        "real": 0,
+        "isRepack": false
+      }
+    },
+    "qualityWeight": 2000,
+    "age": 3,
+    "ageHours": 80.25,
+    "ageMinutes": 4815,
+    "size": 123456789,
+    "indexerId": 12,
+    "indexer": "Test Indexer",
+    "releaseGroup": "TEST",
+    "subGroup": null,
+    "releaseHash": null,
+    "title": "Radiohead - OK Computer (1997) [MP3-320]",
+    "discography": false,
+    "sceneSource": false,
+    "airDate": null,
+    "artistName": "Radiohead",
+    "albumTitle": "OK Computer",
+    "approved": false,
+    "temporarilyRejected": false,
+    "rejected": true,
+    "rejections": [
+      "Existing file meets cutoff",
+      "Release is not wanted"
+    ],
+    "publishDate": "2026-04-29T03:45:00Z",
+    "commentUrl": "https://indexer.example/details/indexer-1-guid-rejected",
+    "downloadUrl": "https://indexer.example/download/indexer-1-guid-rejected",
+    "infoUrl": "https://indexer.example/info/indexer-1-guid-rejected",
+    "downloadAllowed": false,
+    "releaseWeight": 1,
+    "customFormats": [],
+    "customFormatScore": 0,
+    "magnetUrl": null,
+    "infoHash": null,
+    "seeders": null,
+    "leechers": null,
+    "protocol": "usenet",
+    "indexerFlags": 0
+  }
+]
