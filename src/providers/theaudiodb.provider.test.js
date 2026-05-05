@@ -78,7 +78,7 @@ test('TheAudioDb Provider', async (t) => {
               strBiographyEN: 'New Zealand artist.',
               strArtistThumb: 'https://example.test/lorde-thumb.jpg',
               strArtistFanart: 'https://example.test/lorde-fanart.jpg',
-              strArtistLogo: ''
+              strArtistLogo: 'https://example.test/lorde-logo.png'
             }
           ]
         }
@@ -96,9 +96,14 @@ test('TheAudioDb Provider', async (t) => {
         remoteUrl: 'https://example.test/lorde-thumb.jpg'
       },
       {
-        coverType: 'poster',
+        coverType: 'fanart',
         url: 'https://example.test/lorde-fanart.jpg',
         remoteUrl: 'https://example.test/lorde-fanart.jpg'
+      },
+      {
+        coverType: 'clearlogo',
+        url: 'https://example.test/lorde-logo.png',
+        remoteUrl: 'https://example.test/lorde-logo.png'
       }
     ])
   })

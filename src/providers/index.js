@@ -21,6 +21,30 @@ function mergeIds (existingIds, nextIds) {
   }
 }
 
+function normalizeProviderRating (value = {}) {
+  const rating = value.rating || value.ratings || value
+  return {
+    count: Number(rating?.count ?? rating?.votes ?? 0) || 0,
+    value: Number(rating?.value ?? 0) || 0
+  }
+}
+
+function hasProviderRating (rating) {
+  return Boolean(rating && (rating.count > 0 || rating.value > 0))
+}
+
+function shouldReplaceRating (existingRating, nextRating) {
+  if (!hasProviderRating(nextRating)) {
+    return false
+  }
+
+  if (!hasProviderRating(existingRating)) {
+    return true
+  }
+
+  return nextRating.count > existingRating.count
+}
+
 async function aggregateArtist (term) {
   const providerNamesStr = getConfigValue('metadataProviders') || 'musicbrainz'
   const providerNames = providerNamesStr.split(',').map(s => s.trim().toLowerCase())
@@ -156,6 +180,11 @@ async function aggregateArtist (term) {
 
       if (existing) {
         existing.ids = mergeIds(existing.ids, album.ids)
+        const nextRating = normalizeProviderRating(album)
+        if (shouldReplaceRating(existing.rating, nextRating)) {
+          existing.rating = nextRating
+          existing.ratings = { votes: nextRating.count, value: nextRating.value }
+        }
 
         if (!existing.imageUrl && album.imageUrl) {
           existing.imageUrl = album.imageUrl
@@ -186,6 +215,11 @@ async function aggregateArtist (term) {
           year: album.year,
           releaseDate: album.releaseDate || null,
           imageUrl: album.imageUrl || '',
+          rating: normalizeProviderRating(album),
+          ratings: {
+            votes: normalizeProviderRating(album).count,
+            value: normalizeProviderRating(album).value
+          },
           ids: mergeIds(null, album.ids),
           score,
           provider
@@ -206,6 +240,9 @@ async function aggregateArtist (term) {
       for (const img of data.images) {
         imageCandidates.push({
           url: img.url,
+          coverType: img.coverType || 'poster',
+          height: img.height,
+          width: img.width,
           imageSource: provider,
           type: 'artist',
           isSelfTitled: false
@@ -227,6 +264,7 @@ async function aggregateArtist (term) {
 
         imageCandidates.push({
           url: album.imageUrl,
+          coverType: 'poster',
           imageSource,
           type: 'album',
           isSelfTitled
@@ -292,13 +330,14 @@ async function aggregateArtist (term) {
 
   images = []
   if (uniqueScored.length > 0) {
-    const best = uniqueScored[0]
-    images = [{
-      coverType: 'poster',
-      url: best.url,
-      remoteUrl: best.url,
-      imageSource: best.imageSource
-    }]
+    images = uniqueScored.slice(0, 6).map(image => ({
+      coverType: image.coverType || 'poster',
+      url: image.url,
+      remoteUrl: image.url,
+      imageSource: image.imageSource,
+      height: Number(image.height ?? 0) || 0,
+      width: Number(image.width ?? 0) || 0
+    }))
   }
 
   const imageDebug = uniqueScored.slice(0, 5).map(img => ({ url: img.url, score: img.score, source: img.imageSource, type: img.type }))
@@ -322,6 +361,8 @@ async function aggregateArtist (term) {
       year: a.year,
       releaseDate: a.releaseDate || null,
       imageUrl: a.imageUrl || '',
+      rating: a.rating || { count: 0, value: 0 },
+      ratings: a.ratings || { votes: 0, value: 0 },
       ids: a.ids || {},
       provider: a.provider
     })),

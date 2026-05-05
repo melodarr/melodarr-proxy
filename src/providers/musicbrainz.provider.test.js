@@ -39,9 +39,10 @@ test('MusicBrainz Provider', async (t) => {
         }
       }
       if (path === '/release-group') {
+        assert.strictEqual(params.inc, 'ratings')
         return {
           'release-groups': [
-            { id: 'rg1', title: 'Album 1', 'primary-type': 'Album', 'first-release-date': '2020-01-01' },
+            { id: 'rg1', title: 'Album 1', 'primary-type': 'Album', 'first-release-date': '2020-01-01', rating: { value: 4.25, 'votes-count': 12 } },
             { id: 'rg2', title: 'EP 1', 'primary-type': 'EP', 'secondary-types': ['Compilation'] }, // filtered out
             { id: 'rg3', title: 'Album 2', 'primary-type': 'Album' }
           ]
@@ -57,6 +58,8 @@ test('MusicBrainz Provider', async (t) => {
     // v0.3.36: full date preserved alongside year.
     assert.strictEqual(result.albums[0].releaseDate, '2020-01-01')
     assert.ok(result.albums[0].imageUrl.includes('rg1'))
+    assert.deepStrictEqual(result.albums[0].rating, { count: 12, value: 4.25 })
+    assert.deepStrictEqual(result.albums[0].ratings, { votes: 12, value: 4.25 })
     assert.strictEqual(result.albums[1].name, 'Album 2')
     assert.strictEqual(result.albums[1].year, null)
     assert.strictEqual(result.albums[1].releaseDate, null)
@@ -129,9 +132,10 @@ test('MusicBrainz Provider', async (t) => {
       }
       if (path === '/release-group') {
         assert.strictEqual(params.artist, 'a74b1b7f')
+        assert.strictEqual(params.inc, 'ratings')
         return {
           'release-groups': [
-            { id: 'rg1', title: 'OK Computer', 'primary-type': 'Album', 'first-release-date': '1997-05-21' }
+            { id: 'rg1', title: 'OK Computer', 'primary-type': 'Album', 'first-release-date': '1997-05-21', rating: { value: 4.5, 'votes-count': 42 } }
           ]
         }
       }
@@ -142,6 +146,8 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.id, 'a74b1b7f')
     assert.strictEqual(result.albums.length, 1)
     assert.strictEqual(result.albums[0].provider, 'musicbrainz')
+    assert.deepStrictEqual(result.albums[0].rating, { count: 42, value: 4.5 })
+    assert.deepStrictEqual(result.albums[0].ratings, { votes: 42, value: 4.5 })
     assert.strictEqual(result.providers[0].name, 'musicbrainz')
     assert.deepStrictEqual(result.oldIds, [])
     assert.deepStrictEqual(result.aliases, ['On a Friday'])
@@ -153,13 +159,14 @@ test('MusicBrainz Provider', async (t) => {
     const { musicbrainzProvider, setMock } = setupMocks()
     setMock(async (path, params) => {
       if (path === '/release-group/rg1') {
-        assert.strictEqual(params.inc, 'artist-credits')
+        assert.strictEqual(params.inc, 'artist-credits+ratings')
         return {
           id: 'rg1',
           title: 'OK Computer',
           'first-release-date': '1997-05-21',
           'primary-type': 'Album',
           'secondary-types': [],
+          rating: { value: 4.5, 'votes-count': 42 },
           'artist-credit': [{
             artist: {
               id: 'a74b1b7f',
@@ -214,6 +221,8 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.artist.artistName, 'Radiohead')
     assert.strictEqual(result.releaseDate, '1997-05-21')
     assert.strictEqual(result.type, 'Album')
+    assert.deepStrictEqual(result.rating, { count: 42, value: 4.5 })
+    assert.deepStrictEqual(result.ratings, { votes: 42, value: 4.5 })
     assert.deepStrictEqual(result.secondaryTypes, [])
     assert.deepStrictEqual(result.releaseStatuses, ['Official'])
     assert.strictEqual(result.releases.length, 1)

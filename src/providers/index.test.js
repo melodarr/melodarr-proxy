@@ -88,6 +88,64 @@ test('Providers Index', async (t) => {
     assert.deepStrictEqual(result.artistAliases, ['Dummy Alias'])
   })
 
+  await t.test('aggregateArtist - preserves distinct artist image cover types and album ratings', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,theaudiodb' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.9 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Akon',
+          id: 'mb-akon',
+          images: [],
+          albums: [{
+            name: 'Freedom',
+            releaseDate: '2008-11-30',
+            ids: { musicbrainzReleaseGroupId: 'rg-freedom' },
+            rating: { count: 42, value: 4.5 },
+            ratings: { votes: 42, value: 4.5 }
+          }]
+        })
+      }
+    }
+    require.cache[require.resolve('./theaudiodb.provider')] = {
+      exports: {
+        name: 'theaudiodb',
+        searchArtist: async () => ({
+          artistName: 'Akon',
+          images: [
+            { coverType: 'poster', url: 'https://example.test/akon-thumb.jpg', remoteUrl: 'https://example.test/akon-thumb.jpg' },
+            { coverType: 'fanart', url: 'https://example.test/akon-fanart.jpg', remoteUrl: 'https://example.test/akon-fanart.jpg' },
+            { coverType: 'clearlogo', url: 'https://example.test/akon-logo.png', remoteUrl: 'https://example.test/akon-logo.png' }
+          ],
+          albums: [{
+            name: 'Freedom',
+            releaseDate: '2008-11-30',
+            imageUrl: 'https://example.test/freedom.jpg',
+            ids: { theAudioDbAlbumId: 'tadb-freedom' }
+          }]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Akon')
+
+    assert.deepStrictEqual(result.images.map(image => image.coverType), ['poster', 'fanart', 'clearlogo'])
+    assert.deepStrictEqual(result.albums[0].rating, { count: 42, value: 4.5 })
+    assert.deepStrictEqual(result.albums[0].ratings, { votes: 42, value: 4.5 })
+    assert.strictEqual(result.albums[0].imageUrl, 'https://example.test/freedom.jpg')
+  })
+
   await t.test('aggregateArtist - preserves aliases from the highest scored provider with aliases', async () => {
     delete require.cache[require.resolve('./index')]
     require.cache[require.resolve('../settings/store')] = {
