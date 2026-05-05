@@ -174,7 +174,7 @@ jobs:
           output-file: ./melodash-sbom.spdx.json
 
       - name: Upload SBOM Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: |
