@@ -2,6 +2,16 @@ const axios = require('axios')
 const { getConfigValue } = require('../settings/store')
 const { httpsAgent } = require('./http')
 
+function imageResource (url, coverType) {
+  return url
+    ? {
+        coverType,
+        url,
+        remoteUrl: url
+      }
+    : null
+}
+
 class TheAudioDbProvider {
   constructor () {
     this.name = 'theaudiodb'
@@ -31,14 +41,10 @@ class TheAudioDbProvider {
       artistName: artist.strArtist || term,
       overview: artist.strBiographyEN || '',
       images: [
-        artist.strArtistThumb,
-        artist.strArtistFanart,
-        artist.strArtistLogo
-      ].filter(Boolean).map(url => ({
-        coverType: 'poster',
-        url,
-        remoteUrl: url
-      })),
+        imageResource(artist.strArtistThumb, 'poster'),
+        imageResource(artist.strArtistFanart, 'fanart'),
+        imageResource(artist.strArtistLogo, 'clearlogo')
+      ].filter(Boolean),
       ids: {
         theAudioDbArtistId: artist.idArtist || '',
         musicbrainzArtistId: artist.strMusicBrainzID || ''

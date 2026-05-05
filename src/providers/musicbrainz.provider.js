@@ -29,6 +29,14 @@ class MusicBrainzProvider {
       .filter(Boolean)
   }
 
+  mapRating (value = {}) {
+    const rating = value.rating || value
+    return {
+      count: Number(rating?.['votes-count'] ?? rating?.votes ?? rating?.count ?? 0) || 0,
+      value: Number(rating?.value ?? 0) || 0
+    }
+  }
+
   mapReleaseTracks (media = [], fallbackArtistId = '') {
     const tracks = []
 
@@ -109,6 +117,7 @@ class MusicBrainzProvider {
 
     const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
       artist: artist.id,
+      inc: 'ratings',
       type: 'album|ep',
       limit: 100,
       offset: 0
@@ -124,6 +133,7 @@ class MusicBrainzProvider {
       .map(group => {
         const rawDate = group['first-release-date'] || ''
         const yearMatch = rawDate.match(/^(\d{4})/)
+        const rating = this.mapRating(group)
         return {
           name: group.title || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
@@ -131,6 +141,8 @@ class MusicBrainzProvider {
           // consumers can pad to full ISO for Lidarr compatibility.
           releaseDate: rawDate || null,
           imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
+          rating,
+          ratings: { votes: rating.count, value: rating.value },
           ids: {
             musicbrainzReleaseGroupId: group.id || ''
           }
@@ -164,6 +176,7 @@ class MusicBrainzProvider {
 
     const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
       artist: artist.id,
+      inc: 'ratings',
       type: 'album|ep',
       limit: 100,
       offset: 0
@@ -179,11 +192,14 @@ class MusicBrainzProvider {
       .map(group => {
         const rawDate = group['first-release-date'] || ''
         const yearMatch = rawDate.match(/^(\d{4})/)
+        const rating = this.mapRating(group)
         return {
           name: group.title || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
           releaseDate: rawDate || null,
           imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
+          rating,
+          ratings: { votes: rating.count, value: rating.value },
           ids: {
             musicbrainzReleaseGroupId: group.id || ''
           },
@@ -213,7 +229,7 @@ class MusicBrainzProvider {
 
   async lookupAlbumById (releaseGroupId) {
     const group = await upstreamService.musicBrainzGet(`/release-group/${encodeURIComponent(releaseGroupId)}`, {
-      inc: 'artist-credits'
+      inc: 'artist-credits+ratings'
     })
 
     if (!group?.id) {
@@ -235,6 +251,7 @@ class MusicBrainzProvider {
       offset: 0
     })
     const releases = this.mapReleases(releaseResult, artistId)
+    const rating = this.mapRating(group)
 
     return {
       id: group.id || releaseGroupId,
@@ -259,6 +276,8 @@ class MusicBrainzProvider {
         : [],
       releaseDate: rawDate || null,
       imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
+      rating,
+      ratings: { votes: rating.count, value: rating.value },
       images: group.id
         ? [{
             coverType: 'cover',
