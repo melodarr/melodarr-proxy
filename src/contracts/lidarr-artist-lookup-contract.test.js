@@ -25,9 +25,9 @@ const PROXY_EXTENSION_KEYS = [
 test('Lidarr artist lookup resource matches contract exactly', () => {
   const fixture = readFixture('artist-lookup.golden.json')
   const out = fixture.map(a => withArtistLookupDefaults(a))
-  
+
   const expectedKeys = [...LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS, ...PROXY_EXTENSION_KEYS]
-  
+
   for (const artist of out) {
     const keys = Object.keys(artist)
     for (const key of keys) {
@@ -46,7 +46,7 @@ test('withArtistLookupDefaults strictly strips unknown fields from upstream prov
   }
 
   const cleaned = withArtistLookupDefaults(dirty)
-  
+
   assert.equal(cleaned.artistName, 'Radiohead')
   assert.equal(cleaned._upstreamSource, undefined)
   assert.equal(cleaned.matchType, undefined)

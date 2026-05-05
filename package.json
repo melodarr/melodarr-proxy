@@ -11,6 +11,8 @@
     "reset-password": "node src/server.js --reset-password",
     "lint": "XDG_CACHE_HOME=.cache standard",
     "test": "node --test src/**/*.test.js",
+    "test:coverage": "c8 --reporter=text --reporter=lcov node --test src/**/*.test.js",
+    "test:coverage:check": "c8 --check-coverage --lines 85 --branches 80 --functions 85 --statements 85 node --test src/**/*.test.js",
     "test:unit": "find src -name '*.test.js' -not -path 'src/e2e/*' -print0 | xargs -0 node --test --test-force-exit",
     "test:contracts": "node --test src/contracts/**/*.test.js",
     "test:e2e": "node --test src/e2e/**/*.e2e.test.js",
@@ -29,6 +31,7 @@
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
+    "c8": "^11.0.0",
     "husky": "^9.1.7",
     "standard": "^17.1.0",
     "supertest": "^7.0.0"

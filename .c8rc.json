@@ -1,0 +1,18 @@
+{
+  "all": true,
+  "include": [
+    "src/controllers/proxy.controller.js",
+    "src/middleware/lidarrArtistResponse.middleware.js",
+    "src/providers/safeProviderCall.js",
+    "src/ranking/engine.js",
+    "src/utils/dates.js",
+    "src/utils/lidarrArtist.js",
+    "src/utils/skyhook.js",
+    "src/utils/validateArtist.js"
+  ],
+  "exclude": [
+    "coverage/**",
+    "src/**/*.test.js",
+    "src/**/*.e2e.test.js"
+  ]
+}
