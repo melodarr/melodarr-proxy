@@ -257,7 +257,22 @@ async function tryEnrichArtistByIdData (data) {
 
   try {
     const enrichment = await withTimeout(theAudioDbProvider.searchArtistProfile(data.artistName), 10000)
-    return enrichment ? mergeArtistByIdImageEnrichment(data, enrichment) : data
+    if (!enrichment) {
+      return data
+    }
+
+    const enrichmentMbid = enrichment.ids?.musicbrainzArtistId
+    if (enrichmentMbid && data.id && enrichmentMbid !== data.id) {
+      logger.warn('Artist by ID enrichment skipped: TheAudioDB MBID mismatch', {
+        context: 'Proxy',
+        artistName: data.artistName,
+        requestedId: data.id,
+        theAudioDbMbid: enrichmentMbid
+      })
+      return data
+    }
+
+    return mergeArtistByIdImageEnrichment(data, enrichment)
   } catch (error) {
     logger.warn('Artist by ID enrichment skipped', {
       context: 'Proxy',

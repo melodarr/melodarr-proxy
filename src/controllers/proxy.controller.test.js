@@ -496,6 +496,40 @@ test('artist by id enriches missing artist images and preserves MusicBrainz albu
   assert.deepEqual(res.body.albums[0].rating, { count: 42, value: 4.5 })
 })
 
+test('artist by id skips TheAudioDB enrichment when returned MBID does not match requested foreignArtistId', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'Akon',
+      id,
+      disambiguation: '',
+      overview: '',
+      aliases: [],
+      artistAliases: [],
+      images: [],
+      albums: [],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 0 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    }),
+    searchArtistProfile: async () => ({
+      artistName: 'Akon',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/other-thumb.jpg', remoteUrl: 'https://example.test/other-thumb.jpg' }
+      ],
+      ids: { musicbrainzArtistId: 'different-mbid' }
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'akon-id' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.images, [])
+})
+
 test('recent feed returns empty array for unsupported update feed', async () => {
   const { controller } = loadController()
   const res = makeResponse()
