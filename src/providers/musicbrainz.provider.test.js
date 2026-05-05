@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert')
-const { withArtistLookupDefaults } = require('../utils/lidarrArtist')
+const { toSkyhookAlbumResource, withArtistLookupDefaults } = require('../utils/lidarrArtist')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
 
 function setupMocks () {
@@ -155,6 +155,68 @@ test('MusicBrainz Provider', async (t) => {
     assert.deepStrictEqual(withArtistLookupDefaults(result).artistAliases, ['On a Friday'])
   })
 
+  await t.test('lookupArtistById - preserves Album and EP primary types for Lidarr metadata filtering', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path) => {
+      if (path === '/artist/artist-types') {
+        return {
+          id: 'artist-types',
+          name: 'Type Artist'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [
+            { id: 'rg-album', title: 'Album Type', 'primary-type': 'Album', 'first-release-date': '2020' },
+            { id: 'rg-ep', title: 'EP Type', 'primary-type': 'EP', 'first-release-date': '2021' },
+            { id: 'rg-single', title: 'Single Type', 'primary-type': 'Single', 'first-release-date': '2022' },
+            { id: 'rg-live', title: 'Live Album', 'primary-type': 'Album', 'secondary-types': ['Live'], 'first-release-date': '2023' }
+          ]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-types')
+
+    assert.deepStrictEqual(result.albums.map(album => album.name), ['Album Type', 'EP Type'])
+    assert.deepStrictEqual(result.albums.map(album => album.type), ['Album', 'EP'])
+    assert.deepStrictEqual(result.albums.map(album => album.albumType), ['Album', 'EP'])
+    assert.deepStrictEqual(result.albums.map(album => album.secondaryTypes), [[], []])
+    assert.deepStrictEqual(result.albums.map(album => album.releaseStatuses), [['Official'], ['Official']])
+  })
+
+  await t.test('lookupArtistById - handles large valid discographies deterministically', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroups = Array.from({ length: 100 }, (_, index) => ({
+      id: `rg-${index + 1}`,
+      title: `Album ${index + 1}`,
+      'primary-type': index % 2 === 0 ? 'Album' : 'EP',
+      'first-release-date': `${2000 + (index % 20)}-01-01`,
+      rating: { value: 3 + (index % 3), 'votes-count': index + 1 }
+    }))
+
+    setMock(async (path) => {
+      if (path === '/artist/large-artist') {
+        return {
+          id: 'large-artist',
+          name: 'Large Artist'
+        }
+      }
+      if (path === '/release-group') {
+        return { 'release-groups': releaseGroups }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('large-artist')
+
+    assert.strictEqual(result.albums.length, 100)
+    assert.strictEqual(result.providers[0].albumCount, 100)
+    assert.deepStrictEqual(result.albums.slice(0, 3).map(album => album.name), ['Album 1', 'Album 2', 'Album 3'])
+    assert.deepStrictEqual(result.albums.slice(0, 4).map(album => album.type), ['Album', 'EP', 'Album', 'EP'])
+    assert.deepStrictEqual(result.albums[0].rating, { count: 1, value: 3 })
+    assert.deepStrictEqual(result.albums[99].rating, { count: 100, value: 3 })
+  })
+
   await t.test('lookupAlbumById - returns release group metadata for Lidarr album refetch', async () => {
     const { musicbrainzProvider, setMock } = setupMocks()
     setMock(async (path, params) => {
@@ -228,5 +290,150 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.releases.length, 1)
     assert.strictEqual(result.releases[0].tracks.length, 1)
     assert.strictEqual(result.releases[0].tracks[0].artistId, 'a74b1b7f')
+  })
+
+  await t.test('lookupAlbumById - includes every credited track artist required by Lidarr MapTrack', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path, params) => {
+      if (path === '/release-group/rg-collab') {
+        assert.strictEqual(params.inc, 'artist-credits+ratings')
+        return {
+          id: 'rg-collab',
+          title: 'Collaborative Album',
+          'first-release-date': '2024-03-01',
+          'primary-type': 'Album',
+          'secondary-types': [],
+          'artist-credit': [
+            {
+              artist: {
+                id: 'artist-primary',
+                name: 'Primary Artist',
+                'sort-name': 'Primary Artist'
+              }
+            },
+            {
+              artist: {
+                id: 'artist-collab',
+                name: 'Collaborator',
+                'sort-name': 'Collaborator'
+              }
+            }
+          ]
+        }
+      }
+      if (path === '/release') {
+        assert.strictEqual(params['release-group'], 'rg-collab')
+        assert.strictEqual(params.inc, 'media+recordings+artist-credits')
+        return {
+          releases: [{
+            id: 'rel-collab',
+            title: 'Collaborative Album',
+            status: 'Official',
+            media: [{
+              title: 'Digital Media',
+              format: 'Digital Media',
+              position: 1,
+              tracks: [
+                {
+                  id: 'track-primary',
+                  title: 'Opening',
+                  number: '1',
+                  position: 1,
+                  recording: {
+                    id: 'rec-primary',
+                    title: 'Opening',
+                    'artist-credit': [{
+                      artist: {
+                        id: 'artist-primary',
+                        name: 'Primary Artist'
+                      }
+                    }]
+                  }
+                },
+                {
+                  id: 'track-guest',
+                  title: 'Feature',
+                  number: '2',
+                  position: 2,
+                  recording: {
+                    id: 'rec-guest',
+                    title: 'Feature',
+                    'artist-credit': [{
+                      artist: {
+                        id: 'artist-guest',
+                        name: 'Guest Artist'
+                      }
+                    }]
+                  }
+                }
+              ]
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupAlbumById('rg-collab')
+    const album = toSkyhookAlbumResource(result)
+    const artistIds = new Set(album.artists.map(artist => artist.id))
+    const trackArtistIds = album.releases.flatMap(release => release.tracks.map(track => track.artistId))
+
+    // Source of truth:
+    // Lidarr SkyHookProxy.GetAlbumInfo builds artistDict from AlbumResource.Artists,
+    // then MapTrack dereferences artistDict[TrackResource.ArtistId].
+    assert.strictEqual(album.artistId, 'artist-primary')
+    assert.deepStrictEqual([...artistIds].sort(), ['artist-collab', 'artist-guest', 'artist-primary'])
+    for (const artistId of trackArtistIds) {
+      assert.ok(artistIds.has(artistId), `AlbumResource.Artists must include TrackResource.ArtistId ${artistId}`)
+    }
+  })
+
+  await t.test('lookupAlbumById - maps partial MusicBrainz metadata to Lidarr-safe defaults', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path) => {
+      if (path === '/release-group/rg-partial') {
+        return {
+          id: 'rg-partial',
+          title: 'Partial Album',
+          'primary-type': 'EP',
+          'artist-credit': [{
+            artist: {
+              id: 'artist-partial',
+              name: 'Partial Artist'
+            }
+          }]
+        }
+      }
+      if (path === '/release') {
+        return {
+          releases: [{
+            id: 'rel-partial',
+            title: 'Partial Album',
+            media: [{
+              position: 1,
+              tracks: [{
+                title: 'Untitled',
+                position: 1,
+                recording: {}
+              }]
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupAlbumById('rg-partial')
+    const album = toSkyhookAlbumResource(result)
+
+    assert.strictEqual(album.id, 'rg-partial')
+    assert.strictEqual(album.type, 'EP')
+    assert.strictEqual(album.releaseDate, null)
+    assert.deepStrictEqual(album.secondaryTypes, [])
+    assert.deepStrictEqual(album.releaseStatuses, ['Official'])
+    assert.deepStrictEqual(album.rating, { count: 0, value: 0 })
+    assert.deepStrictEqual(album.releases[0].country, [])
+    assert.deepStrictEqual(album.releases[0].label, [])
+    assert.strictEqual(album.releases[0].media[0].format, 'Unknown')
+    assert.strictEqual(album.releases[0].tracks[0].artistId, 'artist-partial')
   })
 })
