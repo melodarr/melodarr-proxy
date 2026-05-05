@@ -3,6 +3,7 @@ const tracer = require('../tracer')
 const cache = require('../cache')
 const { aggregateArtist } = require('../providers')
 const musicbrainzProvider = require('../providers/musicbrainz.provider')
+const theAudioDbProvider = require('../providers/theaudiodb.provider')
 const { discoverArtists, findSongAlbums, getEnabledProviders } = require('../providers/artist-discovery')
 const { rankResults } = require('../ranking/engine')
 const { enrichResult } = require('../enrichment/pipeline')
@@ -197,6 +198,8 @@ function buildArtistLookupRankingInput (term, data) {
           releaseDate: toIsoDate(album.releaseDate || album.year),
           images: album.imageUrl ? [{ coverType: 'cover', url: album.imageUrl, remoteUrl: album.imageUrl }] : [],
           remoteCover: album.imageUrl || '',
+          rating: album.rating || album.ratings,
+          ratings: album.ratings || album.rating,
           provider: album.provider || '',
           ids: album.ids || {}
         })).map(normalizeAlbum),
@@ -231,6 +234,39 @@ function buildArtistLookupResponse (data, enrichedTopResult, rankedResults) {
     score: enrichedTopResult.score,
     results: rankedResults
   })
+}
+
+function mergeArtistByIdImageEnrichment (base = {}, enrichment = {}) {
+  return {
+    ...base,
+    overview: base.overview || enrichment.overview || '',
+    images: Array.isArray(base.images) && base.images.length > 0 ? base.images : (enrichment.images || [])
+  }
+}
+
+async function tryEnrichArtistByIdData (data) {
+  if (!data?.artistName) {
+    return data
+  }
+
+  const needsImages = !Array.isArray(data.images) || data.images.length === 0
+
+  if (!needsImages) {
+    return data
+  }
+
+  try {
+    const enrichment = await withTimeout(theAudioDbProvider.searchArtistProfile(data.artistName), 10000)
+    return enrichment ? mergeArtistByIdImageEnrichment(data, enrichment) : data
+  } catch (error) {
+    logger.warn('Artist by ID enrichment skipped', {
+      context: 'Proxy',
+      artistName: data.artistName,
+      error: error.message,
+      code: error.code
+    })
+    return data
+  }
 }
 
 async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedTerm, trace) {
@@ -494,9 +530,10 @@ async function handleArtistById (req, res) {
     const startedAt = Date.now()
     const data = await withTimeout(musicbrainzProvider.lookupArtistById(foreignArtistId), 15000)
     tracer.addStep(trace, 'lookupArtistById', Date.now() - startedAt, 'success')
+    const enrichedData = await tryEnrichArtistByIdData(data)
 
     const rankingStartTime = Date.now()
-    const { results: rankedResults } = rankResults(buildArtistLookupRankingInput(data.artistName || foreignArtistId, data))
+    const { results: rankedResults } = rankResults(buildArtistLookupRankingInput(enrichedData.artistName || foreignArtistId, enrichedData))
     const rankingTimeMs = Date.now() - rankingStartTime
     tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
 
@@ -505,7 +542,7 @@ async function handleArtistById (req, res) {
     const enrichedTopResult = await enrichResult(topResult, false)
     tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
 
-    const response = toSkyhookArtistResource(buildArtistLookupResponse(data, enrichedTopResult, rankedResults))
+    const response = toSkyhookArtistResource(buildArtistLookupResponse(enrichedData, enrichedTopResult, rankedResults))
 
     await cache.set(cacheKey, response, 86400 * 30)
     await cacheAlbumResponses(response.albums)

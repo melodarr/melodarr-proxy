@@ -25,6 +25,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   const controllerPath = require.resolve('./proxy.controller')
   const providersPath = require.resolve('../providers')
   const musicbrainzProviderPath = require.resolve('../providers/musicbrainz.provider')
+  const theAudioDbProviderPath = require.resolve('../providers/theaudiodb.provider')
   const cachePath = require.resolve('../cache')
   const metricsPath = require.resolve('../metrics')
   const tracerPath = require.resolve('../tracer')
@@ -39,6 +40,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   delete require.cache[controllerPath]
   delete require.cache[providersPath]
   delete require.cache[musicbrainzProviderPath]
+  delete require.cache[theAudioDbProviderPath]
   delete require.cache[cachePath]
   delete require.cache[metricsPath]
   delete require.cache[tracerPath]
@@ -98,6 +100,17 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     exports: {
       lookupArtistById: arguments[0]?.lookupArtistById || (async () => {
         throw new Error('lookupArtistById stub was not configured')
+      })
+    }
+  }
+
+  require.cache[theAudioDbProviderPath] = {
+    id: theAudioDbProviderPath,
+    filename: theAudioDbProviderPath,
+    loaded: true,
+    exports: {
+      searchArtistProfile: arguments[0]?.searchArtistProfile || (async () => {
+        throw new Error('searchArtistProfile stub was not configured')
       })
     }
   }
@@ -437,6 +450,50 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
   assert.equal(res.body.albums[0].id, 'rg-ok')
   assert.equal(res.body.albums[0].releaseDate, '1997-05-21T00:00:00Z')
   assert.equal(Object.prototype.hasOwnProperty.call(res.body.albums[0], 'firstReleaseDate'), false)
+})
+
+test('artist by id enriches missing artist images and preserves MusicBrainz album ratings before returning SkyHook metadata', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'Akon',
+      id,
+      disambiguation: '',
+      overview: '',
+      aliases: [],
+      artistAliases: [],
+      images: [],
+      albums: [{
+        name: 'Freedom',
+        releaseDate: '2008-11-30',
+        imageUrl: '',
+        provider: 'musicbrainz',
+        ids: { musicbrainzReleaseGroupId: 'rg-freedom' },
+        rating: { count: 42, value: 4.5 },
+        ratings: { votes: 42, value: 4.5 }
+      }],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 1 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    }),
+    searchArtistProfile: async () => ({
+      artistName: 'Akon',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/akon-thumb.jpg', remoteUrl: 'https://example.test/akon-thumb.jpg' },
+        { coverType: 'fanart', url: 'https://example.test/akon-fanart.jpg', remoteUrl: 'https://example.test/akon-fanart.jpg' },
+        { coverType: 'clearlogo', url: 'https://example.test/akon-logo.png', remoteUrl: 'https://example.test/akon-logo.png' }
+      ]
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'akon-id' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.images.map(image => image.coverType), ['poster', 'fanart', 'clearlogo'])
+  assert.deepEqual(res.body.albums[0].rating, { count: 42, value: 4.5 })
 })
 
 test('recent feed returns empty array for unsupported update feed', async () => {
