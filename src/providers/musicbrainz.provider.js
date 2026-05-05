@@ -37,6 +37,55 @@ class MusicBrainzProvider {
     }
   }
 
+  mapArtistCreditArtists (artistCredits = []) {
+    return (Array.isArray(artistCredits) ? artistCredits : [])
+      .map(credit => credit?.artist)
+      .filter(artist => artist?.id)
+      .map(artist => ({
+        id: artist.id,
+        foreignArtistId: artist.id,
+        artistName: artist.name || artist['sort-name'] || '',
+        aliases: [],
+        artistAliases: []
+      }))
+  }
+
+  mergeArtists (...artistGroups) {
+    const artists = []
+    const seen = new Set()
+
+    for (const group of artistGroups) {
+      for (const artist of group || []) {
+        if (!artist?.id || seen.has(artist.id)) {
+          continue
+        }
+
+        seen.add(artist.id)
+        artists.push(artist)
+      }
+    }
+
+    return artists
+  }
+
+  collectReleaseArtists (releaseResult = {}) {
+    const releases = Array.isArray(releaseResult.releases) ? releaseResult.releases : []
+    const artists = []
+
+    for (const release of releases) {
+      artists.push(...this.mapArtistCreditArtists(release['artist-credit']))
+
+      for (const medium of Array.isArray(release.media) ? release.media : []) {
+        for (const track of Array.isArray(medium.tracks) ? medium.tracks : []) {
+          artists.push(...this.mapArtistCreditArtists(track['artist-credit']))
+          artists.push(...this.mapArtistCreditArtists(track.recording?.['artist-credit']))
+        }
+      }
+    }
+
+    return this.mergeArtists(artists)
+  }
+
   mapReleaseTracks (media = [], fallbackArtistId = '') {
     const tracks = []
 
@@ -140,6 +189,10 @@ class MusicBrainzProvider {
           // MB returns YYYY, YYYY-MM, or YYYY-MM-DD. Preserve as-is; downstream
           // consumers can pad to full ISO for Lidarr compatibility.
           releaseDate: rawDate || null,
+          type: group['primary-type'] || 'Album',
+          albumType: group['primary-type'] || 'Album',
+          secondaryTypes: group['secondary-types'] || [],
+          releaseStatuses: ['Official'],
           imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
           rating,
           ratings: { votes: rating.count, value: rating.value },
@@ -197,6 +250,10 @@ class MusicBrainzProvider {
           name: group.title || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
           releaseDate: rawDate || null,
+          type: group['primary-type'] || 'Album',
+          albumType: group['primary-type'] || 'Album',
+          secondaryTypes: group['secondary-types'] || [],
+          releaseStatuses: ['Official'],
           imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
           rating,
           ratings: { votes: rating.count, value: rating.value },
@@ -238,11 +295,7 @@ class MusicBrainzProvider {
       throw err
     }
 
-    const artistCredit = Array.isArray(group['artist-credit'])
-      ? group['artist-credit'].find(credit => credit?.artist)?.artist
-      : null
-    const artistId = artistCredit?.id || ''
-    const artistName = artistCredit?.name || artistCredit?.['sort-name'] || ''
+    const groupArtists = this.mapArtistCreditArtists(group['artist-credit'])
     const rawDate = group['first-release-date'] || ''
     const releaseResult = await upstreamService.musicBrainzGet('/release', {
       'release-group': group.id || releaseGroupId,
@@ -250,6 +303,11 @@ class MusicBrainzProvider {
       limit: 10,
       offset: 0
     })
+    const releaseArtists = this.collectReleaseArtists(releaseResult)
+    const artists = this.mergeArtists(groupArtists, releaseArtists)
+    const primaryArtist = groupArtists[0] || releaseArtists[0] || null
+    const artistId = primaryArtist?.id || ''
+    const artistName = primaryArtist?.artistName || ''
     const releases = this.mapReleases(releaseResult, artistId)
     const rating = this.mapRating(group)
 
@@ -265,15 +323,7 @@ class MusicBrainzProvider {
         aliases: [],
         artistAliases: []
       },
-      artists: artistId
-        ? [{
-            id: artistId,
-            foreignArtistId: artistId,
-            artistName,
-            aliases: [],
-            artistAliases: []
-          }]
-        : [],
+      artists,
       releaseDate: rawDate || null,
       imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
       rating,
