@@ -2,6 +2,7 @@ FROM node:24-alpine AS base
 
 WORKDIR /app
 
+RUN npm install -g npm@11.13.0
 RUN corepack enable
 COPY package.json yarn.lock .yarnrc.yml ./
 
