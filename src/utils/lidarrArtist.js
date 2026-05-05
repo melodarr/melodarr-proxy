@@ -46,6 +46,24 @@ const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
   'albums'
 ])
 
+const LIDARR_OPTIONAL_ARTIST_KEYS = Object.freeze([
+  'qualityProfileId',
+  'metadataProfileId',
+  'monitored',
+  'monitorNewItems',
+  'folder',
+  'rootFolderPath',
+  'addOptions',
+  'ended',
+  'tags',
+  'genres',
+  'ratings',
+  'rating',
+  'path',
+  'cleanName',
+  'sortName'
+])
+
 function asString (value) {
   return value == null ? '' : String(value)
 }
@@ -268,8 +286,7 @@ function normalizeLidarrArtistResponse (value) {
 }
 
 function withArtistLookupDefaults (artist = {}) {
-  return {
-    ...artist,
+  const out = {
     artistName: asString(artist.artistName),
     id: asString(artist.id),
     foreignArtistId: asString(artist.foreignArtistId || artist.id),
@@ -281,11 +298,23 @@ function withArtistLookupDefaults (artist = {}) {
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums).map(normalizeAlbum)
   }
+
+  for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
+    if (key in artist) out[key] = artist[key]
+  }
+
+  if ('providers' in artist) out.providers = artist.providers
+  if ('partial' in artist) out.partial = artist.partial
+  if ('warning' in artist) out.warning = artist.warning
+  if ('schemaVersion' in artist) out.schemaVersion = artist.schemaVersion
+  if ('debug' in artist) out.debug = artist.debug
+  if ('_generatedAt' in artist) out._generatedAt = artist._generatedAt
+
+  return out
 }
 
 function withSkyhookArtistDefaults (artist = {}) {
-  return {
-    ...artist,
+  const out = {
     id: asString(artist.id),
     foreignArtistId: asString(artist.foreignArtistId || artist.id),
     artistName: asString(artist.artistName),
@@ -300,6 +329,19 @@ function withSkyhookArtistDefaults (artist = {}) {
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums).map(normalizeAlbum)
   }
+
+  for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
+    if (key in artist) out[key] = artist[key]
+  }
+
+  if ('providers' in artist) out.providers = artist.providers
+  if ('partial' in artist) out.partial = artist.partial
+  if ('warning' in artist) out.warning = artist.warning
+  if ('schemaVersion' in artist) out.schemaVersion = artist.schemaVersion
+  if ('debug' in artist) out.debug = artist.debug
+  if ('_generatedAt' in artist) out._generatedAt = artist._generatedAt
+
+  return out
 }
 
 module.exports = {
@@ -307,6 +349,7 @@ module.exports = {
   LIDARR_SKYHOOK_ARTIST_DEFAULTS,
   LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
+  LIDARR_OPTIONAL_ARTIST_KEYS,
   asString,
   normalizeAliases,
   normalizeAlbum,

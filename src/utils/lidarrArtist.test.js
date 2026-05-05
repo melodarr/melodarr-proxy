@@ -259,6 +259,27 @@ test('toSkyhookArtistResource emits only Lidarr ArtistResource fields', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(artist, '_generatedAt'), false)
 })
 
+test('toSkyhookArtistResource normalizes PascalCase links from Lidarr resources', () => {
+  const artist = toSkyhookArtistResource({
+    Id: 'mb-1',
+    ArtistName: 'Radiohead',
+    Links: [{ Url: 'https://radiohead.com', Name: 'official' }]
+  })
+
+  assert.deepEqual(artist.links, [{ target: 'https://radiohead.com', type: 'official' }])
+})
+
+test('withSkyhookArtistDefaults preserves Lidarr optional add fields when present', () => {
+  const artist = withSkyhookArtistDefaults({
+    artistName: 'Radiohead',
+    tags: [1],
+    rootFolderPath: '/mnt/shared/Music'
+  })
+
+  assert.deepEqual(artist.tags, [1])
+  assert.equal(artist.rootFolderPath, '/mnt/shared/Music')
+})
+
 test('toSkyhookAlbumResource emits only Lidarr AlbumResource fields', () => {
   const album = toSkyhookAlbumResource({
     id: 'rg-1',

@@ -29,6 +29,9 @@ jobs:
       - name: Test
         run: yarn test
 
+      - name: Run coverage
+        run: yarn test:coverage:check
+
       - name: Install Melodash dependencies
         working-directory: melodash
         run: yarn install --immutable
