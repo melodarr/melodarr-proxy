@@ -459,6 +459,16 @@ test('release search returns empty candidate list when no indexer backend is con
   assert.deepEqual(res.body, [])
 })
 
+test('queue details returns empty queue list when no runtime queue backend is configured', async () => {
+  const { controller } = loadController()
+  const res = makeResponse()
+
+  await controller.handleQueueDetails({ query: { artistId: '700' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
+})
+
 // handleSearch tests
 test('handleSearch requires a query parameter', async () => {
   const { controller } = loadController()
