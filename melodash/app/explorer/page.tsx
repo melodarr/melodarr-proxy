@@ -696,7 +696,16 @@ export default function ExplorerPage() {
                     <p className="col-span-full text-sm text-gray-500">No releases found for this artist.</p>
                   ) : artistAlbums.map((album, index) => (
                     <article key={`${album.id || album.title}-${index}`} className="rounded-lg border border-border/60 bg-background/40 p-3">
-                      <AlbumArtwork album={album} onOpen={album.imageUrl ? () => openLightbox(albumLightboxImages, albumLightboxImages.findIndex((image) => image.url === album.imageUrl)) : undefined} />
+                      <AlbumArtwork
+                        album={album}
+                        onOpen={album.imageUrl ? () => {
+                          const imageIndex = albumLightboxImages.findIndex((image) => image.url === album.imageUrl);
+
+                          if (imageIndex !== -1) {
+                            openLightbox(albumLightboxImages, imageIndex);
+                          }
+                        } : undefined}
+                      />
                       <div className="mt-3 min-w-0 space-y-2">
                         <div className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-gray-100">{album.title}</div>
                         <div className="flex items-center justify-between gap-2">
