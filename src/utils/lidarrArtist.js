@@ -46,6 +46,23 @@ const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
   'albums'
 ])
 
+const SKYHOOK_ARTIST_RESOURCE_KEYS = Object.freeze([
+  'genres',
+  'artistUrl',
+  'overview',
+  'type',
+  'disambiguation',
+  'id',
+  'oldIds',
+  'images',
+  'links',
+  'artistName',
+  'artistAliases',
+  'albums',
+  'status',
+  'rating'
+])
+
 const LIDARR_OPTIONAL_ARTIST_KEYS = Object.freeze([
   'qualityProfileId',
   'metadataProfileId',
@@ -62,6 +79,76 @@ const LIDARR_OPTIONAL_ARTIST_KEYS = Object.freeze([
   'path',
   'cleanName',
   'sortName'
+])
+
+const SKYHOOK_ALBUM_REQUIRED_KEYS = Object.freeze([
+  'artistId',
+  'artists',
+  'disambiguation',
+  'overview',
+  'id',
+  'oldIds',
+  'images',
+  'links',
+  'genres',
+  'rating',
+  'releaseDate',
+  'releases',
+  'secondaryTypes',
+  'title',
+  'type',
+  'releaseStatuses'
+])
+
+const SKYHOOK_RELEASE_REQUIRED_KEYS = Object.freeze([
+  'disambiguation',
+  'country',
+  'releaseDate',
+  'id',
+  'oldIds',
+  'label',
+  'media',
+  'title',
+  'status',
+  'trackCount',
+  'tracks'
+])
+
+const SKYHOOK_TRACK_REQUIRED_KEYS = Object.freeze([
+  'artistId',
+  'durationMs',
+  'id',
+  'oldIds',
+  'recordingId',
+  'oldRecordingIds',
+  'trackName',
+  'trackNumber',
+  'trackPosition',
+  'explicit',
+  'mediumNumber'
+])
+
+const SKYHOOK_MEDIUM_REQUIRED_KEYS = Object.freeze([
+  'name',
+  'format',
+  'position'
+])
+
+const SKYHOOK_IMAGE_REQUIRED_KEYS = Object.freeze([
+  'coverType',
+  'url',
+  'height',
+  'width'
+])
+
+const SKYHOOK_LINK_REQUIRED_KEYS = Object.freeze([
+  'target',
+  'type'
+])
+
+const SKYHOOK_RATING_REQUIRED_KEYS = Object.freeze([
+  'count',
+  'value'
 ])
 
 function asString (value) {
@@ -350,6 +437,14 @@ module.exports = {
   LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   LIDARR_OPTIONAL_ARTIST_KEYS,
+  SKYHOOK_ARTIST_RESOURCE_KEYS,
+  SKYHOOK_ALBUM_REQUIRED_KEYS,
+  SKYHOOK_RELEASE_REQUIRED_KEYS,
+  SKYHOOK_TRACK_REQUIRED_KEYS,
+  SKYHOOK_MEDIUM_REQUIRED_KEYS,
+  SKYHOOK_IMAGE_REQUIRED_KEYS,
+  SKYHOOK_LINK_REQUIRED_KEYS,
+  SKYHOOK_RATING_REQUIRED_KEYS,
   asString,
   normalizeAliases,
   normalizeAlbum,
