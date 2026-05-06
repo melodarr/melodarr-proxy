@@ -36,7 +36,7 @@ async function processQueue () {
   isProcessingQueue = true
 
   try {
-    const minInterval = getConfigValue('minRequestIntervalMs') || 1100
+    const minInterval = getConfigValue('minRequestIntervalMs') ?? 1100
     // Arbitrary concurrency limit of 3 for upstream
     const maxConcurrency = 3
 
