@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetcher";
-import { Braces, ChevronLeft, ChevronRight, Disc3, Grid2X2, Loader2, Music2, Search, UserRound, X } from "lucide-react";
+import { Braces, ChevronLeft, ChevronRight, Disc3, Grid2X2, Loader2, Music2, Search, Star, UserRound, X } from "lucide-react";
 
 type SearchMode = "artist" | "song" | "album" | "artistSong";
 type ImageTab = "albums" | "artist" | "debug";
@@ -70,6 +70,10 @@ type AlbumCard = {
   imageUrl?: string;
   provider?: string;
   id?: string;
+  rating?: {
+    count: number;
+    value: number;
+  };
 };
 
 type ArtistPreview = {
@@ -206,9 +210,45 @@ function getArtistAlbums(result: any): AlbumCard[] {
       year: album?.year || album?.firstReleaseDate || null,
       imageUrl: album?.imageUrl || album?.coverUrl || "",
       provider: album?.provider || "",
+      rating: normalizeAlbumRating(album),
       id,
     };
   });
+}
+
+function normalizeAlbumRating(album: any): { count: number; value: number } {
+  const rating = album?.rating || album?.ratings || {};
+  return {
+    count: Number(rating.count ?? rating.votes ?? 0) || 0,
+    value: Number(rating.value ?? 0) || 0,
+  };
+}
+
+function AlbumRating({ rating }: { rating?: { count: number; value: number } }) {
+  const value = Number(rating?.value ?? 0) || 0;
+  const count = Number(rating?.count ?? 0) || 0;
+  const rounded = Math.max(0, Math.min(5, Math.round(value)));
+
+  return (
+    <div className="space-y-1" aria-label={`Rating ${value > 0 ? `${value.toFixed(1)} out of 5` : "unrated"}`}>
+      <div className="flex items-center gap-1">
+        {Array.from({ length: 5 }).map((_, index) => {
+          const filled = index < rounded;
+
+          return (
+            <Star
+              key={index}
+              className={`h-4 w-4 ${filled ? "fill-amber-400 text-amber-400" : "text-gray-700"}`}
+            />
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-gray-300">{value > 0 ? value.toFixed(1) : "--"} <span className="text-gray-600">/ 5</span></span>
+        <span className="text-gray-600">{count === 1 ? "1 vote" : count > 0 ? `${count} votes` : "No votes"}</span>
+      </div>
+    </div>
+  );
 }
 
 function getAlbumLightboxImages(albums: AlbumCard[]): LightboxImage[] {
@@ -716,6 +756,7 @@ export default function ExplorerPage() {
                           <span className="text-xs text-gray-500">{album.year || "--"}</span>
                           <ProviderPill provider={album.provider} />
                         </div>
+                        <AlbumRating rating={album.rating} />
                         {album.id && <div className="truncate text-[11px] text-gray-600">{album.id}</div>}
                       </div>
                     </article>
