@@ -443,7 +443,11 @@ export default function ExplorerPage() {
 
     try {
       if (mode === "artist") {
-        await inspectArtist(query.trim());
+        const result = await fetchJson<DiscoverResult>(`/debug/discover?type=artist&q=${encodeURIComponent(query.trim())}`);
+        setDiscoverResult(result);
+        if (result.candidates[0]?.artistName) {
+          await inspectArtist(result.candidates[0].artistName);
+        }
       } else if (mode === "artistSong") {
         const result = await fetchJson<SongAlbumResult>(
           `/debug/song-albums?artist=${encodeURIComponent(artistQuery.trim())}&song=${encodeURIComponent(query.trim())}`
@@ -529,7 +533,7 @@ export default function ExplorerPage() {
           </div>
           <button className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-50" disabled={loading || lookupLoading || !queryRequired}>
             {loading || lookupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            {mode === "artist" ? "Inspect artist" : mode === "artistSong" ? "Find albums" : "Find artist"}
+            {mode === "artistSong" ? "Find albums" : "Find artist"}
           </button>
         </div>
       </form>
@@ -538,7 +542,7 @@ export default function ExplorerPage() {
 
       {discoverResult && (
         <section className="rounded-lg border border-border/60 bg-card p-6">
-          <h2 className="font-semibold">Artist candidates from {discoverResult.type}</h2>
+          <h2 className="font-semibold">{discoverResult.type === "artist" ? "Artist matches" : `Artist candidates from ${discoverResult.type}`}</h2>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {discoverResult.candidates.length === 0 ? (
               <p className="text-sm text-gray-500">No artist candidates found.</p>
