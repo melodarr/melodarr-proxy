@@ -7,7 +7,7 @@ All notable changes to Melodarr Proxy will be documented here.
 - **Production Hardening & Reliability:** Introduced robust traffic control and stability mechanisms.
 - **Global Concurrency Limiter:** Added new middleware to restrict maximum simultaneous inflight requests (`MAX_CONCURRENT_REQUESTS=20` default). Returns `503 Service Unavailable` with a descriptive message if the server is saturated.
 - **Global Rate Limiter:** Added IP-based global rate limiting (`GLOBAL_RATE_LIMIT_MAX=500` default over a 60s window) to prevent abusive scraping across endpoints.
-- **Strict Server Timeouts:** Implemented strict HTTP request and response timeouts (`SERVER_TIMEOUT_MS=15000` default) at the app level. Disconnects hung clients (408 Request Timeout) and stops runaway server processing (504 Gateway Timeout).
+- **Strict Server Timeouts:** Implemented strict HTTP request and response timeouts (`SERVER_TIMEOUT_MS=15000` default) at the app level. Disconnects hung clients (408 Request Timeout) and returns `504 Gateway Timeout` when server-side processing exceeds the configured deadline; this enforces response deadlines but does not by itself imply automatic cancellation of already-started upstream work.
 - **Upstream Connection Pooling & Queuing:** Overhauled `upstream.service.js` with an asynchronous waiting queue (max 3 concurrent outbound requests) and global interval pacing. Protects upstream APIs from being blasted by parallel proxy requests.
 - **Configuration Overhaul:** All new limits are exposed via environment variables and overrideable dynamically at runtime via the Settings API.
 - **Linting & Code Quality:** Resolved lingering `standard` lint errors across multiple files including `server.js`, `upstream.service.js`, and `startupValidator`.
