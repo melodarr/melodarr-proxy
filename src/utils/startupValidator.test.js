@@ -1,5 +1,5 @@
 const { describe, it, mock, beforeEach, afterEach } = require('node:test')
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { validateStartup } = require('./startupValidator')
 const store = require('../settings/store')
 const logger = require('./logger')
