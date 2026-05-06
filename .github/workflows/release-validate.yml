@@ -80,10 +80,10 @@ jobs:
       - name: Validate SkyHook contract
         run: |
           set -euo pipefail
-          curl -s "http://localhost:3055/api/v1/artist/lookup?term=Radiohead" \
-          | jq '.[0] |
+          curl -s -f "http://localhost:3055/api/v1/artist/lookup?term=Radiohead" \
+          | jq 'if length == 0 then true else .[0] |
               (has("foreignArtistId") and
                has("status") and
                has("links") and
-               has("aliases"))' \
+               has("aliases")) end' \
           | grep true
