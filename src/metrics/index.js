@@ -355,7 +355,10 @@ class MetricsManager extends EventEmitter {
       lidarr: {
         addShapeFailures: this.stats.lidarr.addShapeFailures
       },
-      aggregation: this.stats.aggregation,
+      aggregation: {
+        total: this.stats.aggregation.full + this.stats.aggregation.partial + this.stats.aggregation.empty,
+        ...this.stats.aggregation
+      },
       providerFallbacks: {
         fallbacks: this.stats.providers.fallbacks,
         exhaustions: this.stats.providers.exhaustions

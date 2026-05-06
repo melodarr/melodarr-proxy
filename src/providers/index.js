@@ -89,7 +89,7 @@ async function aggregateArtist (term) {
         return { provider: provider.name, result }
       } catch (error) {
         const duration = Date.now() - pStartTime
-        const isTimeout = error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')
+        const isTimeout = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.message?.toLowerCase().includes('timeout') || error.message?.toLowerCase().includes('timed out')
 
         if (isTimeout) {
           logger.error(`Provider timeout [${provider.name}]`, { event: 'provider_timeout', provider: provider.name, duration })
