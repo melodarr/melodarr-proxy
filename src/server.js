@@ -51,7 +51,6 @@ const storeSettings = require('./settings/store')
 const globalRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: () => storeSettings.getConfigValue('globalRateLimitMax') || 500,
-  keyGenerator: () => 'global',
   message: 'Server is currently overloaded, please try again later.'
 })
 const concurrencyLimit = require('./middleware/concurrency.middleware')
