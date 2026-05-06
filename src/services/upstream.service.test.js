@@ -340,7 +340,7 @@ test('Upstream Service', async (t) => {
 
     const upstreamService = require('./upstream.service')
 
-    // Fill all 3 concurrent upstream slots with blocking requests
+    // Fill all 3 concurrent upstream slots (maxConcurrency hardcoded to 3 in upstream.service.js)
     const req1 = upstreamService.search('a').catch(() => {})
     const req2 = upstreamService.search('b').catch(() => {})
     const req3 = upstreamService.search('c').catch(() => {})
