@@ -24,8 +24,17 @@ function validateStartup () {
 
   // Validate provider configs
   const musicbrainzBaseUrl = store.getConfigValue('musicbrainzBaseUrl')
-  if (!musicbrainzBaseUrl || typeof musicbrainzBaseUrl !== 'string' || !musicbrainzBaseUrl.startsWith('http')) {
+  if (!musicbrainzBaseUrl || typeof musicbrainzBaseUrl !== 'string') {
     errors.push('Invalid musicbrainzBaseUrl configuration (must be a valid HTTP URL).')
+  } else {
+    try {
+      const parsedMusicbrainzBaseUrl = new URL(musicbrainzBaseUrl)
+      if (parsedMusicbrainzBaseUrl.protocol !== 'http:' && parsedMusicbrainzBaseUrl.protocol !== 'https:') {
+        errors.push('Invalid musicbrainzBaseUrl configuration (must be a valid HTTP URL).')
+      }
+    } catch (err) {
+      errors.push('Invalid musicbrainzBaseUrl configuration (must be a valid HTTP URL).')
+    }
   }
 
   // Validate Redis configuration
