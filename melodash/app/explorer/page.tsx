@@ -74,6 +74,12 @@ type AlbumCard = {
     count: number;
     value: number;
   };
+  trackCount?: number;
+  tracks?: Array<{
+    trackName: string;
+    durationMs?: number;
+    trackNumber?: string;
+  }>;
 };
 
 type ArtistPreview = {
@@ -205,6 +211,10 @@ function getArtistAlbums(result: any): AlbumCard[] {
     const ids = album?.ids || {};
     const id = ids.musicbrainzReleaseGroupId || ids.theAudioDbAlbumId || ids.itunesCollectionId || ids.discogsId || ids.musicbrainzAlbumId || album?.id || "";
 
+    const firstRelease = Array.isArray(album?.releases) ? album.releases[0] : null;
+    const tracks = Array.isArray(firstRelease?.tracks) ? firstRelease.tracks : [];
+    const trackCount = firstRelease?.trackCount || tracks.length || 0;
+
     return {
       title: album?.name || album?.title || "Untitled",
       year: album?.year || album?.firstReleaseDate || null,
@@ -212,6 +222,12 @@ function getArtistAlbums(result: any): AlbumCard[] {
       provider: album?.provider || "",
       rating: normalizeAlbumRating(album),
       id,
+      trackCount,
+      tracks: tracks.map((t: any) => ({
+        trackName: t.trackName || t.title || "Unknown Track",
+        durationMs: t.durationMs || t.duration,
+        trackNumber: t.trackNumber,
+      }))
     };
   });
 }
@@ -753,11 +769,34 @@ export default function ExplorerPage() {
                       <div className="mt-3 min-w-0 space-y-2">
                         <div className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-gray-100">{album.title}</div>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-gray-500">{album.year || "--"}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{album.year || "--"}</span>
+                            {album.trackCount ? <span className="text-xs text-gray-500">&bull; {album.trackCount} tracks</span> : null}
+                          </div>
                           <ProviderPill provider={album.provider} />
                         </div>
                         <AlbumRating rating={album.rating} />
                         {album.id && <div className="truncate text-[11px] text-gray-600">{album.id}</div>}
+                        {album.tracks && album.tracks.length > 0 ? (
+                          <details className="text-xs text-gray-400 group/details mt-2">
+                            <summary className="cursor-pointer hover:text-gray-200 list-none flex items-center justify-between border-t border-border/40 pt-2">
+                              <span>Tracklist</span>
+                              <ChevronRight className="h-3 w-3 transition-transform group-open/details:rotate-90" />
+                            </summary>
+                            <ol className="mt-2 space-y-1 max-h-40 overflow-y-auto pl-1 pr-2 pb-1 custom-scrollbar">
+                              {album.tracks.map((t, i) => (
+                                <li key={i} className="flex justify-between gap-2 border-b border-white/5 pb-1 last:border-0 last:pb-0">
+                                  <span className="truncate">{t.trackNumber ? `${t.trackNumber}. ` : ""}{t.trackName}</span>
+                                  {t.durationMs ? <span className="shrink-0 text-gray-500">{formatDuration(t.durationMs / 1000)}</span> : null}
+                                </li>
+                              ))}
+                            </ol>
+                          </details>
+                        ) : (
+                          <div className="mt-2 border-t border-border/40 pt-2 text-xs text-gray-500">
+                            No track data available
+                          </div>
+                        )}
                       </div>
                     </article>
                   ))}

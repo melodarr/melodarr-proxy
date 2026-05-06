@@ -9,7 +9,11 @@ function setupMocks (providersStr, providersMocks) {
 
   require.cache[require.resolve('../settings/store')] = {
     exports: {
-      getConfigValue: (key) => key === 'metadataProviders' ? providersStr : 'dummy'
+      getConfigValue: (key) => {
+        if (key === 'metadataProviders') return providersStr
+        if (key === 'upstreamTimeoutMs') return 8000
+        return 'dummy'
+      }
     }
   }
 
@@ -58,20 +62,7 @@ test('Provider Resilience & Integration Hardening', async (t) => {
     const { safeProviderCall, health } = setupMocks('', { failing_load: failingProvider })
     health.reset()
 
-    // FAILURE_THRESHOLD is 3 by default
     const loadCalls = 10
-    const results = await Promise.allSettled(
-      Array.from({ length: loadCalls }).map(() =>
-        safeProviderCall('failing_load', failingProvider.searchArtist, 'Radiohead')
-      )
-    )
-
-    // Verify it was actually called 3 times and then the circuit breaker opened for the rest
-    // Wait, Promise.allSettled might execute concurrently and trigger multiple failures before
-    // the threshold is reached or exceeded if they all fire at once.
-    // Let's run them sequentially to guarantee state transitions.
-    health.reset()
-    callCount = 0
     const sequentialResults = []
     for (let i = 0; i < loadCalls; i++) {
       try {
@@ -83,7 +74,7 @@ test('Provider Resilience & Integration Hardening', async (t) => {
     }
 
     assert.equal(callCount, 3, 'Provider should only be called exactly up to the failure threshold')
-    
+
     // First 3 should throw the actual error, the rest should return null (skipped)
     for (let i = 0; i < 3; i++) {
       assert.equal(sequentialResults[i].status, 'rejected')
@@ -93,7 +84,7 @@ test('Provider Resilience & Integration Hardening', async (t) => {
       assert.equal(sequentialResults[i].status, 'fulfilled')
       assert.equal(sequentialResults[i].value, null, 'Skipped call returns null')
     }
-    
+
     assert.equal(health.get('failing_load').status, 'disabled')
   })
 
@@ -122,7 +113,7 @@ test('Provider Resilience & Integration Hardening', async (t) => {
     assert.equal(result.providerCount, 1, 'Only 1 provider succeeded')
     assert.equal(result.artistName, 'Radiohead')
     assert.equal(result.albums.length, 1)
-    
+
     assert.equal(health.get('musicbrainz').status, 'healthy')
     assert.equal(health.get('lastfm').failures, 1)
   })
@@ -148,7 +139,7 @@ test('Provider Resilience & Integration Hardening', async (t) => {
     assert.equal(result.partial, true)
     assert.equal(result.providerCount, 1)
     assert.equal(result.artistName, 'Radiohead')
-    
+
     assert.equal(health.get('itunes').failures, 1, 'Malformed data should record a health failure')
   })
 
@@ -174,7 +165,7 @@ test('Provider Resilience & Integration Hardening', async (t) => {
       musicbrainz: slowHighScoring,
       lastfm: fastLowScoring
     })
-    
+
     // Force specific scores to ensure determinism regardless of metrics
     require.cache[require.resolve('../providers/scoring')] = {
       exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
@@ -186,11 +177,88 @@ test('Provider Resilience & Integration Hardening', async (t) => {
     assert.equal(result.partial, false)
     assert.equal(result.providerCount, 2)
     assert.equal(result.albums.length, 1, 'Albums should merge into one')
-    
+
     // musicbrainz score is higher, so its 'year' and ID identity should win if names match fuzzily
     assert.ok(result.albums[0].ids.mb)
     assert.ok(result.albums[0].ids.lfm)
     assert.equal(result.albums[0].year, 1997)
     assert.equal(result.albums[0].releaseDate, '1997-05-21', 'Should keep more precise date from fast provider')
+  })
+
+  await t.test('aggregateArtist throws when complete upstream outage occurs', async () => {
+    const offlineProvider1 = {
+      name: 'musicbrainz',
+      searchArtist: async () => { throw new Error('ECONNREFUSED') }
+    }
+    const offlineProvider2 = {
+      name: 'itunes',
+      searchArtist: async () => { throw new Error('ECONNREFUSED') }
+    }
+
+    const { index, health } = setupMocks('musicbrainz,itunes', {
+      musicbrainz: offlineProvider1,
+      itunes: offlineProvider2
+    })
+    health.reset()
+
+    await assert.rejects(
+      index.aggregateArtist('Radiohead'),
+      /All metadata providers failed/
+    )
+
+    assert.equal(health.get('musicbrainz').failures, 1)
+    assert.equal(health.get('itunes').failures, 1)
+  })
+
+  await t.test('aggregateArtist handles partial failure (empty response) gracefully', async () => {
+    const successProvider = {
+      name: 'musicbrainz',
+      searchArtist: async () => ({ artistName: 'Radiohead', albums: [{ name: 'OK Computer' }] })
+    }
+    const emptyProvider = {
+      name: 'lastfm',
+      searchArtist: async () => null // Simulating an empty/null response
+    }
+
+    const { index, health } = setupMocks('musicbrainz,lastfm', {
+      musicbrainz: successProvider,
+      lastfm: emptyProvider
+    })
+    health.reset()
+
+    const result = await index.aggregateArtist('Radiohead')
+
+    assert.equal(result.partial, true, 'Result should be partial since lastfm returned empty/invalid shape')
+    assert.equal(result.providerCount, 1)
+    assert.equal(result.artistName, 'Radiohead')
+    assert.equal(health.get('lastfm').failures, 1, 'Empty response is recorded as a failure (invalid shape)')
+  })
+
+  await t.test('aggregateArtist handles partial failure (rate limiting 429) gracefully', async () => {
+    const successProvider = {
+      name: 'musicbrainz',
+      searchArtist: async () => ({ artistName: 'Radiohead', albums: [{ name: 'OK Computer' }] })
+    }
+    const rateLimitedProvider = {
+      name: 'lastfm',
+      searchArtist: async () => {
+        const err = new Error('Rate Limited')
+        err.response = { status: 429 }
+        throw err
+      }
+    }
+
+    const { index, health } = setupMocks('musicbrainz,lastfm', {
+      musicbrainz: successProvider,
+      lastfm: rateLimitedProvider
+    })
+    health.reset()
+
+    const result = await index.aggregateArtist('Radiohead')
+
+    assert.equal(result.partial, true, 'Result should be partial since lastfm threw a 429 error')
+    assert.equal(result.providerCount, 1)
+    assert.equal(result.artistName, 'Radiohead')
+    assert.equal(health.get('lastfm').failures, 1, '429 records a health failure to trip circuit breaker')
   })
 })

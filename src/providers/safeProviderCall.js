@@ -26,6 +26,7 @@
 const health = require('../health/providerHealth')
 const metrics = require('../health/providerMetrics')
 const globalMetrics = require('../metrics')
+const { getConfigValue } = require('../settings/store')
 
 function isValidItem (item) {
   if (!item || typeof item !== 'object') return false
@@ -49,7 +50,21 @@ async function safeProviderCall (name, fn, query) {
 
   const start = Date.now()
   try {
-    const result = await fn(query)
+    const timeoutMs = getConfigValue('upstreamTimeoutMs') || 8000
+    let timeoutId
+    const timeoutPromise = new Promise((_resolve, reject) => {
+      timeoutId = setTimeout(() => {
+        const err = new Error(`Provider ${name} timed out after ${timeoutMs}ms`)
+        err.code = 'ETIMEDOUT'
+        reject(err)
+      }, timeoutMs)
+    })
+
+    const result = await Promise.race([
+      fn(query),
+      timeoutPromise
+    ]).finally(() => clearTimeout(timeoutId))
+
     const latency = Date.now() - start
 
     if (Array.isArray(result)) {

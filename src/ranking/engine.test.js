@@ -49,8 +49,8 @@ test('case-insensitive match scores lower than exact', () => {
     ]
   }
   const { results } = rankResults(input)
-  // textMatch = 0.9 → score = 0.9 * 0.4 = 0.36
-  assert.equal(results[0].score, 0.36)
+  // textMatch = 0.9 → score = 0.9 * 0.4 = 0.36, plus 0.5 boost, minus 0.03 penalty = 0.83
+  assert.equal(results[0].score, 0.83)
 })
 
 test('partial substring match gives textMatch 0.6', () => {
@@ -61,8 +61,8 @@ test('partial substring match gives textMatch 0.6', () => {
     ]
   }
   const { results } = rankResults(input)
-  // textMatch = 0.6 → score = 0.6 * 0.4 = 0.24
-  assert.equal(results[0].score, 0.24)
+  // textMatch = 0.6 → score = 0.6 * 0.4 = 0.24, minus 0.03 penalty = 0.21
+  assert.equal(results[0].score, 0.21)
 })
 
 test('shared-word match gives textMatch 0.3', () => {
@@ -74,8 +74,8 @@ test('shared-word match gives textMatch 0.3', () => {
   }
   const { results } = rankResults(input)
   // qWords=['the','beatles'], aWords=['the','kinks'] → 'the' matches → 0.3
-  // score = 0.3 * 0.4 = 0.12
-  assert.equal(results[0].score, 0.12)
+  // score = 0.3 * 0.4 = 0.12, minus 0.03 penalty = 0.09
+  assert.equal(results[0].score, 0.09)
 })
 
 test('no matching words yields textMatch 0.0', () => {
@@ -86,7 +86,7 @@ test('no matching words yields textMatch 0.0', () => {
     ]
   }
   const { results } = rankResults(input)
-  assert.equal(results[0].score, 0)
+  assert.equal(results[0].score, -0.03)
 })
 
 test('empty query or empty artistName yields textMatch 0.0', () => {
@@ -97,7 +97,7 @@ test('empty query or empty artistName yields textMatch 0.0', () => {
     ]
   }
   const { results } = rankResults(input)
-  assert.equal(results[0].score, 0)
+  assert.equal(results[0].score, -0.03)
 })
 
 // ── Sorting ───────────────────────────────────────────────────────
@@ -298,8 +298,8 @@ test('non-numeric confidence defaults to 0', () => {
     ]
   }
   const { results } = rankResults(input)
-  // confidence treated as 0 → score = 1.0*0.4 + 0*0.3 + 0*0.2 + 0*0.1 = 0.4
-  assert.equal(results[0].score, 0.4)
+  // confidence treated as 0 → score = 1.0*0.4 + 0*0.3 + 0*0.2 - 0.03 + 0.5 boost = 0.87
+  assert.equal(results[0].score, 0.87)
 })
 
 test('missing providerSources defaults providerCount to 1', () => {

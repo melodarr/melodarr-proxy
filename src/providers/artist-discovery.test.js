@@ -2,9 +2,11 @@ const test = require('node:test')
 const assert = require('node:assert')
 
 function setupMocks ({ providers = 'musicbrainz,itunes,theaudiodb,discogs' } = {}) {
+  require('../health/providerHealth').reset()
   delete require.cache[require.resolve('./artist-discovery')]
   delete require.cache[require.resolve('./theaudiodb.provider')]
   delete require.cache[require.resolve('./discogs.provider')]
+  delete require.cache[require.resolve('./safeProviderCall')]
 
   let musicBrainzGetMock = async () => ({})
   let axiosGetMock = async () => ({ data: {} })

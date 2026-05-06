@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 
 // Mock providerHealth and providerMetrics with controllable state so we
 // can assert exactly what safeProviderCall recorded for each scenario.
-function loadSafeCall ({ shouldUseValue = true } = {}) {
+function loadSafeCall ({ shouldUseValue = true, timeoutMs = 8000 } = {}) {
   const healthCalls = { recordSuccess: [], recordFailure: [] }
   const metricsCalls = []
 
@@ -18,6 +18,11 @@ function loadSafeCall ({ shouldUseValue = true } = {}) {
   require.cache[require.resolve('../health/providerMetrics')] = {
     exports: {
       record: (name, success, latency) => { metricsCalls.push({ name, success, latency }) }
+    }
+  }
+  require.cache[require.resolve('../settings/store')] = {
+    exports: {
+      getConfigValue: (key) => key === 'upstreamTimeoutMs' ? timeoutMs : undefined
     }
   }
 
@@ -154,4 +159,18 @@ test('safeProviderCall — INVALID_SHAPE failure is recorded exactly once (no do
   await assert.rejects(safeProviderCall('mb', async () => null, 'q'))
   assert.equal(healthCalls.recordFailure.length, 1, 'health.recordFailure called exactly once')
   assert.equal(metricsCalls.length, 1, 'metrics.record called exactly once')
+})
+
+test('safeProviderCall — respects upstreamTimeoutMs config and times out', async () => {
+  const { safeProviderCall, healthCalls, metricsCalls } = loadSafeCall({ timeoutMs: 50 })
+  const slowFn = () => new Promise(resolve => setTimeout(() => resolve({ albums: [] }), 200))
+
+  await assert.rejects(
+    safeProviderCall('mb', slowFn, 'q'),
+    (err) => err.code === 'ETIMEDOUT'
+  )
+  assert.equal(healthCalls.recordFailure.length, 1)
+  assert.match(healthCalls.recordFailure[0].err, /timed out after 50ms/)
+  assert.equal(metricsCalls.length, 1)
+  assert.equal(metricsCalls[0].success, false)
 })
