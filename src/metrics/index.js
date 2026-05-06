@@ -10,10 +10,11 @@ class MetricsManager extends EventEmitter {
     }
 
     this.stats = {
-      requests: { total: 0 },
+      requests: { total: 0, successes: 0, failures: 0, byEndpoint: {} },
       cache: { hits: 0, misses: 0, staleHits: 0 },
       errors: { count: 0 },
       locks: { waitEvents: 0, totalWaitMs: 0, maxWaitMs: 0 },
+      aggregation: { full: 0, partial: 0, empty: 0 },
       lidarr: { addShapeFailures: 0 },
       artistLookup: {
         total: 0,
@@ -72,8 +73,25 @@ class MetricsManager extends EventEmitter {
     if (this.snapshotInterval.unref) this.snapshotInterval.unref()
   }
 
-  recordRequest () {
+  recordRequest ({ endpoint = 'unknown', success = true } = {}) {
     this.stats.requests.total++
+    if (success) {
+      this.stats.requests.successes++
+    } else {
+      this.stats.requests.failures++
+    }
+
+    if (endpoint) {
+      if (!this.stats.requests.byEndpoint[endpoint]) {
+        this.stats.requests.byEndpoint[endpoint] = { total: 0, successes: 0, failures: 0 }
+      }
+      this.stats.requests.byEndpoint[endpoint].total++
+      if (success) {
+        this.stats.requests.byEndpoint[endpoint].successes++
+      } else {
+        this.stats.requests.byEndpoint[endpoint].failures++
+      }
+    }
 
     const now = Date.now()
     this.requestTimestamps.push(now)
@@ -165,6 +183,12 @@ class MetricsManager extends EventEmitter {
     this.stats.lidarr.addShapeFailures++
   }
 
+  recordAggregation (type) {
+    if (this.stats.aggregation[type] !== undefined) {
+      this.stats.aggregation[type]++
+    }
+  }
+
   recordLatency (ms) {
     this.latencySamples.push(ms)
     if (this.latencySamples.length > this.maxLatencySamples) {
@@ -242,14 +266,15 @@ class MetricsManager extends EventEmitter {
     return { avgMs: avg, p95Ms: p95 }
   }
 
-  recordProviderCall (providerName, success, latencyMs) {
+  recordProviderCall (providerName, success, latencyMs, isTimeout = false) {
     if (!this.providerStats.has(providerName)) {
-      this.providerStats.set(providerName, { calls: 0, errors: 0, totalLatency: 0 })
+      this.providerStats.set(providerName, { calls: 0, errors: 0, timeouts: 0, totalLatency: 0 })
     }
     const stats = this.providerStats.get(providerName)
     stats.calls++
     if (!success) {
       stats.errors++
+      if (isTimeout) stats.timeouts++
     }
     stats.totalLatency += latencyMs
   }
@@ -266,6 +291,7 @@ class MetricsManager extends EventEmitter {
       providers[name] = {
         calls: pStats.calls,
         errors: pStats.errors,
+        timeouts: pStats.timeouts || 0,
         avgLatencyMs: pStats.calls > 0 ? Math.round(pStats.totalLatency / pStats.calls) : 0,
         errorRate: pStats.calls > 0 ? Number((pStats.errors / pStats.calls).toFixed(4)) : 0
       }
@@ -290,7 +316,10 @@ class MetricsManager extends EventEmitter {
       },
       requests: {
         total: this.stats.requests.total,
-        perMinute: this.getRPM()
+        successes: this.stats.requests.successes,
+        failures: this.stats.requests.failures,
+        perMinute: this.getRPM(),
+        byEndpoint: this.stats.requests.byEndpoint
       },
       cache: {
         hits: this.stats.cache.hits,
@@ -325,6 +354,10 @@ class MetricsManager extends EventEmitter {
       },
       lidarr: {
         addShapeFailures: this.stats.lidarr.addShapeFailures
+      },
+      aggregation: {
+        total: this.stats.aggregation.full + this.stats.aggregation.partial + this.stats.aggregation.empty,
+        ...this.stats.aggregation
       },
       providerFallbacks: {
         fallbacks: this.stats.providers.fallbacks,

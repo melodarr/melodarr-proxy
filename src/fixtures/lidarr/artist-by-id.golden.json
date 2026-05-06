@@ -1,0 +1,212 @@
+{
+  "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+  "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+  "artistName": "Radiohead",
+  "disambiguation": "English rock band",
+  "overview": "Radiohead are an English rock band formed in Abingdon, Oxfordshire.",
+  "type": "Group",
+  "status": "active",
+  "genres": ["alternative rock", "electronic", "art rock"],
+  "artistUrl": "https://www.radiohead.com",
+  "oldIds": [],
+  "aliases": ["radiohead"],
+  "artistAliases": ["radiohead"],
+  "links": [
+    {
+      "target": "https://en.wikipedia.org/wiki/Radiohead",
+      "type": "wikipedia"
+    },
+    {
+      "target": "https://www.radiohead.com",
+      "type": "official"
+    }
+  ],
+  "images": [
+    {
+      "coverType": "poster",
+      "url": "https://example.com/radiohead-poster.jpg",
+      "height": 1000,
+      "width": 1000
+    },
+    {
+      "coverType": "fanart",
+      "url": "https://example.com/radiohead-fanart.jpg",
+      "height": 1080,
+      "width": 1920
+    }
+  ],
+  "rating": { "count": 128, "value": 4.7 },
+  "ratings": { "votes": 128, "value": 4.7 },
+  "albums": [
+    {
+      "id": "b1392450-e666-3926-a536-22c65f834433",
+      "foreignAlbumId": "b1392450-e666-3926-a536-22c65f834433",
+      "title": "OK Computer",
+      "type": "Album",
+      "albumType": "Album",
+      "disambiguation": "",
+      "overview": "OK Computer is the third studio album by English rock band Radiohead.",
+      "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "secondaryTypes": [],
+      "releaseStatuses": ["Official"],
+      "releaseDate": "1997-05-28",
+      "genres": ["alternative rock", "art rock"],
+      "rating": { "count": 42, "value": 4.5 },
+      "ratings": { "votes": 42, "value": 4.5 },
+      "oldIds": [],
+      "images": [
+        {
+          "coverType": "cover",
+          "url": "https://example.com/ok-computer-cover.jpg",
+          "height": 500,
+          "width": 500
+        }
+      ],
+      "links": [
+        {
+          "target": "https://en.wikipedia.org/wiki/OK_Computer",
+          "type": "wikipedia"
+        }
+      ],
+      "artists": [
+        {
+          "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "artistName": "Radiohead",
+          "disambiguation": "",
+          "overview": "",
+          "type": "Group",
+          "status": "active",
+          "oldIds": [],
+          "artistAliases": [],
+          "links": [],
+          "images": [],
+          "albums": []
+        }
+      ],
+      "releases": [
+        {
+          "id": "f5093e06-23e3-4a5e-8cfa-d9b6e2c7e9b0",
+          "title": "OK Computer",
+          "disambiguation": "UK first pressing",
+          "country": ["GB"],
+          "releaseDate": "1997-06-16",
+          "oldIds": [],
+          "label": ["Parlophone"],
+          "status": "Official",
+          "trackCount": 12,
+          "media": [
+            {
+              "name": "",
+              "format": "CD",
+              "position": 1
+            }
+          ],
+          "tracks": [
+            {
+              "id": "d2ede1b0-1a00-4543-b038-8e7511a3bf3a",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Airbag",
+              "trackNumber": "1",
+              "trackPosition": 1,
+              "durationMs": 284000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "d2ede1b0-1a00-4543-b038-8e7511a3bf3a",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "e5f30c2e-8a1c-4cd4-a3c2-0b2e6d50f9a1",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Paranoid Android",
+              "trackNumber": "2",
+              "trackPosition": 2,
+              "durationMs": 386000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "e5f30c2e-8a1c-4cd4-a3c2-0b2e6d50f9a1",
+              "oldIds": [],
+              "oldRecordingIds": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a6d1f063-97dc-3e1e-a419-08f1b55c0a53",
+      "foreignAlbumId": "a6d1f063-97dc-3e1e-a419-08f1b55c0a53",
+      "title": "Kid A",
+      "type": "Album",
+      "albumType": "Album",
+      "disambiguation": "",
+      "overview": "Kid A is the fourth studio album by English rock band Radiohead.",
+      "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "secondaryTypes": [],
+      "releaseStatuses": ["Official"],
+      "releaseDate": "2000-10-02",
+      "genres": ["electronic", "experimental rock"],
+      "rating": { "count": 38, "value": 4.3 },
+      "ratings": { "votes": 38, "value": 4.3 },
+      "oldIds": [],
+      "images": [
+        {
+          "coverType": "cover",
+          "url": "https://example.com/kid-a-cover.jpg",
+          "height": 500,
+          "width": 500
+        }
+      ],
+      "links": [],
+      "artists": [
+        {
+          "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "artistName": "Radiohead",
+          "disambiguation": "",
+          "overview": "",
+          "type": "Group",
+          "status": "active",
+          "oldIds": [],
+          "artistAliases": [],
+          "links": [],
+          "images": [],
+          "albums": []
+        }
+      ],
+      "releases": [
+        {
+          "id": "c8b23e10-4f9a-4d8a-b2c1-e5f3d7a1b9c0",
+          "title": "Kid A",
+          "disambiguation": "",
+          "country": ["GB", "US"],
+          "releaseDate": "2000-10-02",
+          "oldIds": [],
+          "label": ["Parlophone", "Capitol"],
+          "status": "Official",
+          "trackCount": 10,
+          "media": [
+            {
+              "name": "",
+              "format": "CD",
+              "position": 1
+            }
+          ],
+          "tracks": [
+            {
+              "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Everything In Its Right Place",
+              "trackNumber": "1",
+              "trackPosition": 1,
+              "durationMs": 252000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "oldIds": [],
+              "oldRecordingIds": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -18,7 +18,7 @@ function setupMocks (providersStr, scoreFn) {
 
   // Mock logger
   require.cache[require.resolve('../utils/logger')] = {
-    exports: { error: () => {}, info: () => {} }
+    exports: { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
   }
 
   // Mock scoring
@@ -46,8 +46,8 @@ function setupMocks (providersStr, scoreFn) {
     failing: {
       name: 'failing',
       searchArtist: async (term) => {
-        const err = new Error('Provider failed')
-        err.code = 500
+        const err = new Error(term === 'timeout' ? 'Provider timeout' : 'Provider failed')
+        err.code = term === 'timeout' ? 'ECONNABORTED' : 500
         throw err
       }
     }
@@ -200,6 +200,18 @@ test('Providers Index', async (t) => {
     assert.strictEqual(result.providerCount, 1)
     assert.ok(result.warning.includes('Provider failed'))
     assert.ok(metricsCalled)
+  })
+
+  await t.test('aggregateArtist - marks timeout provider failures in metrics', async () => {
+    const { index, metricsMock } = setupMocks('musicbrainz,discogs', () => 0.5)
+    let timeoutRecorded = false
+    metricsMock.recordProviderCall = (name, success, _duration, isTimeout) => {
+      if (name === 'failing' && !success && isTimeout) timeoutRecorded = true
+    }
+
+    const result = await index.aggregateArtist('timeout')
+    assert.strictEqual(result.partial, true)
+    assert.ok(timeoutRecorded)
   })
 
   await t.test('aggregateArtist - merges releaseDate, prefers more precise (v0.3.36)', async () => {

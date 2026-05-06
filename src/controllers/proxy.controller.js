@@ -1,19 +1,39 @@
 const metrics = require('../metrics')
 const tracer = require('../tracer')
 const cache = require('../cache')
-const { aggregateArtist } = require('../providers')
+const providers = require('../providers')
 const musicbrainzProvider = require('../providers/musicbrainz.provider')
 const theAudioDbProvider = require('../providers/theaudiodb.provider')
-const { discoverArtists, findSongAlbums, getEnabledProviders } = require('../providers/artist-discovery')
-const { rankResults } = require('../ranking/engine')
-const { enrichResult } = require('../enrichment/pipeline')
+const artistDiscovery = require('../providers/artist-discovery')
+const rankingEngine = require('../ranking/engine')
+const enrichment = require('../enrichment/pipeline')
 const { getConfigValue } = require('../settings/store')
 const logger = require('../utils/logger')
 const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
 const { isValidArtist } = require('../utils/validateArtist')
-const { normalizeAlbum, normalizeStringArray, toSkyhookAlbumResource, toSkyhookArtistResource, withArtistLookupDefaults, withSkyhookArtistDefaults } = require('../utils/lidarrArtist')
+const {
+  normalizeAlbum,
+  normalizeStringArray,
+  toSkyhookAlbumResource,
+  toSkyhookArtistResource,
+  withArtistLookupDefaults,
+  withSkyhookArtistDefaults,
+  LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
+  LIDARR_OPTIONAL_ARTIST_KEYS
+} = require('../utils/lidarrArtist')
+
+function stripInternalKeys (response) {
+  const allowed = new Set([...LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS, ...LIDARR_OPTIONAL_ARTIST_KEYS])
+  const cleaned = {}
+  for (const key of Object.keys(response)) {
+    if (allowed.has(key)) {
+      cleaned[key] = response[key]
+    }
+  }
+  return cleaned
+}
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -106,12 +126,12 @@ async function handleSearch (req, res) {
   if (!hasLock) {
     tracer.addStep(trace, 'error', 0, 'timeout')
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json({ error: 'Failed to acquire distributed lock for upstream fetch' })
+    return res.status(200).json([])
   }
 
   try {
     const startAgg = Date.now()
-    const data = await withTimeout(discoverArtists({ query: q, type }), 15000)
+    const data = await withTimeout(artistDiscovery.discoverArtists({ query: q, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startAgg, 'success')
 
     const ttl = 86400 * 30 // 30 days for SWR
@@ -139,10 +159,7 @@ async function handleSearch (req, res) {
     // Diagnostics for operators live in the structured log line above and in
     // the /debug/upstream ring buffer, never in the response.
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json({
-      error: 'Failed to fetch from upstream API',
-      details: { message: err.message, code: err.code || null }
-    })
+    return res.status(200).json([])
   } finally {
     await cache.releaseLock(lockKey, lockToken)
   }
@@ -286,14 +303,14 @@ async function tryEnrichArtistByIdData (data) {
 
 async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedTerm, trace) {
   const startAgg = Date.now()
-  const data = await withTimeout(aggregateArtist(term), 15000)
+  const data = await withTimeout(providers.aggregateArtist(term), 15000)
   tracer.addStep(trace, 'aggregateArtist', Date.now() - startAgg, 'success')
 
   const rankingStartTime = Date.now()
 
   const rankingInput = buildArtistLookupRankingInput(term, data)
 
-  const { results: rankedResults, debug: rankingDebug } = rankResults(rankingInput)
+  const { results: rankedResults, debug: rankingDebug } = rankingEngine.rankResults(rankingInput)
   const rankingTimeMs = Date.now() - rankingStartTime
   tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
 
@@ -305,7 +322,7 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
 
   // Enrichment Pipeline
   const startEnrich = Date.now()
-  const enrichedTopResult = await enrichResult(topResult, isDebug)
+  const enrichedTopResult = await enrichment.enrichResult(topResult, isDebug)
   tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
 
   const response = buildArtistLookupResponse(data, enrichedTopResult, rankedResults)
@@ -379,7 +396,8 @@ async function handleArtistLookup (req, res) {
       statusCode: 200
     })
     res.set('X-Cache', 'HIT')
-    res.set('X-Providers', providers.map(provider => provider.name).join(','))
+    const providerHeader = providers.length ? providers.map(provider => provider.name).join(',') : 'unknown'
+    res.set('X-Providers', providerHeader)
     res.set('X-Cache-Generated-At', cachedData.generatedAt)
 
     const response = withArtistLookupDefaults({ ...cachedObj, providers })
@@ -389,7 +407,9 @@ async function handleArtistLookup (req, res) {
     response._generatedAt = cachedData.generatedAt
 
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
-    return res.json([response].filter(isValidArtist))
+
+    const finalResponse = isDebug ? response : stripInternalKeys(response)
+    return res.json([finalResponse].filter(isValidArtist))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -433,7 +453,8 @@ async function handleArtistLookup (req, res) {
         statusCode: 200
       })
       res.set('X-Cache', 'HIT')
-      res.set('X-Providers', providers.map(provider => provider.name).join(','))
+      const providerHeader = providers.length ? providers.map(provider => provider.name).join(',') : 'unknown'
+      res.set('X-Providers', providerHeader)
       res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
 
       const response = withArtistLookupDefaults({ ...cachedObj, providers })
@@ -443,36 +464,39 @@ async function handleArtistLookup (req, res) {
       response._generatedAt = cachedDataAfterWait.generatedAt
 
       await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
-      return res.json([response].filter(isValidArtist))
+
+      const finalResponse = isDebug ? response : stripInternalKeys(response)
+      return res.json([finalResponse].filter(isValidArtist))
     }
   }
 
   if (!hasLock) {
     tracer.addStep(trace, 'error', 0, 'timeout')
-    metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 502, error: 'Lock timeout' })
+    metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 200, error: 'Lock timeout' })
     await tracer.finalizeTrace(trace, { cacheHit: false })
-    return res.status(502).json([withArtistLookupDefaults({
-      artistName: term,
-      partial: true,
-      warning: 'Upstream request failed during coalescing (lock timeout)'
-    })])
+    return res.status(200).json([])
   }
 
   try {
     const { response, data } = await executeArtistLookupPipeline(term, isDebug, cacheKey, normalizedTerm, trace)
 
+    const resolvedProviders = data.providers?.length
+      ? data.providers
+      : summarizeProvidersFromAlbums(data.albums || [])
+
     metrics.recordArtistLookup({
       term,
-      upstreamCalls: data.providerCount,
-      providers: data.providers,
-      partial: data.partial,
+      upstreamCalls: data.providerCount || 0,
+      providers: resolvedProviders,
+      partial: Boolean(data.partial),
       statusCode: 200,
       error: data.warning
     })
 
     res.set('X-Cache', 'MISS')
-    res.set('X-Upstream-Calls', String(data.providerCount))
-    res.set('X-Providers', data.providers.map(provider => provider.name).join(','))
+    res.set('X-Upstream-Calls', String(data.providerCount || 0))
+    const providerHeader = resolvedProviders.length ? resolvedProviders.map(provider => provider.name).join(',') : 'unknown'
+    res.set('X-Providers', providerHeader)
     res.set('X-Cache-Generated-At', new Date().toISOString())
 
     const finalResponse = { ...response, _generatedAt: new Date().toISOString() }
@@ -480,8 +504,10 @@ async function handleArtistLookup (req, res) {
       delete finalResponse.debug
     }
 
-    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: data.providers.map(p => p.name) })
-    return res.json([finalResponse].filter(isValidArtist))
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: resolvedProviders.map(p => p.name) })
+
+    const sanitizedResponse = isDebug ? finalResponse : stripInternalKeys(finalResponse)
+    return res.json([sanitizedResponse].filter(isValidArtist))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist lookup failed', {
@@ -494,21 +520,13 @@ async function handleArtistLookup (req, res) {
       upstreamCalls: 0,
       providers: [],
       partial: true,
-      statusCode: 502,
+      statusCode: 200,
       error: error.message
     })
 
     await tracer.finalizeTrace(trace, { cacheHit: false })
 
-    return res.status(502).json([withArtistLookupDefaults({
-      artistName: term,
-      partial: true,
-      warning: error.message,
-      details: {
-        message: error.message,
-        code: error.code
-      }
-    })])
+    return res.status(200).json([])
   } finally {
     await cache.releaseLock(lockKey, lockToken)
   }
@@ -548,13 +566,13 @@ async function handleArtistById (req, res) {
     const enrichedData = await tryEnrichArtistByIdData(data)
 
     const rankingStartTime = Date.now()
-    const { results: rankedResults } = rankResults(buildArtistLookupRankingInput(enrichedData.artistName || foreignArtistId, enrichedData))
+    const { results: rankedResults } = rankingEngine.rankResults(buildArtistLookupRankingInput(enrichedData.artistName || foreignArtistId, enrichedData))
     const rankingTimeMs = Date.now() - rankingStartTime
     tracer.addStep(trace, 'rankResults', rankingTimeMs, 'success')
 
     const topResult = rankedResults[0]
     const startEnrich = Date.now()
-    const enrichedTopResult = await enrichResult(topResult, false)
+    const enrichedTopResult = await enrichment.enrichResult(topResult, false)
     tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
 
     const response = toSkyhookArtistResource(buildArtistLookupResponse(enrichedData, enrichedTopResult, rankedResults))
@@ -709,11 +727,11 @@ async function handleArtistDiscover (req, res) {
     return res.status(400).json({ error: 'Missing query parameter "q"' })
   }
 
-  const providersTried = Array.from(getEnabledProviders())
+  const providersTried = Array.from(artistDiscovery.getEnabledProviders())
 
   try {
     const startedAt = Date.now()
-    const candidates = await withTimeout(discoverArtists({ query, type }), 15000)
+    const candidates = await withTimeout(artistDiscovery.discoverArtists({ query, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startedAt, 'success')
     await tracer.finalizeTrace(trace, {
       cacheHit: false,
@@ -758,7 +776,7 @@ async function handleSongAlbums (req, res) {
 
   try {
     const startedAt = Date.now()
-    const result = await withTimeout(findSongAlbums({ artist, song }), 15000)
+    const result = await withTimeout(artistDiscovery.findSongAlbums({ artist, song }), 15000)
     tracer.addStep(trace, 'findSongAlbums', Date.now() - startedAt, 'success')
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: [result.source] })
     return res.json(result)

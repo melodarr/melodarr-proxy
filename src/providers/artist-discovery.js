@@ -276,7 +276,7 @@ async function discoverByITunes (query, type) {
       country: getConfigValue('itunesCountry') || 'US'
     },
     httpsAgent,
-    timeout: getConfigValue('upstreamTimeoutMs') || 10000
+    timeout: Number(getConfigValue('itunesTimeoutMs')) || 5000
   })
 
   const results = response.data?.results || []
@@ -342,8 +342,7 @@ async function findSongAlbumsByITunes (artist, song) {
       limit: 50,
       country: getConfigValue('itunesCountry') || 'US'
     },
-    httpsAgent,
-    timeout: getConfigValue('upstreamTimeoutMs') || 10000
+    httpsAgent
   })
 
   const normalizedArtist = normalizeText(artist).toLowerCase()
@@ -424,11 +423,11 @@ async function findSongAlbums ({ artist, song }) {
 
   if (enabled.has('musicbrainz')) {
     labels.push('musicbrainz')
-    tasks.push(findSongAlbumsByMusicBrainz(normalizedArtist, normalizedSong))
+    tasks.push(safeProviderCall('musicbrainz', () => findSongAlbumsByMusicBrainz(normalizedArtist, normalizedSong)))
   }
   if (enabled.has('itunes')) {
     labels.push('itunes')
-    tasks.push(findSongAlbumsByITunes(normalizedArtist, normalizedSong))
+    tasks.push(safeProviderCall('itunes', () => findSongAlbumsByITunes(normalizedArtist, normalizedSong)))
   }
 
   if (tasks.length === 0) {
@@ -441,8 +440,8 @@ async function findSongAlbums ({ artist, song }) {
     byProvider[labels[i]] = outcome
   })
 
-  const mbAlbums = byProvider.musicbrainz?.status === 'fulfilled' ? byProvider.musicbrainz.value : []
-  const itunesAlbums = byProvider.itunes?.status === 'fulfilled' ? byProvider.itunes.value : []
+  const mbAlbums = byProvider.musicbrainz?.status === 'fulfilled' ? (byProvider.musicbrainz.value || []) : []
+  const itunesAlbums = byProvider.itunes?.status === 'fulfilled' ? (byProvider.itunes.value || []) : []
   const albums = mergeSongAlbums(itunesAlbums, mbAlbums)
 
   const allRejected = settled.every(s => s.status === 'rejected')

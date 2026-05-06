@@ -28,6 +28,79 @@ ghcr.io/melodarr/melodarr-proxy
 ghcr.io/melodarr/melodarr-proxy-melodash
 ```
 
+## How It Works
+
+Melodarr Proxy sits between Lidarr-compatible clients, Melodash, Redis, and live metadata providers. Lidarr keeps speaking familiar Lidarr/SkyHook-style API calls, while the proxy handles caching, provider selection, response normalization, health tracking, and fallback behavior.
+
+```mermaid
+flowchart TB
+    User["Operator"]
+    Lidarr["Lidarr or compatible client"]
+
+    subgraph Compose["Melodarr deployment"]
+        Melodash["Melodash dashboard<br/>status, settings, explorer, traces"]
+        Proxy["Melodarr Proxy API<br/>Lidarr/SkyHook-compatible endpoints"]
+        Cache[("Redis cache<br/>shared lookup results")]
+
+        subgraph Runtime["Provider runtime"]
+            Router["Request router<br/>lookup, search, discovery"]
+            Guard["Safe provider calls<br/>timeouts, retries, validation"]
+            Health["Health, metrics, scoring<br/>success rate, latency, priority"]
+            Breaker["Circuit breaker<br/>degrade, disable, canary, re-enable"]
+            Normalize["Normalizer<br/>stable Lidarr/SkyHook response"]
+        end
+    end
+
+    subgraph Providers["Live metadata sources"]
+        MusicBrainz["MusicBrainz"]
+        ITunes["iTunes"]
+        TheAudioDB["TheAudioDB"]
+        LastFM["Last.fm"]
+        Discogs["Discogs"]
+        Custom["Custom provider"]
+    end
+
+    User -->|"configures and observes"| Melodash
+    Melodash -->|"settings, diagnostics, provider tests"| Proxy
+    Lidarr -->|"artist, album, release, SkyHook requests"| Proxy
+
+    Proxy -->|"1. check cache"| Cache
+    Cache -->|"cache hit"| Proxy
+    Proxy -->|"2. cache miss"| Router
+    Router --> Guard
+    Guard --> Breaker
+    Breaker -->|"skip unhealthy providers"| Health
+    Breaker -->|"call enabled providers"| MusicBrainz
+    Breaker --> ITunes
+    Breaker --> TheAudioDB
+    Breaker --> LastFM
+    Breaker --> Discogs
+    Breaker --> Custom
+
+    MusicBrainz --> Guard
+    ITunes --> Guard
+    TheAudioDB --> Guard
+    LastFM --> Guard
+    Discogs --> Guard
+    Custom --> Guard
+
+    Guard --> Health
+    Health -->|"merge preference and fallback order"| Normalize
+    Normalize -->|"write cacheable result"| Cache
+    Normalize -->|"normalized metadata"| Proxy
+    Proxy -->|"Lidarr-compatible response"| Lidarr
+    Proxy -->|"status, traces, results"| Melodash
+```
+
+Request flow in plain terms:
+
+1. Lidarr asks the proxy for artist, album, release, or SkyHook-compatible metadata.
+2. The proxy returns Redis-cached data immediately when it can.
+3. On a cache miss, the provider runtime calls only enabled and healthy providers.
+4. Provider health, scoring, and priority decide which source wins when multiple providers return useful data.
+5. The normalizer converts provider-specific responses into the stable shape Lidarr expects.
+6. Melodash uses the same proxy API to manage settings, test providers, inspect traces, and monitor readiness.
+
 See [docs/architecture.md](docs/architecture.md) for the runtime diagram covering Lidarr, Melodash, Redis, providers, provider scoring, health, and circuit breaker flow.
 
 ## Features

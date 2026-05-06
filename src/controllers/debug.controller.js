@@ -140,14 +140,20 @@ async function getRequestById (req, res) {
 }
 
 function buildProvidersPayload () {
+  const pStats = getGlobalProviderStats()
   return {
     providers: [
-      { name: 'musicbrainz', status: 'active' },
-      { name: 'discogs', status: 'active' },
-      { name: 'itunes', status: 'active' },
-      { name: 'theaudiodb', status: 'active' }
+      { name: 'musicbrainz', status: 'active', timeouts: pStats.musicbrainz?.timeouts || 0, errors: pStats.musicbrainz?.errors || 0 },
+      { name: 'discogs', status: 'active', timeouts: pStats.discogs?.timeouts || 0, errors: pStats.discogs?.errors || 0 },
+      { name: 'itunes', status: 'active', timeouts: pStats.itunes?.timeouts || 0, errors: pStats.itunes?.errors || 0 },
+      { name: 'theaudiodb', status: 'active', timeouts: pStats.theaudiodb?.timeouts || 0, errors: pStats.theaudiodb?.errors || 0 }
     ]
   }
+}
+
+function getGlobalProviderStats () {
+  if (typeof metrics.getStats !== 'function') return {}
+  return metrics.getStats().providers || {}
 }
 
 function getProviders (req, res) {
@@ -587,6 +593,8 @@ function getProvidersDebug (req, res) {
   ])
 
   const providers = []
+  const globalStats = getGlobalProviderStats()
+
   for (const name of names) {
     const h = providerHealth.get(name)
     const m = providerMetrics.get(name)
@@ -594,6 +602,7 @@ function getProvidersDebug (req, res) {
       name,
       status: h.status,
       failures: h.failures,
+      timeouts: globalStats[name]?.timeouts || 0,
       success: m.success,
       failure: m.failure,
       avgLatency: m.avgLatency,
@@ -615,6 +624,8 @@ function getProvidersDebug (req, res) {
 function getProvidersMetricsDebug (req, res) {
   const names = providerMetrics._getAllNames()
   const providers = []
+  const globalStats = getGlobalProviderStats()
+
   for (const name of names) {
     const m = providerMetrics.get(name)
     // Decayed view: clone the metric and apply elapsed-time decay so
@@ -626,6 +637,7 @@ function getProvidersMetricsDebug (req, res) {
       raw: {
         success: m.success,
         failure: m.failure,
+        timeouts: globalStats[name]?.timeouts || 0,
         avgLatency: m.avgLatency,
         lastSuccess: m.lastSuccess,
         lastUpdated: m.lastUpdated,
@@ -642,4 +654,8 @@ function getProvidersMetricsDebug (req, res) {
   res.json({ providers })
 }
 
-module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug, getProvidersMetricsDebug }
+function getMetrics (req, res) {
+  res.json(metrics.getStats())
+}
+
+module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug, getProvidersMetricsDebug, getMetrics }

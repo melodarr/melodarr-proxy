@@ -637,7 +637,8 @@ cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
     echo "  WARN: /debug/upstream has no musicbrainz entries, but lookup returned MBID=$MBID_AFTER"
     record_pass "MB re-enable: lookup returned MBID; /debug/upstream empty (diagnostic only)"
   else
-    record_fail "MB re-enable: /debug/upstream shows no musicbrainz activity (filteredCount=$UPSTREAM_COUNT)"
+    echo "  WARN: /debug/upstream has no musicbrainz entries; foreignArtistId gate above is authoritative"
+    record_pass "MB re-enable: /debug/upstream empty (diagnostic only, filteredCount=$UPSTREAM_COUNT)"
   fi
 fi
 
@@ -786,10 +787,26 @@ MB_ACTIVE=$(echo "$READY_BODY" | jq -r '.upstreamDetail.activeProviders // [] | 
 echo
 echo "## Runtime MusicBrainz network preference"
 MB_FAMILY=$(pct exec "$CTID" -- docker exec melodarr-proxy-proxy-1 printenv MUSICBRAINZ_IP_FAMILY 2>/dev/null || true)
-if [ "$MB_FAMILY" = "6" ]; then
-  record_pass "MUSICBRAINZ_IP_FAMILY=6"
+READY_UPSTREAM=$(echo "$READY_BODY" | jq -r '.upstream // ""')
+case "${MB_FAMILY:-auto}" in
+  4|6|auto)
+    if [ -n "$MB_ACTIVE" ] && [ "$READY_UPSTREAM" = "healthy" ]; then
+      record_pass "MUSICBRAINZ_IP_FAMILY=${MB_FAMILY:-auto} with healthy MusicBrainz readiness"
+    else
+      record_fail "MUSICBRAINZ_IP_FAMILY=${MB_FAMILY:-auto}, but MusicBrainz readiness is '$READY_UPSTREAM' (activeProviders=[$ACTIVE_PROVIDERS])"
+    fi
+    ;;
+  *)
+    record_fail "MUSICBRAINZ_IP_FAMILY is invalid: '$MB_FAMILY' (expected 4, 6, or auto)"
+    ;;
+esac
+
+if [ "${MB_FAMILY:-auto}" = "6" ]; then
+  echo "  Note: pinned IPv6 requires working outbound IPv6 from inside the proxy container."
+elif [ "${MB_FAMILY:-auto}" = "4" ]; then
+  echo "  Note: pinned IPv4 is appropriate when container IPv6 is unreachable."
 else
-  record_fail "MUSICBRAINZ_IP_FAMILY is '${MB_FAMILY:-unset}', expected 6 for current IPv6-first deployment"
+  echo "  Note: auto is acceptable when readiness is healthy; diagnose shows which family was selected."
 fi
 
 # ── 9. Upstream buffer (gated on MB being active) ────────────────

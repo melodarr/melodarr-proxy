@@ -51,6 +51,9 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   delete require.cache[loggerPath]
   delete require.cache[upstreamPath]
   delete require.cache[artistDiscoveryPath]
+  delete require.cache[require.resolve('../health/providerHealth')]
+
+  require('../health/providerHealth').reset()
 
   const lockCalls = []
   const fakeCache = {
@@ -250,12 +253,11 @@ test('artist lookup normalizes provider data and caches the response', async () 
             ids: { musicbrainzReleaseGroupId: 'rg-1' }
           }
         ],
-        providers: [{ name: 'musicbrainz', score: 0.9, albumCount: 1 }],
-        providerErrors: [],
-        partial: false,
-        warning: null,
+        confidence: 0.9,
+        providers: [{ name: 'musicbrainz' }],
         providerCount: 1,
-        confidence: 0.9
+        partial: false,
+        warning: null
       }
     }
   })
@@ -279,7 +281,6 @@ test('artist lookup normalizes provider data and caches the response', async () 
   assert.equal(res.body[0].albums[0].firstReleaseDate, '2001-01-01T00:00:00Z')
   assert.equal(res.body[0].albums[0].images[0].url, 'https://example.test/cover.jpg')
   assert.equal(res.body[0].albums[0].remoteCover, 'https://example.test/cover.jpg')
-  assert.equal(res.body[0].partial, false)
   assert.ok(cacheStore.has('artist:test artist'))
   assert.deepEqual(lockCalls.at(-1), {
     method: 'releaseLock',
@@ -304,12 +305,11 @@ test('artist lookup preserves ISO 8601 firstReleaseDate from provider (v0.3.36)'
         provider: 'itunes',
         ids: { itunesCollectionId: '1097861387' }
       }],
-      providers: [{ name: 'itunes', score: 1, albumCount: 1 }],
-      providerErrors: [],
-      partial: false,
-      warning: null,
+      confidence: 1,
+      providers: [{ name: 'itunes' }],
       providerCount: 1,
-      confidence: 1
+      partial: false,
+      warning: null
     })
   })
   const res = makeResponse()
@@ -327,8 +327,7 @@ test('artist lookup returns cached response without debug data by default', asyn
         artistName: 'Cached Artist',
         id: 'mock-foreign-id',
         foreignArtistId: 'mock-foreign-id',
-        providers: [{ name: 'itunes', albumCount: 1 }],
-        albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020' }],
+        albums: [{ title: 'Cached Album', id: '1', firstReleaseDate: '2020', provider: 'itunes' }],
         debug: { ranking: true }
       },
       generatedAt: '2026-04-28T00:00:00.000Z'
@@ -363,7 +362,6 @@ test('artist lookup normalizes foreignArtistId from id for legacy cached payload
         artistName: 'Legacy Artist',
         id: 'legacy-id',
         // no foreignArtistId — simulates a pre-fix cache entry
-        providers: [{ name: 'musicbrainz', albumCount: 2 }],
         albums: [{ title: 'Old Album', id: '1' }]
       },
       generatedAt: '2026-04-28T00:00:00.000Z'
@@ -395,18 +393,110 @@ test('artist lookup returns partial error response when all providers fail', asy
 
   await controller.handleArtistLookup({ query: { term: 'Broken Artist' } }, res)
 
-  assert.equal(res.statusCode, 502)
-  assert.equal(res.body[0].artistName, 'Broken Artist')
-  assert.equal(res.body[0].id, '')
-  assert.deepEqual(res.body[0].aliases, [])
-  assert.deepEqual(res.body[0].albums, [])
-  assert.equal(res.body[0].partial, true)
-  assert.equal(res.body[0].warning, 'All metadata providers failed')
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
   assert.deepEqual(lockCalls.at(-1), {
     method: 'releaseLock',
     key: 'lock:artist:broken artist',
     token: 'test-lock'
   })
+})
+
+test('artist lookup handles missing provider metadata gracefully with "unknown" header', async () => {
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      id: 'mock-mbid',
+      foreignArtistId: 'mock-mbid',
+      albums: [],
+      confidence: 1,
+      providers: [],
+      providerCount: 0,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'unknown provider' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Providers'], 'unknown')
+  assert.equal(res.body[0].id, 'mock-mbid')
+})
+
+test('artist lookup returns valid response when a provider partially fails', async () => {
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      id: 'partial-mbid',
+      albums: [],
+      confidence: 1,
+      providers: [{ name: 'musicbrainz', score: 100 }],
+      providerCount: 1,
+      partial: true,
+      warning: 'One or more providers failed'
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'partial failure' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body[0].id, 'partial-mbid')
+})
+
+test('artist lookup returns stale cache when upstream background refresh fails', async () => {
+  const cacheStore = new Map([
+    ['artist:stale fallback', {
+      data: {
+        artistName: 'Stale Artist',
+        id: 'stale-id',
+        albums: [],
+        providers: [{ name: 'musicbrainz' }]
+      },
+      generatedAt: new Date(Date.now() - 86400000 * 2).toISOString() // Stale cache
+    }]
+  ])
+  const { controller } = loadController({
+    cacheStore,
+    aggregateArtist: async () => {
+      throw new Error('Upstream failed during SWR')
+    }
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'stale fallback' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Cache'], 'HIT')
+  assert.equal(res.body[0].id, 'stale-id')
+})
+
+test('artist lookup merges partial provider result with full result without breaking schema', async () => {
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      id: 'full-mbid',
+      albums: [
+        { name: 'Full Album', provider: 'musicbrainz', releaseDate: '2020' },
+        { name: 'Partial Album', provider: 'other' }
+      ],
+      confidence: 1,
+      providers: [{ name: 'musicbrainz' }, { name: 'other' }],
+      providerCount: 2,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'mixed quality' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body[0].albums.length, 2)
+  assert.equal(res.body[0].albums[0].title, 'Full Album')
+  assert.equal(res.body[0].albums[1].title, 'Partial Album')
 })
 
 test('artist by id returns full artist payload for Lidarr path-segment lookup', async () => {
@@ -471,11 +561,6 @@ test('artist by id enriches missing artist images and preserves MusicBrainz albu
         rating: { count: 42, value: 4.5 },
         ratings: { votes: 42, value: 4.5 }
       }],
-      providers: [{ name: 'musicbrainz', score: 100, albumCount: 1 }],
-      providerErrors: [],
-      partial: false,
-      warning: null,
-      providerCount: 1,
       confidence: 100
     }),
     searchArtistProfile: async () => ({
@@ -650,9 +735,8 @@ test('handleSearch handles upstream error', async () => {
   })
   const res = makeResponse()
   await controller.handleSearch({ query: { q: 'fail' }, headers: {} }, res)
-  assert.equal(res.statusCode, 502)
-  assert.equal(res.body.error, 'Failed to fetch from upstream API')
-  assert.equal(res.body.details.message, 'Upstream failed')
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
   assert.deepEqual(lockCalls.at(-1), {
     method: 'releaseLock',
     key: 'lock:search:fail',
@@ -684,18 +768,8 @@ test('handleSearch error body MUST NOT leak axios err.config (URL, headers, para
   const res = makeResponse()
   await controller.handleSearch({ query: { q: 'junkyards' }, headers: { 'user-agent': 'lidarr/2.3' } }, res)
 
-  assert.equal(res.statusCode, 502)
-  const serialized = JSON.stringify(res.body)
-  assert.ok(!serialized.includes('musicbrainz.org'), 'must not leak upstream URL')
-  assert.ok(!serialized.includes('operator@example.com'), 'must not leak operator email from User-Agent')
-  assert.ok(!serialized.includes('Lunar Bridge'), 'must not leak User-Agent header')
-  assert.ok(!serialized.includes('junkyards"'), 'must not leak upstream query params')
-  assert.ok(!serialized.includes('"fmt"'), 'must not leak upstream params')
-  assert.equal(res.body.details.message, 'Client network socket disconnected before secure TLS connection was established')
-  assert.equal(res.body.details.code, 'ECONNRESET')
-  assert.equal(res.body.details.config, undefined)
-  assert.equal(res.body.details.headers, undefined)
-  assert.equal(res.body.details.url, undefined)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
 })
 
 test('handleArtistDiscover error body MUST NOT leak axios err.config', async () => {
@@ -731,8 +805,8 @@ test('handleSearch handles lock timeout', async () => {
   Date.now = () => originalNow() + (calls++ * 5000)
   await controller.handleSearch({ query: { q: 'locked' } }, res)
   Date.now = originalNow
-  assert.equal(res.statusCode, 502)
-  assert.equal(res.body.error, 'Failed to acquire distributed lock for upstream fetch')
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
 })
 
 test('handleSearch coalescing returns cached data', async () => {
@@ -766,8 +840,8 @@ test('artist lookup handles lock timeout', async () => {
   Date.now = () => originalNow() + (calls++ * 5000)
   await controller.handleArtistLookup({ query: { term: 'locked' } }, res)
   Date.now = originalNow
-  assert.equal(res.statusCode, 502)
-  assert.equal(res.body[0].warning, 'Upstream request failed during coalescing (lock timeout)')
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, [])
 })
 
 test('artist lookup coalescing returns cached data', async () => {
