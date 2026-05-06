@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetcher";
-import { Braces, Disc3, Grid2X2, Loader2, Music2, Search, UserRound } from "lucide-react";
+import { Braces, ChevronLeft, ChevronRight, Disc3, Grid2X2, Loader2, Music2, Search, UserRound, X } from "lucide-react";
 
 type SearchMode = "artist" | "song" | "album" | "artistSong";
 type ImageTab = "albums" | "artist" | "debug";
@@ -93,6 +93,13 @@ type ImageDebugCard = {
   score?: number;
   source?: string;
   type?: string;
+};
+
+type LightboxImage = {
+  url: string;
+  title: string;
+  subtitle?: string;
+  meta?: string;
 };
 
 const modes: Array<{ id: SearchMode; label: string; icon: typeof UserRound; placeholder: string }> = [
@@ -204,6 +211,35 @@ function getArtistAlbums(result: any): AlbumCard[] {
   });
 }
 
+function getAlbumLightboxImages(albums: AlbumCard[]): LightboxImage[] {
+  return albums
+    .filter((album) => album.imageUrl)
+    .map((album) => ({
+      url: album.imageUrl || "",
+      title: album.title,
+      subtitle: [album.year, album.provider].filter(Boolean).join(" / "),
+      meta: album.id,
+    }));
+}
+
+function getArtistLightboxImages(images: ArtistImageCard[], artistName?: string): LightboxImage[] {
+  return images.map((image) => ({
+    url: image.url,
+    title: `${artistName || "Artist"} ${image.coverType}`,
+    subtitle: [image.type, image.source].filter(Boolean).join(" / "),
+    meta: image.width || image.height ? `${image.width || 0} x ${image.height || 0}` : image.url,
+  }));
+}
+
+function getDebugLightboxImages(images: ImageDebugCard[]): LightboxImage[] {
+  return images.map((image) => ({
+    url: image.url,
+    title: `${image.type || "Image"} score ${image.score ?? 0}`,
+    subtitle: image.source,
+    meta: image.url,
+  }));
+}
+
 function ProviderPill({ provider }: { provider?: string }) {
   if (!provider) return null;
 
@@ -214,11 +250,16 @@ function ProviderPill({ provider }: { provider?: string }) {
   );
 }
 
-function AlbumArtwork({ album }: { album: AlbumCard }) {
+function AlbumArtwork({ album, onOpen }: { album: AlbumCard; onOpen?: () => void }) {
   const [failed, setFailed] = useState(false);
 
   if (album.imageUrl && !failed) {
-    return <img src={album.imageUrl} alt="" onError={() => setFailed(true)} className="aspect-square w-full rounded-md object-cover" />;
+    const image = <img src={album.imageUrl} alt="" onError={() => setFailed(true)} className="aspect-square w-full rounded-md object-cover transition-transform group-hover:scale-[1.02]" />;
+    return onOpen ? (
+      <button type="button" onClick={onOpen} className="group block w-full overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+        {image}
+      </button>
+    ) : image;
   }
 
   return (
@@ -242,16 +283,89 @@ function ArtistArtwork({ imageUrl, artistName }: { imageUrl?: string; artistName
   );
 }
 
-function ImagePreview({ url, alt }: { url: string; alt: string }) {
+function ImagePreview({ url, alt, onOpen }: { url: string; alt: string; onOpen?: () => void }) {
   const [failed, setFailed] = useState(false);
 
   if (url && !failed) {
-    return <img src={url} alt={alt} onError={() => setFailed(true)} className="aspect-square w-full rounded-md object-cover" />;
+    const image = <img src={url} alt={alt} onError={() => setFailed(true)} className="aspect-square w-full rounded-md object-cover transition-transform group-hover:scale-[1.02]" />;
+    return onOpen ? (
+      <button type="button" onClick={onOpen} className="group block w-full overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+        {image}
+      </button>
+    ) : image;
   }
 
   return (
     <div className="flex aspect-square w-full items-center justify-center rounded-md border border-border/60 bg-white/5 text-gray-500">
       <UserRound className="h-8 w-8" />
+    </div>
+  );
+}
+
+function ImageLightbox({
+  images,
+  index,
+  onClose,
+  onNavigate,
+}: {
+  images: LightboxImage[];
+  index: number;
+  onClose: () => void;
+  onNavigate: (index: number) => void;
+}) {
+  const image = images[index];
+  const canNavigate = images.length > 1;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft" && canNavigate) onNavigate((index - 1 + images.length) % images.length);
+      if (event.key === "ArrowRight" && canNavigate) onNavigate((index + 1) % images.length);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canNavigate, images.length, index, onClose, onNavigate]);
+
+  if (!image) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true">
+      <button type="button" aria-label="Close image preview" onClick={onClose} className="absolute right-4 top-4 rounded-md border border-white/15 bg-black/60 p-2 text-gray-200 hover:bg-white/10">
+        <X className="h-5 w-5" />
+      </button>
+
+      {canNavigate && (
+        <button
+          type="button"
+          aria-label="Previous image"
+          onClick={() => onNavigate((index - 1 + images.length) % images.length)}
+          className="absolute left-4 top-1/2 -translate-y-1/2 rounded-md border border-white/15 bg-black/60 p-3 text-gray-200 hover:bg-white/10"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      )}
+
+      <div className="flex max-h-[92vh] max-w-[92vw] flex-col items-center gap-4">
+        <img src={image.url} alt={image.title} className="max-h-[78vh] max-w-[92vw] rounded-md object-contain" />
+        <div className="max-w-3xl text-center">
+          <div className="text-base font-semibold text-white">{image.title}</div>
+          {image.subtitle && <div className="mt-1 text-sm text-gray-300">{image.subtitle}</div>}
+          {image.meta && <div className="mt-1 break-all text-xs text-gray-500">{image.meta}</div>}
+          {images.length > 1 && <div className="mt-2 text-xs text-gray-500">{index + 1} / {images.length}</div>}
+        </div>
+      </div>
+
+      {canNavigate && (
+        <button
+          type="button"
+          aria-label="Next image"
+          onClick={() => onNavigate((index + 1) % images.length)}
+          className="absolute right-4 top-1/2 -translate-y-1/2 rounded-md border border-white/15 bg-black/60 p-3 text-gray-200 hover:bg-white/10"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      )}
     </div>
   );
 }
@@ -281,6 +395,8 @@ export default function ExplorerPage() {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [resultView, setResultView] = useState<ResultView>("visual");
   const [imageTab, setImageTab] = useState<ImageTab>("albums");
+  const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const inspectArtist = async (artistName: string) => {
     if (!artistName.trim()) return;
@@ -340,7 +456,16 @@ export default function ExplorerPage() {
   const artistPreview = getArtistPreview(artistResult);
   const artistImages = getArtistImages(artistResult);
   const imageDebug = getImageDebug(artistResult);
+  const albumLightboxImages = getAlbumLightboxImages(artistAlbums);
+  const artistLightboxImages = getArtistLightboxImages(artistImages, artistPreview?.artistName || selectedArtist);
+  const debugLightboxImages = getDebugLightboxImages(imageDebug);
   const cacheMeta = artistResult?.cache as CacheMeta | undefined;
+
+  const openLightbox = (images: LightboxImage[], index: number) => {
+    if (images.length === 0) return;
+    setLightboxImages(images);
+    setLightboxIndex(index);
+  };
 
   return (
     <main className="container mx-auto max-w-screen-2xl space-y-8 p-8">
@@ -558,7 +683,7 @@ export default function ExplorerPage() {
                     <p className="col-span-full text-sm text-gray-500">No releases found for this artist.</p>
                   ) : artistAlbums.map((album, index) => (
                     <article key={`${album.id || album.title}-${index}`} className="rounded-lg border border-border/60 bg-background/40 p-3">
-                      <AlbumArtwork album={album} />
+                      <AlbumArtwork album={album} onOpen={album.imageUrl ? () => openLightbox(albumLightboxImages, albumLightboxImages.findIndex((image) => image.url === album.imageUrl)) : undefined} />
                       <div className="mt-3 min-w-0 space-y-2">
                         <div className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-gray-100">{album.title}</div>
                         <div className="flex items-center justify-between gap-2">
@@ -578,7 +703,7 @@ export default function ExplorerPage() {
                     <p className="col-span-full text-sm text-gray-500">No artist images found for this result.</p>
                   ) : artistImages.map((image) => (
                     <article key={`${image.coverType}-${image.url}`} className="rounded-lg border border-border/60 bg-background/40 p-3">
-                      <ImagePreview url={image.url} alt={`${image.coverType} image`} />
+                      <ImagePreview url={image.url} alt={`${image.coverType} image`} onOpen={() => openLightbox(artistLightboxImages, artistLightboxImages.findIndex((item) => item.url === image.url))} />
                       <div className="mt-3 min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs capitalize text-gray-300">{image.coverType}</span>
@@ -599,7 +724,7 @@ export default function ExplorerPage() {
                     <p className="col-span-full text-sm text-gray-500">No image scoring data found for this result.</p>
                   ) : imageDebug.map((image) => (
                     <article key={`${image.source}-${image.type}-${image.url}`} className="rounded-lg border border-border/60 bg-background/40 p-3">
-                      <ImagePreview url={image.url} alt={`${image.type || "debug"} image`} />
+                      <ImagePreview url={image.url} alt={`${image.type || "debug"} image`} onOpen={() => openLightbox(debugLightboxImages, debugLightboxImages.findIndex((item) => item.url === image.url))} />
                       <div className="mt-3 min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs capitalize text-gray-300">{image.type || "unknown"}</span>
@@ -618,6 +743,14 @@ export default function ExplorerPage() {
           <p className="mt-4 text-sm text-gray-500">Run a query to inspect ranking, normalization, raw provider output, and cache behavior.</p>
         )}
       </section>
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={lightboxImages}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
+      )}
     </main>
   );
 }
