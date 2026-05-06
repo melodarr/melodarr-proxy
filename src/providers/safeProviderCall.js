@@ -59,9 +59,10 @@ async function safeProviderCall (name, fn, query) {
         reject(err)
       }, timeoutMs)
     })
+    const providerPromise = Promise.resolve().then(() => fn(query))
 
     const result = await Promise.race([
-      fn(query),
+      providerPromise,
       timeoutPromise
     ]).finally(() => clearTimeout(timeoutId))
 
