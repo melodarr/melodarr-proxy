@@ -565,6 +565,7 @@ test('artist by id enriches missing artist images and preserves MusicBrainz albu
     }),
     searchArtistProfile: async () => ({
       artistName: 'Akon',
+      overview: 'Akon is a Senegalese-American singer.',
       images: [
         { coverType: 'poster', url: 'https://example.test/akon-thumb.jpg', remoteUrl: 'https://example.test/akon-thumb.jpg' },
         { coverType: 'fanart', url: 'https://example.test/akon-fanart.jpg', remoteUrl: 'https://example.test/akon-fanart.jpg' },
@@ -577,8 +578,43 @@ test('artist by id enriches missing artist images and preserves MusicBrainz albu
   await controller.handleArtistById({ params: { foreignArtistId: 'akon-id' }, query: {} }, res)
 
   assert.equal(res.statusCode, 200)
+  assert.equal(res.body.overview, 'Akon is a Senegalese-American singer.')
   assert.deepEqual(res.body.images.map(image => image.coverType), ['poster', 'fanart', 'clearlogo'])
   assert.deepEqual(res.body.albums[0].rating, { count: 42, value: 4.5 })
+})
+
+test('artist by id enriches missing overview even when artist images already exist', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'OneRepublic',
+      id,
+      disambiguation: '',
+      overview: '',
+      aliases: [],
+      artistAliases: [],
+      images: [
+        { coverType: 'poster', url: 'https://example.test/onerepublic-existing.jpg', remoteUrl: 'https://example.test/onerepublic-existing.jpg' }
+      ],
+      albums: [],
+      confidence: 100
+    }),
+    searchArtistProfile: async () => ({
+      artistName: 'OneRepublic',
+      overview: 'OneRepublic is an American pop rock band.',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/onerepublic-new.jpg', remoteUrl: 'https://example.test/onerepublic-new.jpg' }
+      ],
+      genres: ['pop rock']
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'c33c2065-b1c3-4406-b066-d33a9e2ea71a' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.overview, 'OneRepublic is an American pop rock band.')
+  assert.deepEqual(res.body.images.map(image => image.url), ['https://example.test/onerepublic-existing.jpg'])
+  assert.deepEqual(res.body.genres, ['pop rock'])
 })
 
 test('artist by id skips TheAudioDB enrichment when returned MBID does not match requested foreignArtistId', async () => {
