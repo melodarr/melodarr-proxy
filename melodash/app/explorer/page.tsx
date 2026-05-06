@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetcher";
-import { Braces, ChevronLeft, ChevronRight, Disc3, Grid2X2, Loader2, Music2, Search, UserRound, X } from "lucide-react";
+import { Braces, ChevronLeft, ChevronRight, Disc3, Grid2X2, Loader2, Music2, Search, Star, UserRound, X } from "lucide-react";
 
 type SearchMode = "artist" | "song" | "album" | "artistSong";
 type ImageTab = "albums" | "artist" | "debug";
@@ -227,18 +227,26 @@ function normalizeAlbumRating(album: any): { count: number; value: number } {
 function AlbumRating({ rating }: { rating?: { count: number; value: number } }) {
   const value = Number(rating?.value ?? 0) || 0;
   const count = Number(rating?.count ?? 0) || 0;
-  const percent = Math.max(0, Math.min(100, (value / 5) * 100));
+  const rounded = Math.max(0, Math.min(5, Math.round(value)));
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" aria-label={`Rating ${value > 0 ? `${value.toFixed(1)} out of 5` : "unrated"}`}>
+      <div className="flex items-center gap-1">
+        {Array.from({ length: 5 }).map((_, index) => {
+          const filled = index < rounded;
+
+          return (
+            <Star
+              key={index}
+              className={`h-4 w-4 ${filled ? "fill-amber-400 text-amber-400" : "text-gray-700"}`}
+            />
+          );
+        })}
+      </div>
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-gray-500">Rating</span>
         <span className="text-gray-300">{value > 0 ? value.toFixed(1) : "--"} <span className="text-gray-600">/ 5</span></span>
+        <span className="text-gray-600">{count > 0 ? `${count} votes` : "No votes"}</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-amber-400" style={{ width: `${percent}%` }} />
-      </div>
-      <div className="text-[11px] text-gray-600">{count > 0 ? `${count} votes` : "No votes"}</div>
     </div>
   );
 }
