@@ -6,20 +6,35 @@ function validateStartup () {
 
   // Validate cache config
   const cacheTtl = store.getConfigValue('cacheTtlSeconds')
-  if (typeof cacheTtl !== 'number' || isNaN(cacheTtl) || cacheTtl <= 0) {
+  if (typeof cacheTtl !== 'number' || !Number.isFinite(cacheTtl) || cacheTtl <= 0) {
     errors.push('Invalid cacheTtlSeconds configuration (must be a positive number).')
   }
 
   // Validate timeouts
   const upstreamTimeoutMs = store.getConfigValue('upstreamTimeoutMs')
-  if (typeof upstreamTimeoutMs !== 'number' || isNaN(upstreamTimeoutMs) || upstreamTimeoutMs <= 0) {
+  if (typeof upstreamTimeoutMs !== 'number' || !Number.isFinite(upstreamTimeoutMs) || upstreamTimeoutMs <= 0) {
     errors.push('Invalid upstreamTimeoutMs configuration (must be a positive number).')
+  }
+
+  const serverTimeoutMs = store.getConfigValue('serverTimeoutMs')
+  if (typeof serverTimeoutMs !== 'number' || !Number.isFinite(serverTimeoutMs) || serverTimeoutMs <= 0) {
+    errors.push('Invalid serverTimeoutMs configuration (must be a positive number).')
   }
 
   // Validate rate limits
   const minRequestIntervalMs = store.getConfigValue('minRequestIntervalMs')
-  if (typeof minRequestIntervalMs !== 'number' || isNaN(minRequestIntervalMs) || minRequestIntervalMs < 0) {
+  if (typeof minRequestIntervalMs !== 'number' || !Number.isFinite(minRequestIntervalMs) || minRequestIntervalMs < 0) {
     errors.push('Invalid minRequestIntervalMs configuration (must be a non-negative number).')
+  }
+
+  const globalRateLimitMax = store.getConfigValue('globalRateLimitMax')
+  if (typeof globalRateLimitMax !== 'number' || !Number.isFinite(globalRateLimitMax) || globalRateLimitMax <= 0) {
+    errors.push('Invalid globalRateLimitMax configuration (must be a positive number).')
+  }
+
+  const maxConcurrentRequests = store.getConfigValue('maxConcurrentRequests')
+  if (typeof maxConcurrentRequests !== 'number' || !Number.isFinite(maxConcurrentRequests) || maxConcurrentRequests <= 0) {
+    errors.push('Invalid maxConcurrentRequests configuration (must be a positive number).')
   }
 
   // Validate provider configs
