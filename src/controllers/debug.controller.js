@@ -384,6 +384,8 @@ async function handleDebugSearch (req, res) {
             firstReleaseDate: toIsoDate(album.releaseDate || album.year),
             coverUrl: album.imageUrl || '',
             provider: album.provider || '',
+            rating: { count: album.rating?.count ?? album.ratings?.votes ?? 0, value: album.rating?.value ?? album.ratings?.value ?? 0 },
+            ratings: { votes: album.ratings?.votes ?? album.rating?.count ?? 0, value: album.ratings?.value ?? album.rating?.value ?? 0 },
             ids: album.ids || {}
           })),
           providerSources: Array.from(new Set(data.albums.map(a => a.provider))),
