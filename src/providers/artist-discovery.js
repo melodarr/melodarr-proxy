@@ -275,7 +275,8 @@ async function discoverByITunes (query, type) {
       limit: 25,
       country: getConfigValue('itunesCountry') || 'US'
     },
-    httpsAgent
+    httpsAgent,
+    timeout: Number(getConfigValue('itunesTimeoutMs')) || 5000
   })
 
   const results = response.data?.results || []
