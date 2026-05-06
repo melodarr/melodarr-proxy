@@ -61,13 +61,20 @@ pretty () {
 probe () {
   local path="$1"; shift || true
   local url="${BASE_URL%/}${path}"
-  local body_file
+  local body_file err_file
   body_file=$(mktemp -t proxy-diag-body.XXXXXX)
+  err_file=$(mktemp -t proxy-diag-err.XXXXXX)
   echo "→ ${url}" >&2
-  local meta
-  meta=$(curl -sS -m 10 -o "$body_file" -w '%{http_code} %{time_total}' "$@" "$url" 2>&1) || meta="000 -"
+  local meta status=0
+  meta=$(curl -sS -m 10 -o "$body_file" -w '%{http_code} %{time_total}' "$@" "$url" 2>"$err_file") || status=$?
   cat "$body_file"
-  rm -f "$body_file"
+  if [[ "$status" -ne 0 ]]; then
+    local err
+    err=$(tr '\n' ' ' < "$err_file" | sed 's/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//')
+    meta="000 -"
+    [[ -n "$err" ]] && printf '\n[curl error %s] %s\n' "$status" "$err" >&2
+  fi
+  rm -f "$body_file" "$err_file"
   # shellcheck disable=SC2086
   printf '\n[HTTP %s] [%ss]\n' $meta >&2
 }
