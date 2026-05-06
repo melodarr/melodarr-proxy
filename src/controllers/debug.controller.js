@@ -327,7 +327,7 @@ async function handleDebugSearch (req, res) {
 
   const trace = tracer.createTrace(q)
   const normalizedQuery = String(q).toLowerCase().replace(/\s+/g, ' ')
-  const cacheKey = `artist:${normalizedQuery}`
+  const cacheKey = `debug:artist:${normalizedQuery}:v2`
   const cacheTtlSeconds = getConfigValue('cacheTtlSeconds') || 86400
 
   function buildCacheMeta (hit, cachedData, remainingSeconds) {
@@ -399,6 +399,13 @@ async function handleDebugSearch (req, res) {
       ? {
           artistName: rankedResults[0].artistName,
           id: '',
+          disambiguation: data.disambiguation || '',
+          overview: data.overview || '',
+          oldIds: data.oldIds || [],
+          aliases: data.aliases || [],
+          artistAliases: data.artistAliases || data.aliases || [],
+          images: data.images || [],
+          imageDebug: data.imageDebug || [],
           providers: data.providers,
           albums: rankedResults[0].albums,
           partial: data.partial,
@@ -407,6 +414,13 @@ async function handleDebugSearch (req, res) {
       : {
           artistName: data.artistName,
           id: '',
+          disambiguation: data.disambiguation || '',
+          overview: data.overview || '',
+          oldIds: data.oldIds || [],
+          aliases: data.aliases || [],
+          artistAliases: data.artistAliases || data.aliases || [],
+          images: data.images || [],
+          imageDebug: data.imageDebug || [],
           providers: data.providers,
           albums: [],
           partial: data.partial,
