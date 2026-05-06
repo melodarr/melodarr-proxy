@@ -9,8 +9,9 @@ const concurrencyLimit = (req, res, next) => {
 
   if (activeRequests >= maxConcurrent) {
     logger.warn('Concurrency limit exceeded', { path: req.path, activeRequests, maxConcurrent })
-    return res.status(503).json({
-      error: 'Service unavailable, too many concurrent requests'
+    res.set('Retry-After', '1')
+    return res.status(429).json({
+      error: 'Too many concurrent requests'
     })
   }
 
