@@ -90,16 +90,21 @@ async function aggregateArtist (term) {
       } catch (error) {
         const duration = Date.now() - pStartTime
         const isTimeout = error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')
-        logger.error(`Provider error [${provider.name}]`, {
-          error: {
-            message: error.message,
-            code: error.code,
-            stack: error.stack,
-            responseData: error.response?.data,
-            responseStatus: error.response?.status,
-            isTimeout
-          }
-        })
+
+        if (isTimeout) {
+          logger.error(`Provider timeout [${provider.name}]`, { event: 'provider_timeout', provider: provider.name, duration })
+        } else {
+          logger.error(`Provider error [${provider.name}]`, {
+            error: {
+              message: error.message,
+              code: error.code,
+              stack: error.stack,
+              responseData: error.response?.data,
+              responseStatus: error.response?.status,
+              isTimeout
+            }
+          })
+        }
 
         if (metrics.recordProviderCall) {
           metrics.recordProviderCall(provider.name, false, duration, isTimeout)
@@ -346,6 +351,20 @@ async function aggregateArtist (term) {
 
   if (successfulProviders === 0) {
     throw new Error(`All metadata providers failed. Errors: ${warningMessages.join(' | ')}`)
+  }
+
+  const isFull = successfulProviders === orderedProviders.length
+  const albumCount = Array.from(albumMap.values()).length
+  const isEmpty = albumCount === 0
+
+  if (isEmpty) {
+    if (metrics.recordAggregation) metrics.recordAggregation('empty')
+    logger.warn(`Aggregation empty result [${term}]`, { event: 'empty_result', term })
+  } else if (isFull) {
+    if (metrics.recordAggregation) metrics.recordAggregation('full')
+  } else {
+    if (metrics.recordAggregation) metrics.recordAggregation('partial')
+    logger.warn(`Aggregation partial result [${term}]`, { event: 'partial_result', term, missing: orderedProviders.length - successfulProviders, warnings: warningMessages })
   }
 
   return {

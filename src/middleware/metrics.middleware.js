@@ -6,7 +6,9 @@ function metricsMiddleware (req, res, next) {
   res.on('finish', () => {
     // Track requests to /api/ (could be all requests, but let's do all for simplicity)
     if (req.originalUrl.startsWith('/api/')) {
-      metrics.recordRequest()
+      const isSuccess = res.statusCode < 400
+      const endpoint = req.route ? req.route.path : req.path
+      metrics.recordRequest({ endpoint, success: isSuccess })
       if (res.statusCode >= 400 && res.statusCode !== 503) {
         metrics.recordError()
       }

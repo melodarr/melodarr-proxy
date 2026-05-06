@@ -10,10 +10,11 @@ class MetricsManager extends EventEmitter {
     }
 
     this.stats = {
-      requests: { total: 0 },
+      requests: { total: 0, successes: 0, failures: 0, byEndpoint: {} },
       cache: { hits: 0, misses: 0, staleHits: 0 },
       errors: { count: 0 },
       locks: { waitEvents: 0, totalWaitMs: 0, maxWaitMs: 0 },
+      aggregation: { full: 0, partial: 0, empty: 0 },
       lidarr: { addShapeFailures: 0 },
       artistLookup: {
         total: 0,
@@ -72,8 +73,25 @@ class MetricsManager extends EventEmitter {
     if (this.snapshotInterval.unref) this.snapshotInterval.unref()
   }
 
-  recordRequest () {
+  recordRequest ({ endpoint = 'unknown', success = true } = {}) {
     this.stats.requests.total++
+    if (success) {
+      this.stats.requests.successes++
+    } else {
+      this.stats.requests.failures++
+    }
+
+    if (endpoint) {
+      if (!this.stats.requests.byEndpoint[endpoint]) {
+        this.stats.requests.byEndpoint[endpoint] = { total: 0, successes: 0, failures: 0 }
+      }
+      this.stats.requests.byEndpoint[endpoint].total++
+      if (success) {
+        this.stats.requests.byEndpoint[endpoint].successes++
+      } else {
+        this.stats.requests.byEndpoint[endpoint].failures++
+      }
+    }
 
     const now = Date.now()
     this.requestTimestamps.push(now)
@@ -163,6 +181,12 @@ class MetricsManager extends EventEmitter {
 
   recordLidarrAddShapeFailure () {
     this.stats.lidarr.addShapeFailures++
+  }
+
+  recordAggregation (type) {
+    if (this.stats.aggregation[type] !== undefined) {
+      this.stats.aggregation[type]++
+    }
   }
 
   recordLatency (ms) {
@@ -292,7 +316,10 @@ class MetricsManager extends EventEmitter {
       },
       requests: {
         total: this.stats.requests.total,
-        perMinute: this.getRPM()
+        successes: this.stats.requests.successes,
+        failures: this.stats.requests.failures,
+        perMinute: this.getRPM(),
+        byEndpoint: this.stats.requests.byEndpoint
       },
       cache: {
         hits: this.stats.cache.hits,
@@ -328,6 +355,7 @@ class MetricsManager extends EventEmitter {
       lidarr: {
         addShapeFailures: this.stats.lidarr.addShapeFailures
       },
+      aggregation: this.stats.aggregation,
       providerFallbacks: {
         fallbacks: this.stats.providers.fallbacks,
         exhaustions: this.stats.providers.exhaustions

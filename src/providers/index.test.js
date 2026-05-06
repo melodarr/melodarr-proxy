@@ -18,7 +18,7 @@ function setupMocks (providersStr, scoreFn) {
 
   // Mock logger
   require.cache[require.resolve('../utils/logger')] = {
-    exports: { error: () => {}, info: () => {} }
+    exports: { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
   }
 
   // Mock scoring

@@ -80,7 +80,7 @@ class CacheLayer {
         this.stats.misses++
         return null
       } catch (err) {
-        logger.warn(`Redis get failed for ${key}, trying memory`, { context: 'Cache', error: err.message })
+        logger.warn(`Redis get failed for ${key}, trying memory`, { event: 'cache_fallback', context: 'Cache', error: err.message })
       }
     }
 
@@ -113,7 +113,7 @@ class CacheLayer {
         await this.redis.rename(tempKey, key)
         return
       } catch (err) {
-        logger.warn(`Redis set failed for ${key}, using memory`, { context: 'Cache', error: err.message })
+        logger.warn(`Redis set failed for ${key}, using memory`, { event: 'cache_fallback', context: 'Cache', error: err.message })
         // Clean up temp key if possible but rename failed
         this.redis.del(tempKey).catch(() => {})
       }
@@ -131,7 +131,7 @@ class CacheLayer {
       try {
         return await this.redis.ttl(key)
       } catch (err) {
-        logger.warn(`Redis ttl failed for ${key}, trying memory`, { context: 'Cache', error: err.message })
+        logger.warn(`Redis ttl failed for ${key}, trying memory`, { event: 'cache_fallback', context: 'Cache', error: err.message })
       }
     }
 
@@ -163,7 +163,7 @@ class CacheLayer {
         if (result === 'OK') return token
         return false
       } catch (err) {
-        logger.warn(`Redis lock acquire failed for ${key}, falling back to memory`, { context: 'Cache', error: err.message })
+        logger.warn(`Redis lock acquire failed for ${key}, falling back to memory`, { event: 'cache_fallback', context: 'Cache', error: err.message })
       }
     }
 
