@@ -723,9 +723,9 @@ export default function ExplorerPage() {
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
                   {artistImages.length === 0 ? (
                     <p className="col-span-full text-sm text-gray-500">No artist images found for this result.</p>
-                  ) : artistImages.map((image) => (
+                  ) : artistImages.map((image, index) => (
                     <article key={`${image.coverType}-${image.url}`} className="rounded-lg border border-border/60 bg-background/40 p-3">
-                      <ImagePreview url={image.url} alt={`${image.coverType} image`} onOpen={() => openLightbox(artistLightboxImages, artistLightboxImages.findIndex((item) => item.url === image.url))} />
+                      <ImagePreview url={image.url} alt={`${image.coverType} image`} onOpen={() => openLightbox(artistLightboxImages, index)} />
                       <div className="mt-3 min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs capitalize text-gray-300">{image.coverType}</span>
