@@ -261,35 +261,71 @@ function mergeArtistByIdImageEnrichment (base = {}, enrichment = {}) {
   }
 }
 
+function hasArtistImages (data = {}) {
+  return Array.isArray(data.images) && data.images.length > 0
+}
+
+function isMatchingArtistEnrichment (base = {}, enrichment = {}) {
+  const enrichmentMbid = enrichment.id || enrichment.foreignArtistId || enrichment.ids?.musicbrainzArtistId
+  return !enrichmentMbid || !base.id || enrichmentMbid === base.id
+}
+
+async function tryAggregateArtistImageEnrichment (data) {
+  try {
+    const enrichment = await withTimeout(providers.aggregateArtist(data.artistName), 15000)
+    if (!enrichment || !hasArtistImages(enrichment)) {
+      return data
+    }
+
+    if (!isMatchingArtistEnrichment(data, enrichment)) {
+      logger.warn('Artist by ID aggregate enrichment skipped: MBID mismatch', {
+        context: 'Proxy',
+        artistName: data.artistName,
+        requestedId: data.id,
+        enrichmentId: enrichment.id || enrichment.foreignArtistId || enrichment.ids?.musicbrainzArtistId || null
+      })
+      return data
+    }
+
+    return mergeArtistByIdImageEnrichment(data, enrichment)
+  } catch (error) {
+    logger.warn('Artist by ID aggregate enrichment skipped', {
+      context: 'Proxy',
+      artistName: data.artistName,
+      error: error.message,
+      code: error.code
+    })
+    return data
+  }
+}
+
 async function tryEnrichArtistByIdData (data) {
   if (!data?.artistName) {
     return data
   }
 
-  const needsImages = !Array.isArray(data.images) || data.images.length === 0
-
-  if (!needsImages) {
+  if (hasArtistImages(data)) {
     return data
   }
 
   try {
     const enrichment = await withTimeout(theAudioDbProvider.searchArtistProfile(data.artistName), 10000)
     if (!enrichment) {
-      return data
+      return tryAggregateArtistImageEnrichment(data)
     }
 
-    const enrichmentMbid = enrichment.ids?.musicbrainzArtistId
-    if (enrichmentMbid && data.id && enrichmentMbid !== data.id) {
+    if (!isMatchingArtistEnrichment(data, enrichment)) {
       logger.warn('Artist by ID enrichment skipped: TheAudioDB MBID mismatch', {
         context: 'Proxy',
         artistName: data.artistName,
         requestedId: data.id,
-        theAudioDbMbid: enrichmentMbid
+        theAudioDbMbid: enrichment.ids?.musicbrainzArtistId || null
       })
-      return data
+      return tryAggregateArtistImageEnrichment(data)
     }
 
-    return mergeArtistByIdImageEnrichment(data, enrichment)
+    const enrichedData = mergeArtistByIdImageEnrichment(data, enrichment)
+    return hasArtistImages(enrichedData) ? enrichedData : tryAggregateArtistImageEnrichment(data)
   } catch (error) {
     logger.warn('Artist by ID enrichment skipped', {
       context: 'Proxy',
@@ -297,7 +333,7 @@ async function tryEnrichArtistByIdData (data) {
       error: error.message,
       code: error.code
     })
-    return data
+    return tryAggregateArtistImageEnrichment(data)
   }
 }
 

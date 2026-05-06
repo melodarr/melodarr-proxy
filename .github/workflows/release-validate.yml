@@ -28,10 +28,11 @@ jobs:
       - name: Install deps (proxy)
         run: yarn install --immutable
 
-      - name: Lint + unit tests (proxy)
+      - name: Lint + tests (proxy)
         run: |
           yarn lint
-          yarn test:unit
+          yarn test
+          yarn test:coverage:check
 
       - name: Build docker (proxy)
         run: docker build --target production -t test/proxy .

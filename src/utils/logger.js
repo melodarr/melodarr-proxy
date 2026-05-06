@@ -32,12 +32,16 @@ const formatMessage = (level, message, meta = {}) => {
     ...meta
   }
 
-  // Safe stringify to handle circular references in axios errors
+  // Safe stringify to handle circular references and redact sensitive data
+  const SENSITIVE_KEYS = /api_?key|token|secret|password|authorization/i
   const cache = new Set()
   return JSON.stringify(logObj, (key, value) => {
     if (typeof value === 'object' && value !== null) {
       if (cache.has(value)) return '[Circular]'
       cache.add(value)
+    }
+    if (SENSITIVE_KEYS.test(key)) {
+      return '[REDACTED]'
     }
     return value
   })

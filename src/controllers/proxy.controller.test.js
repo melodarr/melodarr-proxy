@@ -615,6 +615,55 @@ test('artist by id skips TheAudioDB enrichment when returned MBID does not match
   assert.deepEqual(res.body.images, [])
 })
 
+test('artist by id falls back to aggregate provider images when TheAudioDB enrichment is unavailable', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'LMFAO',
+      id,
+      disambiguation: '',
+      overview: '',
+      aliases: [],
+      artistAliases: [],
+      images: [],
+      albums: [{
+        name: 'Sorry for Party Rocking',
+        releaseDate: '2011-06-17',
+        imageUrl: 'https://example.test/party-rocking-cover.jpg',
+        provider: 'musicbrainz',
+        ids: { musicbrainzReleaseGroupId: 'rg-party' }
+      }],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 1 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    }),
+    searchArtistProfile: async () => {
+      throw new Error('TheAudioDB API key not configured')
+    },
+    aggregateArtist: async () => ({
+      artistName: 'LMFAO',
+      id: 'ed5d9086-e8cd-473a-b96c-d81ad6c98f0d',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/lmfao-poster.jpg', remoteUrl: 'https://example.test/lmfao-poster.jpg' },
+        { coverType: 'fanart', url: 'https://example.test/lmfao-fanart.jpg', remoteUrl: 'https://example.test/lmfao-fanart.jpg' }
+      ],
+      albums: []
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'ed5d9086-e8cd-473a-b96c-d81ad6c98f0d' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.images.map(image => image.coverType), ['poster', 'fanart'])
+  assert.deepEqual(res.body.images.map(image => image.url), [
+    'https://example.test/lmfao-poster.jpg',
+    'https://example.test/lmfao-fanart.jpg'
+  ])
+})
+
 test('recent feed returns empty array for unsupported update feed', async () => {
   const { controller } = loadController()
   const res = makeResponse()

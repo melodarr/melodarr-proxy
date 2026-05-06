@@ -27,7 +27,63 @@ function getMusicBrainzHttpsAgent () {
 }
 
 let lastRequestTime = 0
-let requestQueue = Promise.resolve()
+const waitingQueue = []
+let activeRequests = 0
+let isProcessingQueue = false
+
+async function processQueue () {
+  if (isProcessingQueue) return
+  isProcessingQueue = true
+
+  try {
+    const minInterval = getConfigValue('minRequestIntervalMs') || 1100
+    // Arbitrary concurrency limit of 3 for upstream
+    const maxConcurrency = 3
+
+    while (waitingQueue.length > 0 && activeRequests < maxConcurrency) {
+      const now = Date.now()
+      const timeSinceLast = now - lastRequestTime
+
+      if (timeSinceLast < minInterval) {
+        await new Promise(resolve => setTimeout(resolve, minInterval - timeSinceLast))
+        continue // re-evaluate queue state after waiting
+      }
+
+      // Check again if we still have room (in case things changed)
+      if (waitingQueue.length === 0 || activeRequests >= maxConcurrency) {
+        break
+      }
+
+      const task = waitingQueue.shift()
+      lastRequestTime = Date.now()
+      activeRequests++
+
+      // Start task asynchronously
+      task().finally(() => {
+        activeRequests--
+        processQueue() // Trigger next processing when a task completes
+      })
+    }
+  } finally {
+    isProcessingQueue = false
+  }
+}
+
+async function enqueueRequest (fn) {
+  return new Promise((resolve, reject) => {
+    const task = async () => {
+      try {
+        const result = await fn()
+        resolve(result)
+      } catch (err) {
+        reject(err)
+      }
+    }
+
+    waitingQueue.push(task)
+    processQueue()
+  })
+}
 
 async function lookupForRecord (hostname, family) {
   if (!hostname) return null
@@ -40,26 +96,6 @@ async function lookupForRecord (hostname, family) {
   } catch (_e) {
     return null
   }
-}
-
-async function enqueueRequest (fn) {
-  const minInterval = getConfigValue('minRequestIntervalMs') || 1100
-
-  const waitPromise = requestQueue.then(async () => {
-    const now = Date.now()
-    const timeSinceLast = now - lastRequestTime
-    if (timeSinceLast < minInterval) {
-      await new Promise(resolve => setTimeout(resolve, minInterval - timeSinceLast))
-    }
-    lastRequestTime = Date.now()
-  }).catch(() => {
-    lastRequestTime = Date.now()
-  })
-
-  requestQueue = waitPromise
-  await waitPromise
-
-  return fn()
 }
 
 class UpstreamService {

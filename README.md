@@ -30,76 +30,60 @@ ghcr.io/melodarr/melodarr-proxy-melodash
 
 ## How It Works
 
-Melodarr Proxy sits between Lidarr-compatible clients, Melodash, Redis, and live metadata providers. Lidarr keeps speaking familiar Lidarr/SkyHook-style API calls, while the proxy handles caching, provider selection, response normalization, health tracking, and fallback behavior.
+Melodarr Proxy is the compatibility layer between Lidarr-style clients and live music metadata providers. Lidarr keeps using familiar SkyHook/Lidarr endpoints; the proxy handles cache, provider fallback, normalization, and diagnostics.
 
 ```mermaid
-flowchart TB
-    User["Operator"]
-    Lidarr["Lidarr or compatible client"]
+flowchart LR
+    Lidarr["Lidarr<br/>or compatible client"]
+    Melodash["Melodash<br/>operator UI"]
 
-    subgraph Compose["Melodarr deployment"]
-        Melodash["Melodash dashboard<br/>status, settings, explorer, traces"]
-        Proxy["Melodarr Proxy API<br/>Lidarr/SkyHook-compatible endpoints"]
-        Cache[("Redis cache<br/>shared lookup results")]
-
-        subgraph Runtime["Provider runtime"]
-            Router["Request router<br/>lookup, search, discovery"]
-            Guard["Safe provider calls<br/>timeouts, retries, validation"]
-            Health["Health, metrics, scoring<br/>success rate, latency, priority"]
-            Breaker["Circuit breaker<br/>degrade, disable, canary, re-enable"]
-            Normalize["Normalizer<br/>stable Lidarr/SkyHook response"]
-        end
+    subgraph Stack["Melodarr Proxy deployment"]
+        Proxy["Proxy API<br/>SkyHook/Lidarr routes"]
+        Cache[("Redis<br/>metadata cache")]
+        Runtime["Provider runtime<br/>fallback, scoring, circuit breaker"]
+        Shape["Normalizer<br/>Lidarr-safe JSON"]
     end
 
-    subgraph Providers["Live metadata sources"]
-        MusicBrainz["MusicBrainz"]
+    subgraph Sources["Metadata providers"]
+        MB["MusicBrainz"]
         ITunes["iTunes"]
-        TheAudioDB["TheAudioDB"]
+        TADB["TheAudioDB"]
         LastFM["Last.fm"]
         Discogs["Discogs"]
-        Custom["Custom provider"]
+        Custom["Custom APIs"]
     end
 
-    User -->|"configures and observes"| Melodash
-    Melodash -->|"settings, diagnostics, provider tests"| Proxy
-    Lidarr -->|"artist, album, release, SkyHook requests"| Proxy
+    Lidarr -->|"1 request metadata"| Proxy
+    Melodash -->|"settings, tests, traces"| Proxy
+    Proxy <-->|"2 cache hit or write"| Cache
+    Proxy -->|"3 cache miss"| Runtime
+    Runtime -->|"4 call healthy providers"| Sources
+    Sources -->|"5 raw provider data"| Runtime
+    Runtime -->|"6 best merged result"| Shape
+    Shape -->|"7 cacheable response"| Cache
+    Shape -->|"8 Lidarr-compatible JSON"| Proxy
+    Proxy --> Lidarr
+    Proxy --> Melodash
 
-    Proxy -->|"1. check cache"| Cache
-    Cache -->|"cache hit"| Proxy
-    Proxy -->|"2. cache miss"| Router
-    Router --> Guard
-    Guard --> Breaker
-    Breaker -->|"skip unhealthy providers"| Health
-    Breaker -->|"call enabled providers"| MusicBrainz
-    Breaker --> ITunes
-    Breaker --> TheAudioDB
-    Breaker --> LastFM
-    Breaker --> Discogs
-    Breaker --> Custom
+    classDef app fill:#eef6ff,stroke:#2f6fab,color:#0f2742
+    classDef service fill:#f7f7f7,stroke:#555,color:#222
+    classDef cache fill:#fff3cd,stroke:#9a6b00,color:#302000
+    classDef provider fill:#f0fff4,stroke:#2f7d32,color:#163f18
 
-    MusicBrainz --> Guard
-    ITunes --> Guard
-    TheAudioDB --> Guard
-    LastFM --> Guard
-    Discogs --> Guard
-    Custom --> Guard
-
-    Guard --> Health
-    Health -->|"merge preference and fallback order"| Normalize
-    Normalize -->|"write cacheable result"| Cache
-    Normalize -->|"normalized metadata"| Proxy
-    Proxy -->|"Lidarr-compatible response"| Lidarr
-    Proxy -->|"status, traces, results"| Melodash
+    class Lidarr,Melodash app
+    class Proxy,Runtime,Shape service
+    class Cache cache
+    class MB,ITunes,TADB,LastFM,Discogs,Custom provider
 ```
 
 Request flow in plain terms:
 
-1. Lidarr asks the proxy for artist, album, release, or SkyHook-compatible metadata.
-2. The proxy returns Redis-cached data immediately when it can.
-3. On a cache miss, the provider runtime calls only enabled and healthy providers.
-4. Provider health, scoring, and priority decide which source wins when multiple providers return useful data.
-5. The normalizer converts provider-specific responses into the stable shape Lidarr expects.
-6. Melodash uses the same proxy API to manage settings, test providers, inspect traces, and monitor readiness.
+1. Lidarr or Melodash calls the proxy API.
+2. Redis returns a cached answer when one is available.
+3. Cache misses go through the provider runtime.
+4. The runtime skips unhealthy providers, calls healthy ones, and ranks their results.
+5. The normalizer turns provider-specific data into the stable Lidarr/SkyHook shape.
+6. The proxy writes cacheable results and returns clean JSON to Lidarr or Melodash.
 
 See [docs/architecture.md](docs/architecture.md) for the runtime diagram covering Lidarr, Melodash, Redis, providers, provider scoring, health, and circuit breaker flow.
 

@@ -668,7 +668,10 @@ const EDITABLE_KEYS = {
   customProviderQueryAuthName: { env: 'CUSTOM_PROVIDER_QUERY_AUTH_NAME', fallback: '', type: 'string' },
   customProviderToken: { env: 'CUSTOM_PROVIDER_TOKEN', fallback: '', type: 'string' },
   customProviderMapping: { env: 'CUSTOM_PROVIDER_MAPPING', fallback: '{}', type: 'string' },
-  providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' }
+  providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' },
+  globalRateLimitMax: { env: 'GLOBAL_RATE_LIMIT_MAX', fallback: 500, type: 'number' },
+  serverTimeoutMs: { env: 'SERVER_TIMEOUT_MS', fallback: 15000, type: 'number' },
+  maxConcurrentRequests: { env: 'MAX_CONCURRENT_REQUESTS', fallback: 20, type: 'number' }
 }
 
 function getRuntimeConfig () {

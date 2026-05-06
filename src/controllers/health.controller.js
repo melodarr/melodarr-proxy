@@ -11,6 +11,12 @@ function buildLivenessPayload () {
   const memoryMb = Math.round(memoryUsage.rss / 1024 / 1024)
   const memoryStatus = memoryMb > 500 ? 'critical' : (memoryMb > 300 ? 'warning' : 'ok')
 
+  const cacheStatus = cache.getHealth()
+  const providerScores = {}
+  for (const [providerName] of metrics.providerStats.entries()) {
+    providerScores[providerName] = getProviderScore(providerName, null)
+  }
+
   return {
     status: memoryStatus === 'critical' ? 'down' : 'ok',
     service: process.env.APP_NAME || 'melodarr-proxy',
@@ -18,7 +24,9 @@ function buildLivenessPayload () {
     instanceId: process.env.INSTANCE_ID,
     proxy: metrics.state.isRunning ? 'running' : 'stopped',
     memory: { status: memoryStatus, usageMb: memoryMb },
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    cache: cacheStatus,
+    providers: providerScores
   }
 }
 
