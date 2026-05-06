@@ -26,10 +26,10 @@ jobs:
       - name: Lint
         run: yarn lint
 
-      - name: Test
+      - name: Run full test suite
         run: yarn test
 
-      - name: Run coverage
+      - name: Run coverage check
         run: yarn test:coverage:check
 
       - name: Install Melodash dependencies

@@ -46,12 +46,53 @@ function redactPathApiKeys (value = '') {
     .join('/')
 }
 
+const rateLimit = require('./middleware/rateLimit.middleware')
+const storeSettings = require('./settings/store')
+const globalRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: () => storeSettings.getConfigValue('globalRateLimitMax') || 500,
+  message: 'Server is currently overloaded, please try again later.'
+})
+const concurrencyLimit = require('./middleware/concurrency.middleware')
+
 function createApp () {
   const app = express()
+
+  // Timeout Hard Caps - Ensure no request hangs indefinitely
+  app.use((req, res, next) => {
+    const configuredServerTimeoutMs = Number(storeSettings.getConfigValue('serverTimeoutMs'))
+    const serverTimeoutMs = Number.isFinite(configuredServerTimeoutMs) && configuredServerTimeoutMs > 0
+      ? configuredServerTimeoutMs
+      : 15000
+
+    if (req.socket && typeof req.socket.setTimeout === 'function') {
+      req.socket.setTimeout(serverTimeoutMs, () => {
+        logger.error('Request timeout (Client)', { path: req.path })
+        if (!res.headersSent) res.status(408).json({ error: 'Request Timeout' })
+      })
+    }
+
+    if (res.socket && typeof res.socket.setTimeout === 'function') {
+      res.socket.setTimeout(serverTimeoutMs, () => {
+        logger.error('Response timeout (Server)', { path: req.path })
+        if (!res.headersSent) {
+          res.status(504).json({ error: 'Gateway Timeout' })
+        }
+      })
+    }
+
+    next()
+  })
 
   // RequestId / ALS scope must be first so every downstream middleware,
   // controller, and async hop sees the correlation id.
   app.use(requestIdMiddleware)
+
+  // Global rate limiter
+  app.use(globalRateLimiter)
+
+  // Global concurrency limiter
+  app.use(concurrencyLimit)
 
   app.use(corsMiddleware)
   app.use(express.json())
@@ -138,6 +179,9 @@ const PORT = process.env.PORT || 3000
 // ── Startup Validation (Fail-Fast System) ───────────────────────
 async function boot (appInstance) {
   logger.info('Starting boot sequence...')
+
+  const { validateStartup } = require('./utils/startupValidator')
+  validateStartup()
 
   // Surface saved runtime overrides that are shadowing different env values.
   // Saved-wins precedence is intentional, but operators who change an env var

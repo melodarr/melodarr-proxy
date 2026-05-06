@@ -28,10 +28,11 @@ jobs:
       - name: Install deps (proxy)
         run: yarn install --immutable
 
-      - name: Lint + unit tests (proxy)
+      - name: Lint + tests (proxy)
         run: |
           yarn lint
-          yarn test:unit
+          yarn test
+          yarn test:coverage:check
 
       - name: Build docker (proxy)
         run: docker build --target production -t test/proxy .
@@ -79,10 +80,10 @@ jobs:
       - name: Validate SkyHook contract
         run: |
           set -euo pipefail
-          curl -s "http://localhost:3055/api/v1/artist/lookup?term=Radiohead" \
-          | jq '.[0] |
+          curl -s -f "http://localhost:3055/api/v1/artist/lookup?term=Radiohead" \
+          | jq 'if length == 0 then true else .[0] |
               (has("foreignArtistId") and
                has("status") and
                has("links") and
-               has("aliases"))' \
+               has("aliases")) end' \
           | grep true

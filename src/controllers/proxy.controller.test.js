@@ -565,6 +565,7 @@ test('artist by id enriches missing artist images and preserves MusicBrainz albu
     }),
     searchArtistProfile: async () => ({
       artistName: 'Akon',
+      overview: 'Akon is a Senegalese-American singer.',
       images: [
         { coverType: 'poster', url: 'https://example.test/akon-thumb.jpg', remoteUrl: 'https://example.test/akon-thumb.jpg' },
         { coverType: 'fanart', url: 'https://example.test/akon-fanart.jpg', remoteUrl: 'https://example.test/akon-fanart.jpg' },
@@ -577,8 +578,43 @@ test('artist by id enriches missing artist images and preserves MusicBrainz albu
   await controller.handleArtistById({ params: { foreignArtistId: 'akon-id' }, query: {} }, res)
 
   assert.equal(res.statusCode, 200)
+  assert.equal(res.body.overview, 'Akon is a Senegalese-American singer.')
   assert.deepEqual(res.body.images.map(image => image.coverType), ['poster', 'fanart', 'clearlogo'])
   assert.deepEqual(res.body.albums[0].rating, { count: 42, value: 4.5 })
+})
+
+test('artist by id enriches missing overview even when artist images already exist', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'OneRepublic',
+      id,
+      disambiguation: '',
+      overview: '',
+      aliases: [],
+      artistAliases: [],
+      images: [
+        { coverType: 'poster', url: 'https://example.test/onerepublic-existing.jpg', remoteUrl: 'https://example.test/onerepublic-existing.jpg' }
+      ],
+      albums: [],
+      confidence: 100
+    }),
+    searchArtistProfile: async () => ({
+      artistName: 'OneRepublic',
+      overview: 'OneRepublic is an American pop rock band.',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/onerepublic-new.jpg', remoteUrl: 'https://example.test/onerepublic-new.jpg' }
+      ],
+      genres: ['pop rock']
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'c33c2065-b1c3-4406-b066-d33a9e2ea71a' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.overview, 'OneRepublic is an American pop rock band.')
+  assert.deepEqual(res.body.images.map(image => image.url), ['https://example.test/onerepublic-existing.jpg'])
+  assert.deepEqual(res.body.genres, ['pop rock'])
 })
 
 test('artist by id skips TheAudioDB enrichment when returned MBID does not match requested foreignArtistId', async () => {
@@ -613,6 +649,55 @@ test('artist by id skips TheAudioDB enrichment when returned MBID does not match
 
   assert.equal(res.statusCode, 200)
   assert.deepEqual(res.body.images, [])
+})
+
+test('artist by id falls back to aggregate provider images when TheAudioDB enrichment is unavailable', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'LMFAO',
+      id,
+      disambiguation: '',
+      overview: '',
+      aliases: [],
+      artistAliases: [],
+      images: [],
+      albums: [{
+        name: 'Sorry for Party Rocking',
+        releaseDate: '2011-06-17',
+        imageUrl: 'https://example.test/party-rocking-cover.jpg',
+        provider: 'musicbrainz',
+        ids: { musicbrainzReleaseGroupId: 'rg-party' }
+      }],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 1 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    }),
+    searchArtistProfile: async () => {
+      throw new Error('TheAudioDB API key not configured')
+    },
+    aggregateArtist: async () => ({
+      artistName: 'LMFAO',
+      id: 'ed5d9086-e8cd-473a-b96c-d81ad6c98f0d',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/lmfao-poster.jpg', remoteUrl: 'https://example.test/lmfao-poster.jpg' },
+        { coverType: 'fanart', url: 'https://example.test/lmfao-fanart.jpg', remoteUrl: 'https://example.test/lmfao-fanart.jpg' }
+      ],
+      albums: []
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'ed5d9086-e8cd-473a-b96c-d81ad6c98f0d' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.images.map(image => image.coverType), ['poster', 'fanart'])
+  assert.deepEqual(res.body.images.map(image => image.url), [
+    'https://example.test/lmfao-poster.jpg',
+    'https://example.test/lmfao-fanart.jpg'
+  ])
 })
 
 test('recent feed returns empty array for unsupported update feed', async () => {
