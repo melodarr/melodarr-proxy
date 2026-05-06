@@ -60,21 +60,27 @@ function createApp () {
 
   // Timeout Hard Caps - Ensure no request hangs indefinitely
   app.use((req, res, next) => {
-    const serverTimeoutMs = storeSettings.getConfigValue('serverTimeoutMs') || 15000
+    const configuredServerTimeoutMs = Number(storeSettings.getConfigValue('serverTimeoutMs'))
+    const serverTimeoutMs = Number.isFinite(configuredServerTimeoutMs) && configuredServerTimeoutMs > 0
+      ? configuredServerTimeoutMs
+      : 15000
+
     if (req.socket && typeof req.socket.setTimeout === 'function') {
-      req.setTimeout(serverTimeoutMs, () => {
+      req.socket.setTimeout(serverTimeoutMs, () => {
         logger.error('Request timeout (Client)', { path: req.path })
         if (!res.headersSent) res.status(408).json({ error: 'Request Timeout' })
       })
     }
+
     if (res.socket && typeof res.socket.setTimeout === 'function') {
-      res.setTimeout(serverTimeoutMs, () => {
+      res.socket.setTimeout(serverTimeoutMs, () => {
         logger.error('Response timeout (Server)', { path: req.path })
         if (!res.headersSent) {
           res.status(504).json({ error: 'Gateway Timeout' })
         }
       })
     }
+
     next()
   })
 
