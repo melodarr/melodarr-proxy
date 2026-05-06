@@ -18,6 +18,7 @@ function setupMocks () {
         if (key === 'upstreamRetryBaseMs') return 1
         if (key === 'upstreamRetryMaxMs') return 1000
         if (key === 'upstreamMaxAttempts') return 3
+        if (key === 'upstreamQueueMax') return 200
         return 'dummy'
       }
     }
@@ -303,5 +304,65 @@ test('Upstream Service', async (t) => {
     // the field should be a number, not null).
     assert.strictEqual(typeof entries[1].nextWaitMs, 'number')
     assert.strictEqual(typeof entries[2].nextWaitMs, 'number')
+  })
+
+  await t.test('enqueueRequest - rejects with UPSTREAM_QUEUE_FULL when queue is saturated', async () => {
+    delete require.cache[require.resolve('./upstream.service')]
+    delete require.cache[require.resolve('../diagnostics/upstream-buffer')]
+
+    const blockers = []
+
+    require.cache[require.resolve('../settings/store')] = {
+      exports: {
+        getConfigValue: (key) => {
+          if (key === 'musicbrainzBaseUrl') return 'http://mb.test'
+          if (key === 'upstreamTimeoutMs') return 1000
+          if (key === 'musicbrainzIpFamily') return 'auto'
+          if (key === 'minRequestIntervalMs') return 0
+          if (key === 'upstreamQueueMax') return 1
+          if (key === 'upstreamRetryBaseMs') return 1
+          if (key === 'upstreamRetryMaxMs') return 1000
+          if (key === 'upstreamMaxAttempts') return 1
+          return 'dummy'
+        }
+      }
+    }
+
+    require.cache[require.resolve('axios')] = {
+      exports: {
+        get: () => new Promise((resolve, reject) => blockers.push({ resolve, reject }))
+      }
+    }
+
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error: () => {}, info: () => {}, warn: () => {}, debug: () => {} }
+    }
+
+    const upstreamService = require('./upstream.service')
+
+    // Fill all 3 concurrent upstream slots with blocking requests
+    const req1 = upstreamService.search('a').catch(() => {})
+    const req2 = upstreamService.search('b').catch(() => {})
+    const req3 = upstreamService.search('c').catch(() => {})
+
+    // One more fills the waiting queue (upstreamQueueMax = 1)
+    const req4 = upstreamService.search('d').catch(() => {})
+
+    // Any further request must be rejected immediately
+    await assert.rejects(
+      () => upstreamService.search('overflow'),
+      (err) => {
+        assert.strictEqual(err.code, 'UPSTREAM_QUEUE_FULL')
+        return true
+      }
+    )
+
+    // Cleanup: abort in-flight requests so the test does not hang
+    const cleanupErr = Object.assign(new Error('test cleanup'), { code: 'ECONNABORTED' })
+    for (const { reject } of blockers.splice(0)) reject(cleanupErr)
+    await new Promise(resolve => setImmediate(resolve))
+    // req4 may have dequeued and started after the first 3 completed; drain it too
+    for (const { reject } of blockers.splice(0)) reject(cleanupErr)
+    await Promise.allSettled([req1, req2, req3, req4])
   })
 })

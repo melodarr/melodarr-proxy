@@ -37,6 +37,11 @@ function validateStartup () {
     errors.push('Invalid maxConcurrentRequests configuration (must be a positive number).')
   }
 
+  const upstreamQueueMax = store.getConfigValue('upstreamQueueMax')
+  if (typeof upstreamQueueMax !== 'number' || !Number.isFinite(upstreamQueueMax) || upstreamQueueMax <= 0) {
+    errors.push('Invalid upstreamQueueMax configuration (must be a positive number).')
+  }
+
   // Validate provider configs
   const musicbrainzBaseUrl = store.getConfigValue('musicbrainzBaseUrl')
   if (!musicbrainzBaseUrl || typeof musicbrainzBaseUrl !== 'string') {

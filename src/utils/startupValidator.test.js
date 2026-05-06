@@ -28,7 +28,11 @@ describe('Startup Validator', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
       if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return undefined
     })
@@ -43,7 +47,11 @@ describe('Startup Validator', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return -1 // invalid
       if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
       if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return undefined
     })
@@ -57,7 +65,11 @@ describe('Startup Validator', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 'not_a_number'
+      if (key === 'serverTimeoutMs') return 15000
       if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return undefined
     })
@@ -71,7 +83,11 @@ describe('Startup Validator', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
       if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'not_a_url'
       return undefined
     })
@@ -85,7 +101,11 @@ describe('Startup Validator', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
       if (key === 'minRequestIntervalMs') return -500
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return undefined
     })
@@ -95,11 +115,33 @@ describe('Startup Validator', () => {
     assert.strictEqual(exitSpy.mock.calls.length, 1)
   })
 
+  it('fails if upstreamQueueMax is missing or invalid', () => {
+    getConfigValueMock.mock.mockImplementation((key) => {
+      if (key === 'cacheTtlSeconds') return 3600
+      if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
+      if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return -1
+      if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
+      return undefined
+    })
+
+    assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
+    assert.strictEqual(loggerErrorMock.mock.calls[0].arguments[0], 'Startup Validation Failed: Invalid upstreamQueueMax configuration (must be a positive number).')
+    assert.strictEqual(exitSpy.mock.calls.length, 1)
+  })
+
   it('fails if REDIS_ENABLED=true but REDIS_URL is missing', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
       if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return undefined
     })

@@ -671,7 +671,8 @@ const EDITABLE_KEYS = {
   providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' },
   globalRateLimitMax: { env: 'GLOBAL_RATE_LIMIT_MAX', fallback: 500, type: 'number' },
   serverTimeoutMs: { env: 'SERVER_TIMEOUT_MS', fallback: 15000, type: 'number' },
-  maxConcurrentRequests: { env: 'MAX_CONCURRENT_REQUESTS', fallback: 20, type: 'number' }
+  maxConcurrentRequests: { env: 'MAX_CONCURRENT_REQUESTS', fallback: 20, type: 'number' },
+  upstreamQueueMax: { env: 'UPSTREAM_QUEUE_MAX', fallback: 50, type: 'number' }
 }
 
 function getRuntimeConfig () {

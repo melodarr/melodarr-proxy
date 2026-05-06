@@ -116,6 +116,16 @@ async function processQueue () {
 }
 
 async function enqueueRequest (fn) {
+  const queueMax = getConfigValue('upstreamQueueMax') ?? 50
+  const maxLen = Number.isFinite(queueMax) && queueMax > 0 ? Math.floor(queueMax) : 50
+
+  if (waitingQueue.length >= maxLen) {
+    const err = new Error('Upstream request queue is full')
+    err.code = 'UPSTREAM_QUEUE_FULL'
+    err.status = 503
+    return Promise.reject(err)
+  }
+
   return new Promise((resolve, reject) => {
     const task = async () => {
       try {
