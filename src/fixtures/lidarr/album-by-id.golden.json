@@ -1,0 +1,97 @@
+{
+  "id": "b1392450-e666-3926-a536-22c65f834433",
+  "foreignAlbumId": "b1392450-e666-3926-a536-22c65f834433",
+  "title": "OK Computer",
+  "type": "Album",
+  "albumType": "Album",
+  "disambiguation": "",
+  "overview": "OK Computer is the third studio album by English rock band Radiohead.",
+  "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+  "secondaryTypes": [],
+  "releaseStatuses": ["Official"],
+  "releaseDate": "1997-05-28",
+  "firstReleaseDate": "1997-05-21",
+  "genres": ["alternative rock", "art rock"],
+  "rating": { "count": 42, "value": 4.5 },
+  "ratings": { "votes": 42, "value": 4.5 },
+  "oldIds": [],
+  "images": [
+    {
+      "coverType": "cover",
+      "url": "https://example.com/ok-computer-cover.jpg",
+      "height": 500,
+      "width": 500
+    }
+  ],
+  "links": [
+    {
+      "target": "https://en.wikipedia.org/wiki/OK_Computer",
+      "type": "wikipedia"
+    }
+  ],
+  "artists": [
+    {
+      "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "artistName": "Radiohead",
+      "disambiguation": "",
+      "overview": "",
+      "type": "Group",
+      "status": "active",
+      "oldIds": [],
+      "aliases": [],
+      "artistAliases": [],
+      "links": [],
+      "images": [],
+      "albums": []
+    }
+  ],
+  "releases": [
+    {
+      "id": "f5093e06-23e3-4a5e-8cfa-d9b6e2c7e9b0",
+      "title": "OK Computer",
+      "disambiguation": "UK first pressing",
+      "country": ["GB"],
+      "releaseDate": "1997-06-16",
+      "oldIds": [],
+      "label": ["Parlophone"],
+      "status": "Official",
+      "trackCount": 12,
+      "media": [
+        {
+          "name": "",
+          "format": "CD",
+          "position": 1
+        }
+      ],
+      "tracks": [
+        {
+          "id": "d2ede1b0-1a00-4543-b038-8e7511a3bf3a",
+          "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "trackName": "Airbag",
+          "trackNumber": "1",
+          "trackPosition": 1,
+          "durationMs": 284000,
+          "explicit": false,
+          "mediumNumber": 1,
+          "recordingId": "d2ede1b0-1a00-4543-b038-8e7511a3bf3a",
+          "oldIds": [],
+          "oldRecordingIds": []
+        },
+        {
+          "id": "e5f30c2e-8a1c-4cd4-a3c2-0b2e6d50f9a1",
+          "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+          "trackName": "Paranoid Android",
+          "trackNumber": "2",
+          "trackPosition": 2,
+          "durationMs": 386000,
+          "explicit": false,
+          "mediumNumber": 1,
+          "recordingId": "e5f30c2e-8a1c-4cd4-a3c2-0b2e6d50f9a1",
+          "oldIds": [],
+          "oldRecordingIds": []
+        }
+      ]
+    }
+  ]
+}
