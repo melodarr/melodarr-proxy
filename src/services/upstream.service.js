@@ -27,7 +27,53 @@ function getMusicBrainzHttpsAgent () {
 }
 
 let lastRequestTime = 0
-const waitingQueue = []
+
+function getMaxWaitingQueueLength () {
+  const configuredValue = Number(getConfigValue('maxWaitingQueueLength'))
+
+  if (Number.isFinite(configuredValue) && configuredValue >= 0) {
+    return Math.floor(configuredValue)
+  }
+
+  return 100
+}
+
+function buildQueueOverflowError () {
+  const minInterval = Number(getConfigValue('minRequestIntervalMs') ?? 1100)
+  const retryAfterSeconds = Math.max(1, Math.ceil((Number.isFinite(minInterval) ? minInterval : 1100) / 1000))
+  const error = new Error('Upstream request queue is full, please retry later')
+
+  error.statusCode = 503
+  error.retryAfter = retryAfterSeconds
+  error.headers = {
+    'Retry-After': String(retryAfterSeconds)
+  }
+
+  return error
+}
+
+function createWaitingQueue () {
+  const queue = []
+  const originalPush = Array.prototype.push
+
+  queue.push = function (...tasks) {
+    const maxWaitingQueueLength = getMaxWaitingQueueLength()
+
+    if (tasks.length === 0) {
+      return queue.length
+    }
+
+    if (queue.length + tasks.length > maxWaitingQueueLength) {
+      throw buildQueueOverflowError()
+    }
+
+    return originalPush.apply(queue, tasks)
+  }
+
+  return queue
+}
+
+const waitingQueue = createWaitingQueue()
 let activeRequests = 0
 let isProcessingQueue = false
 
