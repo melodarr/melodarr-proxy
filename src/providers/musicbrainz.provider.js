@@ -183,7 +183,7 @@ class MusicBrainzProvider {
         const rawDate = group['first-release-date'] || ''
         const yearMatch = rawDate.match(/^(\d{4})/)
         const rating = this.mapRating(group)
-        
+
         const rawReleases = Array.isArray(group.releases) ? group.releases : []
         const releases = rawReleases.map(r => ({
           id: r.id || '',
