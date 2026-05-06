@@ -242,14 +242,15 @@ class MetricsManager extends EventEmitter {
     return { avgMs: avg, p95Ms: p95 }
   }
 
-  recordProviderCall (providerName, success, latencyMs) {
+  recordProviderCall (providerName, success, latencyMs, isTimeout = false) {
     if (!this.providerStats.has(providerName)) {
-      this.providerStats.set(providerName, { calls: 0, errors: 0, totalLatency: 0 })
+      this.providerStats.set(providerName, { calls: 0, errors: 0, timeouts: 0, totalLatency: 0 })
     }
     const stats = this.providerStats.get(providerName)
     stats.calls++
     if (!success) {
       stats.errors++
+      if (isTimeout) stats.timeouts++
     }
     stats.totalLatency += latencyMs
   }
@@ -266,6 +267,7 @@ class MetricsManager extends EventEmitter {
       providers[name] = {
         calls: pStats.calls,
         errors: pStats.errors,
+        timeouts: pStats.timeouts || 0,
         avgLatencyMs: pStats.calls > 0 ? Math.round(pStats.totalLatency / pStats.calls) : 0,
         errorRate: pStats.calls > 0 ? Number((pStats.errors / pStats.calls).toFixed(4)) : 0
       }

@@ -14,7 +14,7 @@ const heavyStubs = {
     get: async () => null,
     set: async () => {}
   },
-  '../metrics': { state: { isRunning: true }, providerStats: new Map() },
+  '../metrics': { state: { isRunning: true }, providerStats: new Map(), getStats: () => ({ providers: {} }) },
   '../providers': { aggregateArtist: async () => ({}) },
   '../providers/artist-discovery': { discoverArtists: async () => [], findSongAlbums: async () => ({}) },
   '../ranking/engine': { rankResults: () => ({ results: [], debug: {} }) },
@@ -82,6 +82,7 @@ test('getProvidersMetricsDebug — surfaces raw, decayed, and score for a record
   // raw: untouched counters
   assert.equal(p.raw.success, 2)
   assert.equal(p.raw.failure, 0)
+  assert.equal(p.raw.timeouts, 0)
   assert.equal(p.raw.avgLatency, 200)
   // decayed: at zero elapsed time, identical to raw
   assert.equal(p.decayed.success, 2)
@@ -148,6 +149,6 @@ test('getProvidersMetricsDebug — response shape contract', () => {
   assert.deepEqual(Object.keys(res.body), ['providers'])
   const p = res.body.providers[0]
   assert.deepEqual(Object.keys(p).sort(), ['decayed', 'name', 'raw', 'score'])
-  assert.deepEqual(Object.keys(p.raw).sort(), ['avgLatency', 'failure', 'lastDecayAt', 'lastSuccess', 'lastUpdated', 'success'])
+  assert.deepEqual(Object.keys(p.raw).sort(), ['avgLatency', 'failure', 'lastDecayAt', 'lastSuccess', 'lastUpdated', 'success', 'timeouts'])
   assert.deepEqual(Object.keys(p.decayed).sort(), ['avgLatency', 'failure', 'success'])
 })

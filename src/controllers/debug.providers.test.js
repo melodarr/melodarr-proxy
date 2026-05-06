@@ -19,7 +19,7 @@ const heavyStubs = {
     get: async () => null,
     set: async () => {}
   },
-  '../metrics': { state: { isRunning: true }, providerStats: new Map() },
+  '../metrics': { state: { isRunning: true }, providerStats: new Map(), getStats: () => ({ providers: {} }) },
   '../providers': { aggregateArtist: async () => ({}) },
   '../providers/artist-discovery': { discoverArtists: async () => [], findSongAlbums: async () => ({}) },
   '../ranking/engine': { rankResults: () => ({ results: [], debug: {} }) },
@@ -86,6 +86,7 @@ test('getProvidersDebug — surfaces a healthy provider with score and counters'
   assert.equal(p.success, 1)
   assert.equal(p.failure, 0)
   assert.equal(p.failures, 0)
+  assert.equal(p.timeouts, 0)
   assert.equal(p.avgLatency, 200)
   assert.ok(typeof p.score === 'number' && p.score > 0 && p.score <= 1)
   assert.ok(typeof p.lastSuccess === 'number')
@@ -142,7 +143,7 @@ test('getProvidersDebug — response shape is the documented contract', () => {
 
   assert.deepEqual(Object.keys(res.body), ['providers'])
 
-  const required = ['name', 'status', 'failures', 'success', 'failure', 'avgLatency', 'score', 'lastSuccess', 'lastFailure']
+  const required = ['name', 'status', 'failures', 'timeouts', 'success', 'failure', 'avgLatency', 'score', 'lastSuccess', 'lastFailure']
   for (const key of required) {
     assert.ok(key in res.body.providers[0], `missing key: ${key}`)
   }
