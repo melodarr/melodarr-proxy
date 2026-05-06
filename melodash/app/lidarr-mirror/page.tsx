@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { resolveProxyBaseUrl } from "@/lib/proxy";
 import {
   Activity,
   AlertTriangle,
+  ArrowDown,
   Braces,
   Check,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
   Layers,
   List,
   Loader2,
+  MousePointerClick,
   RotateCcw,
   Search,
   Send,
@@ -422,6 +424,10 @@ function EndpointSection({
   inputs,
   contractFields,
   buildUrl,
+  onResultData,
+  externalValues,
+  inputHint,
+  renderAfterResult,
 }: {
   id: string;
   title: string;
@@ -437,6 +443,10 @@ function EndpointSection({
   }>;
   contractFields: Array<{ key: string; required: boolean }>;
   buildUrl: (values: Record<string, string>) => string | null;
+  onResultData?: (data: unknown) => void;
+  externalValues?: Record<string, string>;
+  inputHint?: string;
+  renderAfterResult?: (result: EndpointResult) => React.ReactNode;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<ViewMode>("formatted");
@@ -451,6 +461,20 @@ function EndpointSection({
   const abortRef = useRef<AbortController | null>(null);
 
   const presets = PRESETS[id] || [];
+
+  // Sync externally-pushed values (auto-fill from other sections)
+  useEffect(() => {
+    if (externalValues && Object.keys(externalValues).length > 0) {
+      setValues((prev) => ({ ...prev, ...externalValues }));
+    }
+  }, [externalValues]);
+
+  // Emit result data upstream for cross-section communication
+  useEffect(() => {
+    if (result?.data && !result.error && onResultData) {
+      onResultData(result.data);
+    }
+  }, [result, onResultData]);
 
   const handleCopy = useCallback(async () => {
     if (!result?.data) return;
@@ -620,6 +644,14 @@ function EndpointSection({
             )}
           </div>
 
+          {/* Auto-fill hint */}
+          {inputHint && (
+            <div className="flex items-center gap-1.5 text-xs text-blue-400/70">
+              <MousePointerClick className="h-3 w-3" />
+              {inputHint}
+            </div>
+          )}
+
           {/* Result area */}
           {result && (
             <div className="space-y-3">
@@ -770,6 +802,9 @@ function EndpointSection({
                   )}
                 </div>
               )}
+
+              {/* Picker slot for cross-section selection */}
+              {renderAfterResult && renderAfterResult(result)}
             </div>
           )}
         </div>
@@ -779,10 +814,176 @@ function EndpointSection({
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
+   Flow Arrow  — visual connector between sections
+   ──────────────────────────────────────────────────────────────────────── */
+
+function FlowArrow({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-1">
+      <ArrowDown className="h-4 w-4 text-blue-500/50" />
+      <span className="text-[10px] font-medium uppercase tracking-wider text-blue-500/50">
+        {label}
+      </span>
+      <ArrowDown className="h-4 w-4 text-blue-500/50" />
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Artist Picker — selectable rows from lookup results
+   ──────────────────────────────────────────────────────────────────────── */
+
+function ArtistPicker({
+  result,
+  onSelect,
+}: {
+  result: EndpointResult;
+  onSelect: (id: string, name: string) => void;
+}) {
+  if (!result.data || result.error) return null;
+  const artists = Array.isArray(result.data) ? result.data : [];
+  if (artists.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-blue-500/20 bg-blue-500/5 p-3">
+      <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-blue-300">
+        <MousePointerClick className="h-3 w-3" />
+        Select an artist to auto-fill downstream sections
+      </h4>
+      <div className="max-h-[200px] space-y-1 overflow-y-auto">
+        {artists.slice(0, 20).map((artist: Record<string, unknown>, i: number) => {
+          const id = String(artist.foreignArtistId || "");
+          const name = String(artist.artistName || artist.name || "Unknown");
+          const disambiguation = artist.disambiguation
+            ? ` (${String(artist.disambiguation)})`
+            : "";
+          if (!id) return null;
+          return (
+            <button
+              key={`${id}-${i}`}
+              type="button"
+              onClick={() => onSelect(id, name)}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-blue-500/10"
+            >
+              <UserRound className="h-3.5 w-3.5 shrink-0 text-blue-400/60" />
+              <span className="min-w-0 flex-1 truncate text-gray-200">
+                {name}
+                <span className="text-gray-500">{disambiguation}</span>
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-gray-500">
+                {id.slice(0, 8)}…
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Album Picker — selectable rows from artist-by-id embedded albums
+   ──────────────────────────────────────────────────────────────────────── */
+
+function AlbumPicker({
+  result,
+  onSelect,
+}: {
+  result: EndpointResult;
+  onSelect: (id: string, title: string) => void;
+}) {
+  if (!result.data || result.error) return null;
+  const data = result.data as Record<string, unknown>;
+  const albums = Array.isArray(data.albums) ? data.albums : [];
+  if (albums.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
+      <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+        <MousePointerClick className="h-3 w-3" />
+        Select an album to auto-fill Album by ID &amp; Release Search
+      </h4>
+      <div className="max-h-[240px] space-y-1 overflow-y-auto">
+        {albums.slice(0, 30).map((album: Record<string, unknown>, i: number) => {
+          const id = String(album.foreignAlbumId || "");
+          const title = String(album.title || "Untitled");
+          const year = album.releaseDate
+            ? new Date(String(album.releaseDate)).getFullYear()
+            : null;
+          if (!id) return null;
+          return (
+            <button
+              key={`${id}-${i}`}
+              type="button"
+              onClick={() => onSelect(id, title)}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-emerald-500/10"
+            >
+              <Disc3 className="h-3.5 w-3.5 shrink-0 text-emerald-400/60" />
+              <span className="min-w-0 flex-1 truncate text-gray-200">
+                {title}
+                {year && (
+                  <span className="ml-1.5 text-gray-500">({year})</span>
+                )}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-gray-500">
+                {id.slice(0, 8)}…
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
    Page
    ──────────────────────────────────────────────────────────────────────── */
 
 export default function LidarrMirrorPage() {
+  // Cross-section auto-fill state
+  const [selectedArtistId, setSelectedArtistId] = useState("");
+  const [selectedAlbumId, setSelectedAlbumId] = useState("");
+  const [selectedArtistName, setSelectedArtistName] = useState("");
+  const [selectedAlbumTitle, setSelectedAlbumTitle] = useState("");
+
+  const handleSelectArtist = useCallback((id: string, name: string) => {
+    setSelectedArtistId(id);
+    setSelectedArtistName(name);
+    // Scroll to artist-by-id section
+    document.getElementById("artist-by-id")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const handleSelectAlbum = useCallback((id: string, title: string) => {
+    setSelectedAlbumId(id);
+    setSelectedAlbumTitle(title);
+    document.getElementById("album-by-id")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  // Stable references for external values (avoids infinite re-render loops)
+  const artistExternal = useMemo(
+    () => (selectedArtistId ? { id: selectedArtistId } : undefined),
+    [selectedArtistId],
+  );
+  const albumExternal = useMemo(
+    () => (selectedAlbumId ? { id: selectedAlbumId } : undefined),
+    [selectedAlbumId],
+  );
+  const releaseExternal = useMemo(
+    () =>
+      selectedArtistId || selectedAlbumId
+        ? {
+            ...(selectedArtistId ? { artistId: selectedArtistId } : {}),
+            ...(selectedAlbumId ? { albumId: selectedAlbumId } : {}),
+          }
+        : undefined,
+    [selectedArtistId, selectedAlbumId],
+  );
+  const queueExternal = useMemo(
+    () => (selectedArtistId ? { artistId: selectedArtistId } : undefined),
+    [selectedArtistId],
+  );
+
   return (
     <main className="container mx-auto max-w-screen-2xl space-y-6 p-8">
       <div>
@@ -792,9 +993,42 @@ export default function LidarrMirrorPage() {
           visually confirm proxy correctness and contract coverage.
         </p>
         <div className="mt-4 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
-          <p className="font-medium">💡 Workflow: Start with Artist Lookup → copy the foreignArtistId (UUID) → use it in Artist by ID → copy foreignAlbumId from embedded albums → use it in Album by ID</p>
-          <p className="mt-1 text-xs text-blue-400/70">All ID fields require MusicBrainz UUIDs (e.g. a74b1b7f-71a5-4011-9441-d0b5e4122711), not numeric Lidarr IDs. Use the preset buttons for quick testing.</p>
+          <p className="font-medium">💡 Guided Workflow: Search for an artist → click a result to auto-fill Artist by ID → click an album to auto-fill Album by ID &amp; Release Search</p>
+          <p className="mt-1 text-xs text-blue-400/70">IDs are auto-populated as you select results. No manual copy/paste needed. You can also use preset buttons or type IDs directly.</p>
         </div>
+
+        {/* Selection state indicator */}
+        {(selectedArtistName || selectedAlbumTitle) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/40 bg-card px-4 py-2.5 text-sm">
+            <span className="text-xs font-medium uppercase tracking-wider text-gray-500">Active selection:</span>
+            {selectedArtistName && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 text-xs text-blue-300">
+                <UserRound className="h-3 w-3" />
+                {selectedArtistName}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedArtistId(""); setSelectedArtistName(""); }}
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-blue-500/20"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            )}
+            {selectedAlbumTitle && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
+                <Disc3 className="h-3 w-3" />
+                {selectedAlbumTitle}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedAlbumId(""); setSelectedAlbumTitle(""); }}
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-emerald-500/20"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 1 — Artist Lookup */}
@@ -819,7 +1053,12 @@ export default function LidarrMirrorPage() {
             ? `/api/v1/artist/lookup?term=${encodeURIComponent(v.term.trim())}`
             : null
         }
+        renderAfterResult={(res) => (
+          <ArtistPicker result={res} onSelect={handleSelectArtist} />
+        )}
       />
+
+      <FlowArrow label="select artist" />
 
       {/* 2 — Artist by ID */}
       <EndpointSection
@@ -841,13 +1080,20 @@ export default function LidarrMirrorPage() {
         buildUrl={(v) =>
           v.id?.trim() ? `/api/v1/artist/${encodeURIComponent(v.id.trim())}` : null
         }
+        externalValues={artistExternal}
+        inputHint={selectedArtistName ? `Auto-filled from "${selectedArtistName}"` : undefined}
+        renderAfterResult={(res) => (
+          <AlbumPicker result={res} onSelect={handleSelectAlbum} />
+        )}
       />
 
       {/* NOTE: There is no /api/v1/album?artistId= route on this proxy.
          Albums are embedded in the Artist by ID response.
          The proxy uses /v1/album/:foreignAlbumId for individual album lookup. */}
 
-      {/* 4 — Album by ID */}
+      <FlowArrow label="select album" />
+
+      {/* 3 — Album by ID */}
       <EndpointSection
         id="album-by-id"
         title="Album by ID"
@@ -867,7 +1113,11 @@ export default function LidarrMirrorPage() {
         buildUrl={(v) =>
           v.id?.trim() ? `/api/v1/album/${encodeURIComponent(v.id.trim())}` : null
         }
+        externalValues={albumExternal}
+        inputHint={selectedAlbumTitle ? `Auto-filled from "${selectedAlbumTitle}"` : undefined}
       />
+
+      <FlowArrow label="auto-filled" />
 
       {/* 4 — Release Search */}
       <EndpointSection
@@ -896,6 +1146,12 @@ export default function LidarrMirrorPage() {
           if (v.albumId?.trim()) params.set("albumId", v.albumId.trim());
           return params.toString() ? `/api/v1/release?${params}` : null;
         }}
+        externalValues={releaseExternal}
+        inputHint={
+          selectedArtistName || selectedAlbumTitle
+            ? `Auto-filled from selections`
+            : undefined
+        }
       />
 
       {/* 5 — Queue Details */}
@@ -919,7 +1175,10 @@ export default function LidarrMirrorPage() {
           if (v.artistId?.trim()) params.set("artistId", v.artistId.trim());
           return `/api/v1/queue/details${params.toString() ? `?${params}` : ""}`;
         }}
+        externalValues={queueExternal}
+        inputHint={selectedArtistName ? `Auto-filled from "${selectedArtistName}"` : undefined}
       />
     </main>
   );
 }
+
