@@ -86,14 +86,14 @@ test('Load Simulation & Edge Case Verification', async (t) => {
       itunes: itunesProvider,
       lastfm: lastfmProvider
     })
-    
+
     // Clear initial metrics if any
     // (Instance is fresh from setupMocks)
 
     // 2. Simulate Burst Traffic (100 concurrent requests)
     const totalRequests = 100
     const promises = []
-    
+
     for (let i = 0; i < totalRequests; i++) {
       promises.push(index.aggregateArtist(`Artist ${i}`))
     }
@@ -102,7 +102,7 @@ test('Load Simulation & Edge Case Verification', async (t) => {
 
     // 3. Verify System State Under Load
     assert.equal(results.length, totalRequests, 'All requests should complete')
-    
+
     // Check results stability
     let successfulResults = 0
     for (const result of results) {
@@ -113,7 +113,7 @@ test('Load Simulation & Edge Case Verification', async (t) => {
         }
         assert.equal(data.partial, true) // Always partial because "slow" always times out
         assert.ok(data.albums.length > 0)
-        
+
         // Edge Case Verification: Schema validation
         if (data.partial !== true) {
           console.log('Got partial=false:', JSON.stringify(data))
@@ -128,7 +128,7 @@ test('Load Simulation & Edge Case Verification', async (t) => {
         successfulResults++
       }
     }
-    
+
     assert.equal(successfulResults, totalRequests, 'No requests should reject at the aggregate level due to graceful fallback')
 
     // 4. Verify Metrics reflect the state correctly
@@ -141,7 +141,7 @@ test('Load Simulation & Edge Case Verification', async (t) => {
     // Verify provider metrics
     assert.ok(stats.providers.musicbrainz)
     assert.equal(stats.providers.musicbrainz.calls, totalRequests)
-    
+
     assert.ok(stats.providers.lastfm)
     assert.equal(stats.providers.lastfm.calls, totalRequests)
     assert.equal(stats.providers.lastfm.timeouts, totalRequests, 'Slow provider should register timeouts for all calls')
