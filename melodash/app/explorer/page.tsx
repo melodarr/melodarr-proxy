@@ -245,7 +245,7 @@ function AlbumRating({ rating }: { rating?: { count: number; value: number } }) 
       </div>
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="text-gray-300">{value > 0 ? value.toFixed(1) : "--"} <span className="text-gray-600">/ 5</span></span>
-        <span className="text-gray-600">{count > 0 ? `${count} votes` : "No votes"}</span>
+        <span className="text-gray-600">{count === 1 ? "1 vote" : count > 0 ? `${count} votes` : "No votes"}</span>
       </div>
     </div>
   );
