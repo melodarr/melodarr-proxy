@@ -108,17 +108,10 @@ test('Load Simulation & Edge Case Verification', async (t) => {
     for (const result of results) {
       if (result.status === 'fulfilled') {
         const data = result.value
-        if (data.partial !== true) {
-          console.log('Got partial=false:', JSON.stringify(data))
-        }
-        assert.equal(data.partial, true) // Always partial because "slow" always times out
+        assert.equal(data.partial, true, 'Results should be partial because the slow provider always times out')
         assert.ok(data.albums.length > 0)
 
         // Edge Case Verification: Schema validation
-        if (data.partial !== true) {
-          console.log('Got partial=false:', JSON.stringify(data))
-        }
-        assert.equal(data.partial, true) // Always partial because "slow" always times out
         for (const album of data.albums) {
           assert.ok(album.name)
           assert.ok(album.ids)
