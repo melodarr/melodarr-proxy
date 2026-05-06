@@ -31,12 +31,21 @@ const waitingQueue = []
 let activeRequests = 0
 let isProcessingQueue = false
 
+function getConfiguredMinRequestIntervalMs () {
+  const configuredValue = getConfigValue('minRequestIntervalMs') ??
+    process.env.UPSTREAM_MIN_REQUEST_INTERVAL_MS ??
+    process.env.MIN_REQUEST_INTERVAL_MS
+
+  const parsedValue = Number.parseInt(configuredValue, 10)
+  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 1100
+}
+
 async function processQueue () {
   if (isProcessingQueue) return
   isProcessingQueue = true
 
   try {
-    const minInterval = getConfigValue('minRequestIntervalMs') ?? 1100
+    const minInterval = getConfiguredMinRequestIntervalMs()
     // Arbitrary concurrency limit of 3 for upstream
     const maxConcurrency = 3
 
