@@ -35,8 +35,8 @@ const rateLimit = (options = {}) => {
     const record = store.get(ip)
     const timestamps = record.timestamps
 
-    // Update windowMs if it changed (unlikely, but safe)
-    record.windowMs = Math.max(record.windowMs, windowMs)
+    // Keep cleanup and request trimming aligned with the current window
+    record.windowMs = windowMs
 
     // Remove expired timestamps
     const windowStart = now - windowMs
