@@ -254,9 +254,22 @@ function AlbumArtwork({ album, onOpen }: { album: AlbumCard; onOpen?: () => void
   const [failed, setFailed] = useState(false);
 
   if (album.imageUrl && !failed) {
-    const image = <img src={album.imageUrl} alt="" onError={() => setFailed(true)} className="aspect-square w-full rounded-md object-cover transition-transform group-hover:scale-[1.02]" />;
+    const artworkLabel = album.title ? `${album.title} album cover` : "Album cover";
+    const image = (
+      <img
+        src={album.imageUrl}
+        alt={onOpen ? "" : artworkLabel}
+        onError={() => setFailed(true)}
+        className="aspect-square w-full rounded-md object-cover transition-transform group-hover:scale-[1.02]"
+      />
+    );
     return onOpen ? (
-      <button type="button" onClick={onOpen} className="group block w-full overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={artworkLabel}
+        className="group block w-full overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
         {image}
       </button>
     ) : image;
