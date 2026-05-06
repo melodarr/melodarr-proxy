@@ -1127,7 +1127,7 @@ __metadata:
     clsx: "npm:2.1.1"
     lucide-react: "npm:1.11.0"
     next: "npm:16.2.4"
-    postcss: "npm:8.5.12"
+    postcss: "npm:8.5.14"
     react: "npm:19.2.5"
     react-dom: "npm:19.2.5"
     react-is: "npm:19.2.5"
@@ -1240,7 +1240,18 @@ __metadata:
   languageName: node
   linkType: hard
 
-"postcss@npm:8.5.12, postcss@npm:^8.5.6":
+"postcss@npm:8.5.14":
+  version: 8.5.14
+  resolution: "postcss@npm:8.5.14"
+  dependencies:
+    nanoid: "npm:^3.3.11"
+    picocolors: "npm:^1.1.1"
+    source-map-js: "npm:^1.2.1"
+  checksum: 10c0/48138207cf5ef5581be1bfe2cb65ccfe0ac75e43888ba045afc8ed6043d7b56aeb3b9a9fe5b353ff554be943cd0cc15d826ccb991525159175971e5ee8ab0237
+  languageName: node
+  linkType: hard
+
+"postcss@npm:^8.5.6":
   version: 8.5.12
   resolution: "postcss@npm:8.5.12"
   dependencies:
