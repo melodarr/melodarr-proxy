@@ -166,7 +166,7 @@ class MusicBrainzProvider {
 
     const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
       artist: artist.id,
-      inc: 'ratings',
+      inc: 'releases+ratings',
       type: 'album|ep',
       limit: 100,
       offset: 0
@@ -183,12 +183,29 @@ class MusicBrainzProvider {
         const rawDate = group['first-release-date'] || ''
         const yearMatch = rawDate.match(/^(\d{4})/)
         const rating = this.mapRating(group)
+        
+        const rawReleases = Array.isArray(group.releases) ? group.releases : []
+        const releases = rawReleases.map(r => ({
+          id: r.id || '',
+          title: r.title || group.title || '',
+          status: r.status || 'Official',
+          disambiguation: r.disambiguation || '',
+          country: r.country ? [r.country] : [],
+          releaseDate: r.date || null,
+          trackCount: Number(r['track-count'] || 0),
+          media: [],
+          tracks: []
+        }))
+        const trackCounts = releases.map(r => Number(r.trackCount) || 0)
+        const trackCount = trackCounts.length ? Math.max(...trackCounts) : 0
+
         return {
           name: group.title || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
           // MB returns YYYY, YYYY-MM, or YYYY-MM-DD. Preserve as-is; downstream
           // consumers can pad to full ISO for Lidarr compatibility.
           releaseDate: rawDate || null,
+          trackCount,
           type: group['primary-type'] || 'Album',
           albumType: group['primary-type'] || 'Album',
           secondaryTypes: group['secondary-types'] || [],
@@ -198,7 +215,8 @@ class MusicBrainzProvider {
           ratings: { votes: rating.count, value: rating.value },
           ids: {
             musicbrainzReleaseGroupId: group.id || ''
-          }
+          },
+          releases
         }
       }).filter(a => a.name)
 
@@ -229,7 +247,7 @@ class MusicBrainzProvider {
 
     const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
       artist: artist.id,
-      inc: 'ratings',
+      inc: 'releases+ratings',
       type: 'album|ep',
       limit: 100,
       offset: 0
@@ -246,10 +264,27 @@ class MusicBrainzProvider {
         const rawDate = group['first-release-date'] || ''
         const yearMatch = rawDate.match(/^(\d{4})/)
         const rating = this.mapRating(group)
+
+        const rawReleases = Array.isArray(group.releases) ? group.releases : []
+        const releases = rawReleases.map(r => ({
+          id: r.id || '',
+          title: r.title || group.title || '',
+          status: r.status || 'Official',
+          disambiguation: r.disambiguation || '',
+          country: r.country ? [r.country] : [],
+          releaseDate: r.date || null,
+          trackCount: Number(r['track-count'] || 0),
+          media: [],
+          tracks: []
+        }))
+        const trackCounts = releases.map(r => Number(r.trackCount) || 0)
+        const trackCount = trackCounts.length ? Math.max(...trackCounts) : 0
+
         return {
           name: group.title || '',
           year: yearMatch ? parseInt(yearMatch[1], 10) : null,
           releaseDate: rawDate || null,
+          trackCount,
           type: group['primary-type'] || 'Album',
           albumType: group['primary-type'] || 'Album',
           secondaryTypes: group['secondary-types'] || [],
@@ -260,7 +295,8 @@ class MusicBrainzProvider {
           ids: {
             musicbrainzReleaseGroupId: group.id || ''
           },
-          provider: 'musicbrainz'
+          provider: 'musicbrainz',
+          releases
         }
       }).filter(a => a.name)
 
