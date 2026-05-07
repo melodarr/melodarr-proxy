@@ -29,7 +29,8 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'artistAliases',
   'links',
   'images',
-  'albums'
+  'albums',
+  'ratings'
 ])
 
 const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
@@ -285,13 +286,14 @@ function normalizeAlbum (album = {}) {
 }
 
 function toSkyhookArtistResource (artist = {}) {
+  const id = asString(artist.id || artist.Id || artist.foreignArtistId)
   return {
     genres: normalizeStringArray(artist.genres || artist.Genres),
     artistUrl: asString(artist.artistUrl || artist.ArtistUrl || artist.aristUrl || artist.AristUrl),
     overview: asString(artist.overview || artist.Overview),
     type: asString(artist.type || artist.Type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     disambiguation: asString(artist.disambiguation || artist.Disambiguation),
-    id: asString(artist.id || artist.Id || artist.foreignArtistId),
+    id,
     oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
     images: normalizeArray(artist.images || artist.Images).map(normalizeImageResource),
     links: normalizeArray(artist.links || artist.Links).map(normalizeLinkResource),
@@ -387,11 +389,12 @@ function withArtistLookupDefaults (artist = {}) {
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums).map(normalizeAlbum)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum),
+    ratings: normalizeRatings(artist.ratings || artist.rating)
   }
 
   for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
-    if (key in artist) out[key] = artist[key]
+    if (key !== 'ratings' && key !== 'rating' && key in artist) out[key] = artist[key]
   }
 
   if ('providers' in artist) out.providers = artist.providers
@@ -418,11 +421,14 @@ function withSkyhookArtistDefaults (artist = {}) {
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums).map(normalizeAlbum)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum),
+    genres: normalizeStringArray(artist.genres),
+    ratings: normalizeRatings(artist.ratings || artist.rating),
+    rating: normalizeRating(artist.rating || artist.ratings)
   }
 
   for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
-    if (key in artist) out[key] = artist[key]
+    if (key !== 'ratings' && key !== 'rating' && key !== 'genres' && key in artist) out[key] = artist[key]
   }
 
   if ('providers' in artist) out.providers = artist.providers
