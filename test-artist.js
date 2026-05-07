@@ -14,9 +14,14 @@ const req = {
 }
 
 const res = {
+  headers: {},
   json: (data) => console.log(JSON.stringify(data, null, 2)),
   status: (code) => {
     console.log('Status:', code)
+    return res
+  },
+  set: (name, value) => {
+    res.headers[name] = value
     return res
   }
 }
