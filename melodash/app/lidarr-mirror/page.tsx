@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { resolveProxyBaseUrl } from "@/lib/proxy";
+
 import {
   Activity,
   AlertTriangle,
@@ -13,6 +13,7 @@ import {
   Clipboard,
   ClipboardCheck,
   Clock,
+
   Disc3,
   GitCompare,
   Layers,
@@ -21,10 +22,12 @@ import {
   MousePointerClick,
   RotateCcw,
   Search,
+  Pencil,
   Send,
   Server,
   UserRound,
   X,
+  Zap,
 } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -428,6 +431,7 @@ function EndpointSection({
   externalValues,
   inputHint,
   renderAfterResult,
+  autoExecuteTrigger,
 }: {
   id: string;
   title: string;
@@ -447,6 +451,7 @@ function EndpointSection({
   externalValues?: Record<string, string>;
   inputHint?: string;
   renderAfterResult?: (result: EndpointResult) => React.ReactNode;
+  autoExecuteTrigger?: number;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<ViewMode>("formatted");
@@ -458,7 +463,10 @@ function EndpointSection({
   const [copied, setCopied] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [lastUrl, setLastUrl] = useState<string | null>(null);
+  const [autoFilledKeys, setAutoFilledKeys] = useState<Set<string>>(new Set());
+  const [overrideMode, setOverrideMode] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const pendingAutoExecRef = useRef(0);
 
   const presets = PRESETS[id] || [];
 
@@ -466,8 +474,62 @@ function EndpointSection({
   useEffect(() => {
     if (externalValues && Object.keys(externalValues).length > 0) {
       setValues((prev) => ({ ...prev, ...externalValues }));
+      setAutoFilledKeys(new Set(Object.keys(externalValues)));
+      setOverrideMode(false);
     }
   }, [externalValues]);
+
+  // Auto-execute when trigger counter increments
+  useEffect(() => {
+    if (autoExecuteTrigger && autoExecuteTrigger > 0) {
+      pendingAutoExecRef.current = autoExecuteTrigger;
+    }
+  }, [autoExecuteTrigger]);
+
+  // Deferred auto-execute: runs after values are synced
+  useEffect(() => {
+    if (pendingAutoExecRef.current > 0 && externalValues) {
+      const merged = { ...values, ...externalValues };
+      const url = buildUrl(merged);
+      if (url) {
+        pendingAutoExecRef.current = 0;
+        // Small delay to ensure DOM has settled
+        const timer = setTimeout(() => {
+          setCollapsed(false);
+          // Execute with merged values directly
+          const doExec = async () => {
+            abortRef.current?.abort();
+            const controller = new AbortController();
+            abortRef.current = controller;
+            setLoading(true);
+            if (result) setPrevResult(result);
+            setResult(null);
+            setLastUrl(url);
+            setShowDiff(false);
+            const start = performance.now();
+            try {
+              const res = await fetch(url, { signal: controller.signal, credentials: "include" });
+              const timing = Math.round(performance.now() - start);
+              const headers = extractResponseHeaders(res.headers);
+              const contentType = res.headers.get("content-type") || "";
+              const body = await res.text();
+              const isJson = contentType.includes("application/json");
+              const data = isJson && body ? JSON.parse(body) : body || null;
+              setResult({ data, timing, headers, error: res.ok ? null : `HTTP ${res.status} ${res.statusText}` });
+            } catch (err: any) {
+              if (err.name === "AbortError") return;
+              const timing = Math.round(performance.now() - start);
+              setResult({ data: null, timing, headers: {}, error: err.message || "Request failed" });
+            } finally {
+              setLoading(false);
+            }
+          };
+          doExec();
+        }, 150);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [values, externalValues, autoExecuteTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Emit result data upstream for cross-section communication
   useEffect(() => {
@@ -501,9 +563,7 @@ function EndpointSection({
 
     const start = performance.now();
     try {
-      const base = resolveProxyBaseUrl();
-      const fullUrl = url.startsWith("/") ? `${base}${url}` : url;
-      const res = await fetch(fullUrl, {
+      const res = await fetch(url, {
         signal: controller.signal,
         credentials: "include",
       });
@@ -591,34 +651,65 @@ function EndpointSection({
 
           {/* Input fields */}
           <div className="flex flex-wrap items-end gap-3">
-            {inputs.map((input) => (
-              <div key={input.name} className="min-w-[200px] flex-1">
-                <label
-                  htmlFor={`${id}-${input.name}`}
-                  className="mb-1 block text-xs font-medium text-gray-400"
-                >
-                  {input.label}
-                  {input.required && (
-                    <span className="ml-1 text-red-400">*</span>
-                  )}
-                </label>
-                <input
-                  id={`${id}-${input.name}`}
-                  value={values[input.name] || ""}
-                  onChange={(e) =>
-                    setValues((prev) => ({
-                      ...prev,
-                      [input.name]: e.target.value,
-                    }))
-                  }
-                  placeholder={input.placeholder}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") execute();
-                  }}
-                  className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
-                />
-              </div>
-            ))}
+            {inputs.map((input) => {
+              const isAutoFilled = autoFilledKeys.has(input.name) && !overrideMode;
+              return (
+                <div key={input.name} className="min-w-[200px] flex-1">
+                  <label
+                    htmlFor={`${id}-${input.name}`}
+                    className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400"
+                  >
+                    {input.label}
+                    {input.required && (
+                      <span className="ml-1 text-red-400">*</span>
+                    )}
+                    {isAutoFilled && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-300">
+                        <Zap className="h-2.5 w-2.5" />
+                        Auto-selected
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      id={`${id}-${input.name}`}
+                      value={values[input.name] || ""}
+                      readOnly={isAutoFilled}
+                      onChange={(e) => {
+                        setAutoFilledKeys((prev) => {
+                          const next = new Set(prev);
+                          next.delete(input.name);
+                          return next;
+                        });
+                        setValues((prev) => ({
+                          ...prev,
+                          [input.name]: e.target.value,
+                        }));
+                      }}
+                      placeholder={input.placeholder}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") execute();
+                      }}
+                      className={`w-full rounded-md border px-3 py-2 text-sm outline-none transition-colors ${
+                        isAutoFilled
+                          ? "border-blue-500/30 bg-blue-500/5 text-blue-200 cursor-default"
+                          : "border-border/60 bg-background focus:border-blue-500"
+                      }`}
+                    />
+                    {isAutoFilled && (
+                      <button
+                        type="button"
+                        title="Override auto-fill"
+                        onClick={() => setOverrideMode(true)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-blue-400/50 transition-colors hover:bg-blue-500/10 hover:text-blue-300"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             <button
               type="button"
               onClick={execute}
@@ -840,24 +931,54 @@ function ArtistPicker({
   result: EndpointResult;
   onSelect: (id: string, name: string) => void;
 }) {
-  if (!result.data || result.error) return null;
-  const artists = Array.isArray(result.data) ? result.data : [];
-  if (artists.length === 0) return null;
+  const autoSelectedRef = useRef(false);
 
+  const artists = (!result.data || result.error) ? [] : (Array.isArray(result.data) ? result.data : []);
+  const validArtists = artists.filter((a: Record<string, unknown>) => String(a.foreignArtistId || ""));
+
+  // Auto-select when exactly one result
+  useEffect(() => {
+    if (validArtists.length === 1 && !autoSelectedRef.current) {
+      autoSelectedRef.current = true;
+      const artist = validArtists[0] as Record<string, unknown>;
+      const id = String(artist.foreignArtistId || "");
+      const name = String(artist.artistName || artist.name || "Unknown");
+      if (id) onSelect(id, name);
+    } else if (validArtists.length !== 1) {
+      autoSelectedRef.current = false;
+    }
+  }, [validArtists.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (validArtists.length === 0) return null;
+
+  // Single result — show auto-selected confirmation
+  if (validArtists.length === 1) {
+    const artist = validArtists[0] as Record<string, unknown>;
+    const name = String(artist.artistName || artist.name || "Unknown");
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-500/20 bg-blue-500/5 px-4 py-2.5 text-sm">
+        <Zap className="h-3.5 w-3.5 text-blue-400" />
+        <span className="text-blue-200">Auto-selected:</span>
+        <span className="font-medium text-blue-100">{name}</span>
+        <span className="text-[10px] text-blue-400/60">— single result</span>
+      </div>
+    );
+  }
+
+  // Multiple results — show selectable list
   return (
     <div className="mt-3 rounded-md border border-blue-500/20 bg-blue-500/5 p-3">
       <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-blue-300">
         <MousePointerClick className="h-3 w-3" />
-        Select an artist to auto-fill downstream sections
+        {validArtists.length} artists found — select one to continue
       </h4>
       <div className="max-h-[200px] space-y-1 overflow-y-auto">
-        {artists.slice(0, 20).map((artist: Record<string, unknown>, i: number) => {
+        {validArtists.slice(0, 20).map((artist: Record<string, unknown>, i: number) => {
           const id = String(artist.foreignArtistId || "");
           const name = String(artist.artistName || artist.name || "Unknown");
           const disambiguation = artist.disambiguation
             ? ` (${String(artist.disambiguation)})`
             : "";
-          if (!id) return null;
           return (
             <button
               key={`${id}-${i}`}
@@ -892,25 +1013,58 @@ function AlbumPicker({
   result: EndpointResult;
   onSelect: (id: string, title: string) => void;
 }) {
-  if (!result.data || result.error) return null;
-  const data = result.data as Record<string, unknown>;
-  const albums = Array.isArray(data.albums) ? data.albums : [];
-  if (albums.length === 0) return null;
+  const autoSelectedRef = useRef(false);
 
+  const albums = (!result.data || result.error)
+    ? []
+    : (Array.isArray((result.data as Record<string, unknown>).albums)
+      ? ((result.data as Record<string, unknown>).albums as Record<string, unknown>[])
+      : []);
+  const validAlbums = albums.filter((a) => String(a.foreignAlbumId || ""));
+
+  // Auto-select when exactly one album
+  useEffect(() => {
+    if (validAlbums.length === 1 && !autoSelectedRef.current) {
+      autoSelectedRef.current = true;
+      const album = validAlbums[0];
+      const id = String(album.foreignAlbumId || "");
+      const title = String(album.title || "Untitled");
+      if (id) onSelect(id, title);
+    } else if (validAlbums.length !== 1) {
+      autoSelectedRef.current = false;
+    }
+  }, [validAlbums.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (validAlbums.length === 0) return null;
+
+  // Single album — show auto-selected confirmation
+  if (validAlbums.length === 1) {
+    const album = validAlbums[0];
+    const title = String(album.title || "Untitled");
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5 text-sm">
+        <Zap className="h-3.5 w-3.5 text-emerald-400" />
+        <span className="text-emerald-200">Auto-selected:</span>
+        <span className="font-medium text-emerald-100">{title}</span>
+        <span className="text-[10px] text-emerald-400/60">— single album</span>
+      </div>
+    );
+  }
+
+  // Multiple albums — show selectable list
   return (
     <div className="mt-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
       <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-emerald-300">
         <MousePointerClick className="h-3 w-3" />
-        Select an album to auto-fill Album by ID &amp; Release Search
+        {validAlbums.length} albums found — select one to continue
       </h4>
       <div className="max-h-[240px] space-y-1 overflow-y-auto">
-        {albums.slice(0, 30).map((album: Record<string, unknown>, i: number) => {
+        {validAlbums.slice(0, 30).map((album: Record<string, unknown>, i: number) => {
           const id = String(album.foreignAlbumId || "");
           const title = String(album.title || "Untitled");
           const year = album.releaseDate
             ? new Date(String(album.releaseDate)).getFullYear()
             : null;
-          if (!id) return null;
           return (
             <button
               key={`${id}-${i}`}
@@ -947,9 +1101,18 @@ export default function LidarrMirrorPage() {
   const [selectedArtistName, setSelectedArtistName] = useState("");
   const [selectedAlbumTitle, setSelectedAlbumTitle] = useState("");
 
+  // Auto-execute triggers (increment to fire)
+  const [artistByIdTrigger, setArtistByIdTrigger] = useState(0);
+  const [albumByIdTrigger, setAlbumByIdTrigger] = useState(0);
+
   const handleSelectArtist = useCallback((id: string, name: string) => {
     setSelectedArtistId(id);
     setSelectedArtistName(name);
+    // Reset downstream: clear album selection when artist changes
+    setSelectedAlbumId("");
+    setSelectedAlbumTitle("");
+    // Auto-trigger Artist by ID request
+    setArtistByIdTrigger((prev) => prev + 1);
     // Scroll to artist-by-id section
     document.getElementById("artist-by-id")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
@@ -957,6 +1120,8 @@ export default function LidarrMirrorPage() {
   const handleSelectAlbum = useCallback((id: string, title: string) => {
     setSelectedAlbumId(id);
     setSelectedAlbumTitle(title);
+    // Auto-trigger Album by ID request
+    setAlbumByIdTrigger((prev) => prev + 1);
     document.getElementById("album-by-id")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
@@ -993,8 +1158,8 @@ export default function LidarrMirrorPage() {
           visually confirm proxy correctness and contract coverage.
         </p>
         <div className="mt-4 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
-          <p className="font-medium">💡 Guided Workflow: Search for an artist → click a result to auto-fill Artist by ID → click an album to auto-fill Album by ID &amp; Release Search</p>
-          <p className="mt-1 text-xs text-blue-400/70">IDs are auto-populated as you select results. No manual copy/paste needed. You can also use preset buttons or type IDs directly.</p>
+          <p className="font-medium">⚡ Auto-Guided Flow: Search → auto-selects single results → auto-executes downstream requests → full chain in one click</p>
+          <p className="mt-1 text-xs text-blue-400/70">Single results are auto-selected. Multiple results show a picker. Each selection auto-triggers the next request. Override any auto-fill with the ✏️ button.</p>
         </div>
 
         {/* Selection state indicator */}
@@ -1007,7 +1172,13 @@ export default function LidarrMirrorPage() {
                 {selectedArtistName}
                 <button
                   type="button"
-                  onClick={() => { setSelectedArtistId(""); setSelectedArtistName(""); }}
+                  onClick={() => {
+                    setSelectedArtistId("");
+                    setSelectedArtistName("");
+                    // Cascade: clearing artist also clears album
+                    setSelectedAlbumId("");
+                    setSelectedAlbumTitle("");
+                  }}
                   className="ml-0.5 rounded-full p-0.5 hover:bg-blue-500/20"
                 >
                   <X className="h-2.5 w-2.5" />
@@ -1058,7 +1229,7 @@ export default function LidarrMirrorPage() {
         )}
       />
 
-      <FlowArrow label="select artist" />
+      <FlowArrow label={selectedArtistId ? "auto-executing ⚡" : "select artist"} />
 
       {/* 2 — Artist by ID */}
       <EndpointSection
@@ -1081,6 +1252,7 @@ export default function LidarrMirrorPage() {
           v.id?.trim() ? `/api/v1/artist/${encodeURIComponent(v.id.trim())}` : null
         }
         externalValues={artistExternal}
+        autoExecuteTrigger={artistByIdTrigger}
         inputHint={selectedArtistName ? `Auto-filled from "${selectedArtistName}"` : undefined}
         renderAfterResult={(res) => (
           <AlbumPicker result={res} onSelect={handleSelectAlbum} />
@@ -1091,7 +1263,7 @@ export default function LidarrMirrorPage() {
          Albums are embedded in the Artist by ID response.
          The proxy uses /v1/album/:foreignAlbumId for individual album lookup. */}
 
-      <FlowArrow label="select album" />
+      <FlowArrow label={selectedAlbumId ? "auto-executing ⚡" : "select album"} />
 
       {/* 3 — Album by ID */}
       <EndpointSection
@@ -1114,6 +1286,7 @@ export default function LidarrMirrorPage() {
           v.id?.trim() ? `/api/v1/album/${encodeURIComponent(v.id.trim())}` : null
         }
         externalValues={albumExternal}
+        autoExecuteTrigger={albumByIdTrigger}
         inputHint={selectedAlbumTitle ? `Auto-filled from "${selectedAlbumTitle}"` : undefined}
       />
 

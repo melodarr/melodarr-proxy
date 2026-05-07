@@ -164,9 +164,11 @@ class MusicBrainzProvider {
       return { artistName: term, albums: [] }
     }
 
+    // Browse API only supports 'artist-credits' as a subquery inc plus misc
+    // includes like 'ratings'. 'releases' is a lookup-only inc and causes a 400.
     const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
       artist: artist.id,
-      inc: 'releases+ratings',
+      inc: 'ratings',
       type: 'album|ep',
       limit: 100,
       offset: 0
@@ -245,9 +247,11 @@ class MusicBrainzProvider {
       throw err
     }
 
+    // Browse API only supports 'artist-credits' as a subquery inc plus misc
+    // includes like 'ratings'. 'releases' is a lookup-only inc and causes a 400.
     const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
       artist: artist.id,
-      inc: 'releases+ratings',
+      inc: 'ratings',
       type: 'album|ep',
       limit: 100,
       offset: 0
