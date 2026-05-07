@@ -114,6 +114,16 @@ docker compose run --rm --no-deps proxy node -e "require('https').get('https://m
 docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:6,headers:{'User-Agent':'melodarr-proxy-diag/1.0 (admin@example.com)'}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
 ```
 
+If IPv6 ping works but MusicBrainz still fails during TLS, treat it as a TLS-path failure, not an IPv6 routing failure. Example:
+
+```text
+ping -6 2606:4700:4700::1111 succeeds
+curl -6 https://musicbrainz.org/ connects to TCP/443
+OpenSSL SSL_connect: SSL_ERROR_SYSCALL
+```
+
+In that case, collect `/debug/diagnose?provider=musicbrainz` and container-level `curl -4`/`curl -6` results before changing application code. The proxy cannot fix an upstream or network middlebox resetting TLS after TCP connect.
+
 Check Docker network configuration:
 
 ```bash
@@ -385,6 +395,70 @@ NEXT_PUBLIC_PROXY_FALLBACK=http://localhost:3055
 ```
 
 If Melodash is served from `https://melodash.example.com`, make sure API requests go to the proxy host, not back to the Melodash app route.
+
+## Melodash Shows `Proxy unreachable` Or Public `/api/*` Returns 502
+
+Symptoms:
+
+```text
+Proxy unreachable (https://melodash.example.com/api/health — Primary returned 502)
+Proxy unreachable (https://melodash.example.com/api/settings — Primary returned 502)
+openresty 502 Bad Gateway
+curl: (7) Failed to connect to 127.0.0.1 port 3055
+```
+
+This means Melodash loaded, but its browser-side API calls cannot reach the proxy backend. It is not a MusicBrainz failure until the proxy API itself is reachable.
+
+First verify the proxy locally from the Docker host or LXC:
+
+```bash
+cd /opt/melodarr-proxy/src-branch-build
+
+docker compose ps
+curl -i http://127.0.0.1:3055/api/health
+curl -i http://127.0.0.1:3055/api/settings/status
+```
+
+The expected port mapping is:
+
+```text
+proxy    0.0.0.0:3055->3000/tcp
+melodash 0.0.0.0:55026->3000/tcp
+```
+
+If `docker compose ps` shows a random proxy port such as `32769->3000/tcp`, or shows Melodash on `3055`, fix the source-checkout `.env`:
+
+```bash
+cd /opt/melodarr-proxy/src-branch-build
+
+cat > .env <<'EOF'
+HOST_PORT=3055
+MELODASH_HOST_PORT=55026
+EOF
+
+docker compose down
+docker compose up -d --build
+docker compose ps
+curl -i http://127.0.0.1:3055/api/health
+```
+
+For same-origin public Melodash deployments, the reverse proxy must route API paths to the proxy backend and everything else to Melodash:
+
+```nginx
+location /api/ {
+  proxy_pass http://127.0.0.1:3055;
+}
+
+location /debug/ {
+  proxy_pass http://127.0.0.1:3055;
+}
+
+location / {
+  proxy_pass http://127.0.0.1:55026;
+}
+```
+
+If `/api/health` works on `127.0.0.1:3055` but fails through the public hostname, the issue is reverse-proxy routing. If `127.0.0.1:3055` fails locally, the proxy container is down or not published on the expected port.
 
 ## What To Include In A Bug Report
 

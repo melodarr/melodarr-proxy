@@ -113,6 +113,27 @@ curl -s http://127.0.0.1:3055/api/health
 curl -s http://127.0.0.1:3055/api/ready
 ```
 
+The source checkout should publish stable ports:
+
+```text
+proxy    0.0.0.0:3055->3000/tcp
+melodash 0.0.0.0:55026->3000/tcp
+```
+
+If `proxy` is published on a random high port or Melodash is published on `3055`, confirm `.env` uses:
+
+```env
+HOST_PORT=3055
+MELODASH_HOST_PORT=55026
+```
+
+Then recreate the services:
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
 Open Melodash:
 
 ```text
