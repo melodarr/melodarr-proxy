@@ -547,56 +547,59 @@ function EndpointSection({
     }
   }, [result]);
 
-  const execute = useCallback(async () => {
-    const url = buildUrl(values);
-    if (!url) return;
+  const execute = useCallback(
+    async (urlOverride?: string) => {
+      const url = urlOverride ?? buildUrl(values);
+      if (!url) return;
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-    setLoading(true);
-    if (result) setPrevResult(result);
-    setResult(null);
-    setLastUrl(url);
-    setShowDiff(false);
+      setLoading(true);
+      if (result) setPrevResult(result);
+      setResult(null);
+      setLastUrl(url);
+      setShowDiff(false);
 
-    const start = performance.now();
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        credentials: "include",
-      });
-      const timing = Math.round(performance.now() - start);
-      const headers = extractResponseHeaders(res.headers);
-      const contentType = res.headers.get("content-type") || "";
-      const body = await res.text();
-      const isJson = contentType.includes("application/json");
-      const data = isJson && body ? JSON.parse(body) : body || null;
+      const start = performance.now();
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          credentials: "include",
+        });
+        const timing = Math.round(performance.now() - start);
+        const headers = extractResponseHeaders(res.headers);
+        const contentType = res.headers.get("content-type") || "";
+        const body = await res.text();
+        const isJson = contentType.includes("application/json");
+        const data = isJson && body ? JSON.parse(body) : body || null;
 
-      setResult({
-        data,
-        timing,
-        headers,
-        error: res.ok ? null : `HTTP ${res.status} ${res.statusText}`,
-      });
-    } catch (err: any) {
-      if (err.name === "AbortError") return;
-      const timing = Math.round(performance.now() - start);
-      setResult({
-        data: null,
-        timing,
-        headers: {},
-        error: err.message || "Request failed",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [values, buildUrl, result]);
+        setResult({
+          data,
+          timing,
+          headers,
+          error: res.ok ? null : `HTTP ${res.status} ${res.statusText}`,
+        });
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+        const timing = Math.round(performance.now() - start);
+        setResult({
+          data: null,
+          timing,
+          headers: {},
+          error: err.message || "Request failed",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [values, buildUrl, result]
+  );
 
   const replay = useCallback(async () => {
     if (!lastUrl) return;
-    execute();
+    await execute(lastUrl);
   }, [lastUrl, execute]);
 
   const contract = result?.data
