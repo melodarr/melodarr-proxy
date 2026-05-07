@@ -9,6 +9,7 @@ const links = [
   { href: "/analytics", label: "Analytics" },
   { href: "/requests", label: "Requests" },
   { href: "/explorer", label: "Explorer" },
+  { href: "/lidarr-mirror", label: "Lidarr Mirror" },
   { href: "/settings", label: "Settings" },
   { href: "/updates", label: "Updates" },
 ];

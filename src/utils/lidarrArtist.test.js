@@ -32,6 +32,18 @@ test('withArtistLookupDefaults supplies Lidarr-safe lookup fields', () => {
   assert.deepEqual(artist.links, [])
   assert.deepEqual(artist.images, [])
   assert.deepEqual(artist.albums, [])
+  assert.deepEqual(artist.ratings, { votes: 0, value: 0 })
+  assert.deepEqual(artist.rating, { count: 0, value: 0 })
+})
+
+test('withArtistLookupDefaults always emits both Lidarr ratings and SkyHook rating', () => {
+  const artist = withArtistLookupDefaults({
+    artistName: 'Lorde',
+    ratings: { votes: 12, value: 4.5 }
+  })
+
+  assert.deepEqual(artist.ratings, { votes: 12, value: 4.5 })
+  assert.deepEqual(artist.rating, { count: 12, value: 4.5 })
 })
 
 test('withArtistLookupDefaults falls back foreignArtistId from id for legacy/cached payloads', () => {
