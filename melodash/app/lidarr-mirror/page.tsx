@@ -104,7 +104,7 @@ const ARTIST_BY_ID_FIELDS: Array<{ key: string; required: boolean }> = [
   { key: "overview", required: false },
   { key: "images", required: true },
   { key: "albums", required: true },
-  { key: "ratings", required: false },
+  { key: "rating", required: false },
   { key: "links", required: false },
   { key: "genres", required: false },
 ];
