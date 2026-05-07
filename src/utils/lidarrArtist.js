@@ -30,7 +30,8 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'links',
   'images',
   'albums',
-  'ratings'
+  'ratings',
+  'rating'
 ])
 
 const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
@@ -390,7 +391,8 @@ function withArtistLookupDefaults (artist = {}) {
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
     albums: normalizeArray(artist.albums).map(normalizeAlbum),
-    ratings: normalizeRatings(artist.ratings || artist.rating)
+    ratings: normalizeRatings(artist.ratings || artist.rating),
+    rating: normalizeRating(artist.rating || artist.ratings)
   }
 
   for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
