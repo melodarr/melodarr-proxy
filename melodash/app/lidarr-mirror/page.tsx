@@ -99,8 +99,8 @@ const ARTIST_LOOKUP_FIELDS: Array<{ key: string; required: boolean }> = [
 ];
 
 const ARTIST_BY_ID_FIELDS: Array<{ key: string; required: boolean }> = [
+  { key: "id", required: true },
   { key: "artistName", required: true },
-  { key: "foreignArtistId", required: true },
   { key: "overview", required: false },
   { key: "images", required: true },
   { key: "albums", required: true },
