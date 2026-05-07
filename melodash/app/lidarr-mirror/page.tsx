@@ -934,23 +934,28 @@ function ArtistPicker({
   result: EndpointResult;
   onSelect: (id: string, name: string) => void;
 }) {
-  const autoSelectedRef = useRef(false);
+  const autoSelectedArtistIdRef = useRef<string | null>(null);
 
   const artists = (!result.data || result.error) ? [] : (Array.isArray(result.data) ? result.data : []);
   const validArtists = artists.filter((a: Record<string, unknown>) => String(a.foreignArtistId || ""));
+  const singleValidArtistId =
+    validArtists.length === 1
+      ? String((validArtists[0] as Record<string, unknown>).foreignArtistId || "")
+      : "";
 
   // Auto-select when exactly one result
   useEffect(() => {
-    if (validArtists.length === 1 && !autoSelectedRef.current) {
-      autoSelectedRef.current = true;
-      const artist = validArtists[0] as Record<string, unknown>;
-      const id = String(artist.foreignArtistId || "");
-      const name = String(artist.artistName || artist.name || "Unknown");
-      if (id) onSelect(id, name);
-    } else if (validArtists.length !== 1) {
-      autoSelectedRef.current = false;
+    if (validArtists.length === 1 && singleValidArtistId) {
+      if (autoSelectedArtistIdRef.current !== singleValidArtistId) {
+        autoSelectedArtistIdRef.current = singleValidArtistId;
+        const artist = validArtists[0] as Record<string, unknown>;
+        const name = String(artist.artistName || artist.name || "Unknown");
+        onSelect(singleValidArtistId, name);
+      }
+    } else {
+      autoSelectedArtistIdRef.current = null;
     }
-  }, [validArtists.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [singleValidArtistId, validArtists.length, onSelect]);
 
   if (validArtists.length === 0) return null;
 
