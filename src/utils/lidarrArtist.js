@@ -29,7 +29,9 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'artistAliases',
   'links',
   'images',
-  'albums'
+  'albums',
+  'ratings',
+  'rating'
 ])
 
 const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
