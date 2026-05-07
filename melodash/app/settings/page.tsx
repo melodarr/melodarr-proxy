@@ -64,6 +64,14 @@ type ProviderTestResult = {
  error?: string;
  details?: Record<string, unknown>;
 };
+type SettingsField = {
+ key: string;
+ label: string;
+ type: string;
+ suffix?: string;
+ placeholder?: string;
+ options?: Array<{ value: string; label: string }>;
+};
 type CustomMapping = {
  artistName?: string;
  albums?: string;
@@ -114,9 +122,14 @@ const cacheFields = [
  { key: "slowRequestMs", label: "Slow request threshold", type: "number", suffix: "ms" },
 ];
 
-const providerSettings: Record<string, Array<{ key: string; label: string; type: string; placeholder?: string }>> = {
+const providerSettings: Record<string, SettingsField[]> = {
  musicbrainz: [
  { key: "musicbrainzApiKey", label: "API key", type: "password" },
+ { key: "musicbrainzIpFamily", label: "IP family", type: "select", options: [
+ { value: "auto", label: "Auto" },
+ { value: "4", label: "IPv4" },
+ { value: "6", label: "IPv6" },
+ ] },
  ],
  itunes: [
  { key: "itunesCountry", label: "Country", type: "text" },
@@ -547,7 +560,7 @@ export default function SettingsPage() {
  window.setTimeout(() => setCopiedProvider(null), 1500);
  }
 
- function renderField(field: { key: string; label: string; type: string; suffix?: string; placeholder?: string }) {
+ function renderField(field: SettingsField) {
  const source = config[field.key]?.source;
 
  return (
@@ -571,8 +584,9 @@ export default function SettingsPage() {
  );
  }
 
- function renderProviderSetting(field: { key: string; label: string; type: string; placeholder?: string }) {
+ function renderProviderSetting(field: SettingsField) {
  const source = config[field.key]?.source;
+ const value = form[field.key] ?? readConfig(config, field.key);
 
  return (
  <label key={field.key} className="block">
@@ -580,13 +594,25 @@ export default function SettingsPage() {
  <span className="text-xs font-medium text-secondary">{field.label}</span>
  {source && <span className="text-xs text-secondary">{source}</span>}
  </div>
+ {field.type === "select" ? (
+ <select
+ className={inputClass()}
+ value={value}
+ onChange={(event) => updateField(field.key, event.target.value)}
+ >
+ {(field.options ?? []).map((option) => (
+ <option key={option.value} value={option.value}>{option.label}</option>
+ ))}
+ </select>
+ ) : (
  <input
  className={inputClass()}
  type={field.type}
  placeholder={field.placeholder}
- value={form[field.key] ?? readConfig(config, field.key)}
+ value={value}
  onChange={(event) => updateField(field.key, event.target.value)}
  />
+ )}
  </label>
  );
  }
