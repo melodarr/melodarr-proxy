@@ -32,7 +32,7 @@ const SENSITIVE_SETTING_KEYS = new Set([
   'lastfmApiKey',
   'discogsToken',
   'theAudioDbApiKey',
-  'customProviderToken'
+  'customProviders'
 ])
 
 function redactSensitiveKeys (obj) {

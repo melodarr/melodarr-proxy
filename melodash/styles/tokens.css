@@ -1,0 +1,26 @@
+@layer base {
+  :root {
+    /* Backgrounds */
+    --bg-page: #f9fafb;
+    --bg-card: #ffffff;
+
+    /* Borders */
+    --border-default: #e5e7eb;
+
+    /* Text */
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
+  }
+
+  .dark {
+    --bg-page: #020617;
+    --bg-card: #111827;
+
+    --border-default: #1f2937;
+
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+  }
+}
