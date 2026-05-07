@@ -31,6 +31,8 @@
 #                   /config/settings.json, then container-wide find).
 #                   Only used when REENABLE_MB=1.
 #   EXPECTED_REV — optional git SHA expected from /api/version (default: empty = skip)
+#   SITE_TESTS_CONFIG — saved interactive defaults file
+#                       (default: .site-tests.env in this repo)
 #
 # Tracks pass/fail per check and exits non-zero if any test failed.
 
@@ -53,6 +55,45 @@ EXPECTED_REV="${EXPECTED_REV:-}"
 BRANCHES_LISTED=0
 declare -a BRANCH_CHOICES=()
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SITE_TESTS_CONFIG="${SITE_TESTS_CONFIG:-$BASE_DIR/.site-tests.env}"
+
+shell_quote () {
+  local value="${1:-}"
+  printf "%q" "$value"
+}
+
+load_saved_site_test_config () {
+  [ -f "$SITE_TESTS_CONFIG" ] || return 1
+  # The file is written by this script as shell assignments with quoted values.
+  # shellcheck disable=SC1090
+  . "$SITE_TESTS_CONFIG"
+}
+
+save_site_test_config () {
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/melodarr-site-tests.XXXXXX")" || return 1
+  chmod 600 "$tmp" 2>/dev/null || true
+  {
+    echo "# Saved by scripts/site-tests.sh. Contains local deployment defaults."
+    echo "# API_KEY is stored here for convenience; keep this file private."
+    printf "CTID=%s\n" "$(shell_quote "$CTID")"
+    printf "BASE_URL=%s\n" "$(shell_quote "$BASE_URL")"
+    printf "API_KEY=%s\n" "$(shell_quote "$API_KEY")"
+    printf "SKIP_DEPLOY=%s\n" "$(shell_quote "$SKIP_DEPLOY")"
+    printf "BRANCH_REMOTE=%s\n" "$(shell_quote "$BRANCH_REMOTE")"
+    printf "LIST_BRANCHES=%s\n" "$(shell_quote "$LIST_BRANCHES")"
+    printf "BRANCH_LIST_ONLY=%s\n" "$(shell_quote "$BRANCH_LIST_ONLY")"
+    printf "BRANCH_LIMIT=%s\n" "$(shell_quote "$BRANCH_LIMIT")"
+    printf "LXC_REPO_PATH=%s\n" "$(shell_quote "$LXC_REPO_PATH")"
+    printf "LXC_BRANCH_SOURCE_PATH=%s\n" "$(shell_quote "$LXC_BRANCH_SOURCE_PATH")"
+    printf "DEPLOY_BRANCH=%s\n" "$(shell_quote "$DEPLOY_BRANCH")"
+    printf "REENABLE_MB=%s\n" "$(shell_quote "$REENABLE_MB")"
+    printf "SETTINGS_PATH=%s\n" "$(shell_quote "$SETTINGS_PATH")"
+    printf "EXPECTED_REV=%s\n" "$(shell_quote "$EXPECTED_REV")"
+  } > "$tmp"
+  mv "$tmp" "$SITE_TESTS_CONFIG"
+  chmod 600 "$SITE_TESTS_CONFIG" 2>/dev/null || true
+}
 
 # ── Branch listing/deploy helpers ────────────────────────────────
 host_git_available () {
@@ -310,31 +351,50 @@ ask_yn () {
 }
 
 if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
+  USE_SAVED_CONFIG=0
   echo "Melodarr verification harness — interactive setup"
   echo "Press Enter for the default; set INTERACTIVE=0 to skip the wizard."
+  echo "Saved answers file: $SITE_TESTS_CONFIG"
   echo
-  ask    CTID         "Proxmox CTID"                          "$CTID"
-  ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
-  ask    API_KEY      "Proxy API key"                         "$API_KEY"
-  ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
-  ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
-  ask    LXC_REPO_PATH "LXC source repo path for branch deploys (blank = auto)" "$LXC_REPO_PATH"
-  ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
-  if [ "$LIST_BRANCHES" = "1" ]; then
-    ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
-    show_remote_branches
-    if [ "$BRANCH_LIST_ONLY" = "1" ]; then
-      exit 0
+
+  if [ -f "$SITE_TESTS_CONFIG" ]; then
+    ask_yn USE_SAVED_CONFIG "Use saved answers from previous run?" "1"
+    if [ "$USE_SAVED_CONFIG" = "1" ]; then
+      if load_saved_site_test_config; then
+        echo "Loaded saved answers."
+      else
+        echo "WARN: unable to load saved answers; continuing with prompts."
+        USE_SAVED_CONFIG=0
+      fi
     fi
+    echo
   fi
-  ask    DEPLOY_BRANCH "Branch number/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
-  resolve_branch_selection "$DEPLOY_BRANCH"
-  ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
-  if [ "$REENABLE_MB" = "1" ]; then
-    ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
+
+  if [ "$USE_SAVED_CONFIG" != "1" ]; then
+    ask    CTID         "Proxmox CTID"                          "$CTID"
+    ask    BASE_URL     "Proxy URL inside the LXC"              "$BASE_URL"
+    ask    API_KEY      "Proxy API key"                         "$API_KEY"
+    ask_yn SKIP_DEPLOY  "Skip pull + recreate of proxy?"        "$SKIP_DEPLOY"
+    ask    BRANCH_REMOTE "Git remote for branch deploys"        "$BRANCH_REMOTE"
+    ask    LXC_REPO_PATH "LXC source repo path for branch deploys (blank = auto)" "$LXC_REPO_PATH"
+    ask_yn LIST_BRANCHES "List available deploy branches?"      "$LIST_BRANCHES"
+    if [ "$LIST_BRANCHES" = "1" ]; then
+      ask_yn BRANCH_LIST_ONLY "Only list branches and exit?"    "$BRANCH_LIST_ONLY"
+      show_remote_branches
+      if [ "$BRANCH_LIST_ONLY" = "1" ]; then
+        save_site_test_config || true
+        exit 0
+      fi
+    fi
+    ask    DEPLOY_BRANCH "Branch number/ref to deploy (blank = current image/checkout)" "$DEPLOY_BRANCH"
+    resolve_branch_selection "$DEPLOY_BRANCH"
+    ask_yn REENABLE_MB  "Re-enable MusicBrainz on this run?"    "$REENABLE_MB"
+    if [ "$REENABLE_MB" = "1" ]; then
+      ask  SETTINGS_PATH "  settings.json path (blank = auto-discover)" "$SETTINGS_PATH"
+    fi
+    ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
+    echo
   fi
-  ask    EXPECTED_REV "Expected git revision SHA"             "$EXPECTED_REV"
-  echo
 fi
 
 if [ "$LIST_BRANCHES" = "1" ] && [ "$BRANCHES_LISTED" = "0" ]; then
@@ -361,6 +421,10 @@ fi
 if [ -z "$API_KEY" ]; then
   echo "ERROR: API key is required"
   exit 1
+fi
+
+if [ -t 0 ] && [ "${INTERACTIVE:-1}" = "1" ]; then
+  save_site_test_config || echo "WARN: unable to save answers to $SITE_TESTS_CONFIG"
 fi
 
 # ── Pass/fail tracking ───────────────────────────────────────────
@@ -617,6 +681,11 @@ cd /opt/melodarr-proxy && docker compose restart proxy > /dev/null
   fi
 
   # ── PASS gate 4: lookup returns a non-empty foreignArtistId (MBID) ──
+  # Clear cache here even if no settings edit/restart was needed. Otherwise
+  # a previous Radiohead lookup can satisfy this gate from cache and leave
+  # /debug/upstream empty, which makes the diagnostic gate misleading.
+  remote_post /api/cache/clear > /dev/null 2>&1 || true
+  echo "  Cache cleared before MusicBrainz verification lookup"
   # This verifies the merge sees MB. /debug/upstream is checked below as
   # diagnostics only; the Lidarr contract is the returned artist shape.
   LOOKUP_AFTER=$(remote_get '/api/v0.4/artist/lookup?term=radiohead')
