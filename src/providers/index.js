@@ -6,12 +6,31 @@ const { safeProviderCall } = require('./safeProviderCall')
 const providerMetrics = require('../health/providerMetrics')
 const { normalizeAliases, normalizeStringArray } = require('../utils/lidarrArtist')
 
-const providers = {
+const customProviderModule = require('./custom.provider')
+
+const builtinProviders = {
   musicbrainz: require('./musicbrainz.provider'),
   lastfm: require('./lastfm.provider'),
   discogs: require('./discogs.provider'),
   theaudiodb: require('./theaudiodb.provider'),
   itunes: require('./itunes.provider')
+}
+
+function getAllProviders () {
+  const all = { ...builtinProviders }
+  let customProviders = []
+  try {
+    customProviders = JSON.parse(getConfigValue('customProviders') || '[]')
+  } catch (err) {
+    logger.warn('Failed to parse customProviders config', { error: err.message })
+  }
+  for (const cp of customProviders) {
+    if (cp && cp.id) {
+      const id = String(cp.id).trim().toLowerCase()
+      if (id) all[id] = customProviderModule.createCustomProvider({ ...cp, id })
+    }
+  }
+  return all
 }
 
 function mergeIds (existingIds, nextIds) {
@@ -49,9 +68,11 @@ async function aggregateArtist (term) {
   const providerNamesStr = getConfigValue('metadataProviders') || 'musicbrainz'
   const providerNames = providerNamesStr.split(',').map(s => s.trim().toLowerCase())
 
+  const allProviders = getAllProviders()
+
   const activeProviders = providerNames
-    .filter(name => providers[name])
-    .map(name => providers[name])
+    .filter(name => allProviders[name])
+    .map(name => allProviders[name])
 
   if (activeProviders.length === 0) {
     throw new Error('No active metadata providers configured')
@@ -402,10 +423,11 @@ async function aggregateArtist (term) {
 
 async function testProvider (providerName, term) {
   const normalizedName = String(providerName || '').trim().toLowerCase()
-  const provider = providers[normalizedName]
+  const allProviders = getAllProviders()
+  const provider = allProviders[normalizedName]
 
   if (!provider) {
-    const validProviders = Object.keys(providers).join(', ')
+    const validProviders = Object.keys(allProviders).join(', ')
     throw new Error(`Unknown provider "${providerName}". Valid providers: ${validProviders}`)
   }
 
