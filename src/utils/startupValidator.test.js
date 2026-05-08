@@ -71,6 +71,8 @@ describe('Startup Validator', () => {
     })
 
     assert.doesNotThrow(() => validateStartup())
+    assert.strictEqual(loggerInfoMock.mock.calls.length, 1)
+    assert.strictEqual(loggerInfoMock.mock.calls[0].arguments[0], 'Startup configuration validated successfully.')
     assert.strictEqual(exitSpy.mock.calls.length, 0)
   })
 
