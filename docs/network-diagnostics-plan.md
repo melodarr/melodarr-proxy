@@ -14,10 +14,12 @@ Implemented:
 - Source Compose and smoke-test flows use the IPv6 Docker network by default.
 - `scripts/ensure-docker-ipv6.sh` configures Docker daemon IPv6 and creates the Melodarr IPv6 network.
 - Site/install tests verify the proxy container is attached to an IPv6-enabled Docker network.
+- Generic provider transport registry for iTunes, TheAudioDB, Discogs, and Last.fm.
+- `/debug/diagnose?provider=<name>` supports generic provider DNS/TCP/TLS/HTTP diagnostics.
+- `/debug/network` includes cached generic provider transport states alongside MusicBrainz.
 
 Still planned:
 
-- General provider diagnostics for non-MusicBrainz providers.
 - Deeper standalone diagnostics page.
 - Operator export/copy tools.
 

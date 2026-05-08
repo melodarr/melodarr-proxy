@@ -7,6 +7,22 @@ const {
 
 const networkDiagnostics = require('./network-diagnostics.service')
 
+async function okGenericProvider (name) {
+  return {
+    provider: name,
+    ok: true,
+    failedStep: null,
+    checkedAt: '2026-05-07T16:00:00Z',
+    dns: {
+      addresses: [{ address: '192.0.2.10', family: 4 }, { address: '2001:db8::10', family: 6 }],
+      errors: {}
+    },
+    tcp: { connected: true },
+    tls: { protocol: 'TLSv1.3' },
+    http: { status: 200 }
+  }
+}
+
 test('network diagnostics starts with unknown cached MusicBrainz state and does not probe', () => {
   networkDiagnostics.resetNetworkDiagnosticsForTest()
 
@@ -36,13 +52,17 @@ test('refreshNetworkDiagnostics caches successful MusicBrainz IPv6 report', asyn
         tcp: { connected: true },
         tls: { protocol: 'TLSv1.3' }
       }
-    }
+    },
+    probeProvider: okGenericProvider
   })
 
   assert.strictEqual(calls, 1)
   assert.strictEqual(first.status, 'ok')
   assert.strictEqual(first.providers.musicbrainz.state, MUSICBRAINZ_STATES.HEALTHY)
   assert.strictEqual(first.providers.musicbrainz.lastSuccessAt, '2026-05-07T16:00:00Z')
+  assert.strictEqual(first.providers.itunes.state, 'HEALTHY')
+  assert.strictEqual(first.summary.itunes.policy, 'auto')
+  assert.strictEqual(first.summary.itunes.fallbackAllowed, true)
 
   const cached = await networkDiagnostics.getNetworkDiagnostics()
   assert.strictEqual(calls, 1)
@@ -58,7 +78,8 @@ test('refreshNetworkDiagnostics increments consecutive failures and preserves la
       ok: true,
       checkedAt: '2026-05-07T16:00:00Z',
       dns: { addresses: [{ address: '2a01:4f8:c011:f68::1', family: 6 }], errors: {} }
-    })
+    }),
+    probeProvider: okGenericProvider
   })
 
   const failed = await networkDiagnostics.refreshNetworkDiagnostics({
@@ -69,7 +90,8 @@ test('refreshNetworkDiagnostics increments consecutive failures and preserves la
       checkedAt: '2026-05-07T16:15:00Z',
       error: { code: 'ECONNRESET', message: 'TLS reset' },
       dns: { addresses: [{ address: '2a01:4f8:c011:f68::1', family: 6 }], errors: {} }
-    })
+    }),
+    probeProvider: okGenericProvider
   })
 
   assert.strictEqual(failed.status, 'degraded')
@@ -89,10 +111,20 @@ test('buildNetworkHealthSummary reads cached state without forcing a live probe'
       checkedAt: '2026-05-07T16:00:00Z',
       error: { code: 'ENODATA', message: 'No AAAA' },
       dns: { addresses: [], errors: { v6: 'ENODATA' } }
+    }),
+    probeProvider: async (name) => ({
+      provider: name,
+      ok: false,
+      failedStep: 'http',
+      checkedAt: '2026-05-07T16:00:00Z',
+      error: { code: 'HTTP_401', message: 'HTTP 401' },
+      dns: { addresses: [{ address: '192.0.2.10', family: 4 }], errors: {} }
     })
   })
 
   const summary = networkDiagnostics.buildNetworkHealthSummary()
   assert.strictEqual(summary.musicbrainz.state, MUSICBRAINZ_STATES.DNS_FAILED)
   assert.strictEqual(summary.musicbrainz.lastCheckedAt, '2026-05-07T16:00:00Z')
+  assert.strictEqual(summary.discogs.state, 'HTTP_FAILED')
+  assert.strictEqual(summary.discogs.policy, 'auto')
 })

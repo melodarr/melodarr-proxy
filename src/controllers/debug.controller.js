@@ -9,7 +9,7 @@ const { getSnapshots } = require('../snapshots')
 const { buildHealthPayload } = require('./health.controller')
 const { testCustomProvider } = require('../providers/custom.provider')
 const { getConfigValue } = require('../settings/store')
-const { diagnoseMusicBrainz } = require('../services/diagnose.service')
+const { diagnoseMusicBrainz, diagnoseGenericProvider } = require('../services/diagnose.service')
 const { getNetworkDiagnostics } = require('../infrastructure/network/network-diagnostics.service')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { toIsoDate } = require('../utils/dates')
@@ -557,17 +557,11 @@ function getUpstreamHistory (req, res) {
 async function diagnoseProvider (req, res) {
   const provider = String(req.query.provider || 'musicbrainz').trim().toLowerCase()
 
-  if (provider !== 'musicbrainz') {
-    return res.status(400).json({
-      provider,
-      ok: false,
-      failedStep: 'unsupported',
-      error: { code: 'UNSUPPORTED_PROVIDER', message: `No diagnose pipeline for provider: ${provider}. Currently supported: musicbrainz.` }
-    })
-  }
-
   try {
-    const result = await diagnoseMusicBrainz()
+    const result = provider === 'musicbrainz'
+      ? await diagnoseMusicBrainz()
+      : await diagnoseGenericProvider(provider)
+    if (result.failedStep === 'unsupported') return res.status(400).json(result)
     return res.status(200).json(result)
   } catch (err) {
     return res.status(500).json({

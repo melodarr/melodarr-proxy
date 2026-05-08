@@ -178,3 +178,30 @@ test('diagnoseMusicBrainz — treats missing AAAA as DNS failure and never probe
   assert.deepStrictEqual(result.probes, [])
   assert.match(result.error.message, /No AAAA/)
 })
+
+test('diagnoseGenericProvider — unsupported providers return contract-safe error', async () => {
+  const svc = loadServiceWithMocks()
+
+  const result = await svc.diagnoseGenericProvider('unknown')
+  assert.strictEqual(result.provider, 'unknown')
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'unsupported')
+  assert.strictEqual(result.error.code, 'UNSUPPORTED_PROVIDER')
+})
+
+test('diagnoseGenericProvider — DNS failure path includes generic provider policy', async () => {
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e }
+  })
+
+  const result = await svc.diagnoseGenericProvider('itunes')
+  assert.strictEqual(result.provider, 'itunes')
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'dns')
+  assert.strictEqual(result.target.policy, 'auto')
+  assert.strictEqual(result.target.fallbackAllowed, true)
+  assert.strictEqual(result.target.configuredIpFamily, 'auto')
+  assert.strictEqual(result.error.code, 'ENOTFOUND')
+  assert.match(result.diagnosis.summary, /DNS/)
+})

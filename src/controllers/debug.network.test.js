@@ -23,7 +23,14 @@ const heavyStubs = {
   './health.controller': { buildHealthPayload: () => ({ status: 'ok' }) },
   '../providers/custom.provider': { testCustomProvider: async () => ({}) },
   '../settings/store': { getConfigValue: () => null },
-  '../services/diagnose.service': { diagnoseMusicBrainz: async () => ({}) },
+  '../services/diagnose.service': {
+    diagnoseMusicBrainz: async () => ({}),
+    diagnoseGenericProvider: async (provider) => ({
+      provider,
+      ok: provider === 'itunes',
+      failedStep: provider === 'itunes' ? null : 'http'
+    })
+  },
   '../diagnostics/upstream-buffer': { query: () => ({ entries: [], filteredCount: 0, totalCount: 0, maxSize: 100 }) },
   '../utils/dates': { toIsoDate: (v) => String(v || '') },
   '../utils/logger': { error () {}, warn () {}, info () {}, debug () {} },
@@ -37,6 +44,13 @@ const heavyStubs = {
           family: 6,
           fallbackAllowed: false,
           state: refresh ? 'MUSICBRAINZ_IPV6_HEALTHY' : 'UNKNOWN'
+        },
+        itunes: {
+          provider: 'itunes',
+          policy: 'auto',
+          family: 'auto',
+          fallbackAllowed: true,
+          state: refresh ? 'HEALTHY' : 'UNKNOWN'
         }
       },
       summary: {
@@ -45,6 +59,12 @@ const heavyStubs = {
           family: 6,
           fallbackAllowed: false,
           state: refresh ? 'MUSICBRAINZ_IPV6_HEALTHY' : 'UNKNOWN'
+        },
+        itunes: {
+          policy: 'auto',
+          family: 'auto',
+          fallbackAllowed: true,
+          state: refresh ? 'HEALTHY' : 'UNKNOWN'
         }
       }
     })
@@ -76,6 +96,8 @@ test('getNetworkDebug returns cached network diagnostics by default', async () =
   assert.equal(res.body.summary.musicbrainz.policy, 'ipv6_only')
   assert.equal(res.body.summary.musicbrainz.family, 6)
   assert.equal(res.body.summary.musicbrainz.fallbackAllowed, false)
+  assert.equal(res.body.summary.itunes.policy, 'auto')
+  assert.equal(res.body.summary.itunes.fallbackAllowed, true)
 })
 
 test('getNetworkDebug supports explicit refresh', async () => {
@@ -85,4 +107,5 @@ test('getNetworkDebug supports explicit refresh', async () => {
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.status, 'ok')
   assert.equal(res.body.providers.musicbrainz.state, 'MUSICBRAINZ_IPV6_HEALTHY')
+  assert.equal(res.body.providers.itunes.state, 'HEALTHY')
 })

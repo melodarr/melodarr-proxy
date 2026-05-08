@@ -16,6 +16,16 @@ const MUSICBRAINZ_POLICY = Object.freeze({
   fallbackAllowed: false
 })
 
+const GENERIC_PROVIDER_STATES = Object.freeze({
+  HEALTHY: 'HEALTHY',
+  DNS_FAILED: 'DNS_FAILED',
+  TCP_FAILED: 'TCP_FAILED',
+  TLS_FAILED: 'TLS_FAILED',
+  HTTP_FAILED: 'HTTP_FAILED',
+  UNAVAILABLE: 'UNAVAILABLE',
+  UNKNOWN: 'UNKNOWN'
+})
+
 function classifyMusicBrainzReport (report = {}) {
   if (!report || Object.keys(report).length === 0) return MUSICBRAINZ_STATES.UNKNOWN
   if (report.ok) return MUSICBRAINZ_STATES.HEALTHY
@@ -33,6 +43,21 @@ function classifyMusicBrainzReport (report = {}) {
   if (failedStep === 'parse') return MUSICBRAINZ_STATES.HTTP_FAILED
 
   return MUSICBRAINZ_STATES.UNAVAILABLE
+}
+
+function classifyGenericProviderReport (report = {}) {
+  if (!report || Object.keys(report).length === 0) return GENERIC_PROVIDER_STATES.UNKNOWN
+  if (report.ok) return GENERIC_PROVIDER_STATES.HEALTHY
+
+  const failedStep = report.failedStep || 'unknown'
+
+  if (failedStep === 'dns') return GENERIC_PROVIDER_STATES.DNS_FAILED
+  if (failedStep === 'tcp') return GENERIC_PROVIDER_STATES.TCP_FAILED
+  if (failedStep === 'tls') return GENERIC_PROVIDER_STATES.TLS_FAILED
+  if (failedStep === 'http') return GENERIC_PROVIDER_STATES.HTTP_FAILED
+  if (failedStep === 'parse') return GENERIC_PROVIDER_STATES.HTTP_FAILED
+
+  return GENERIC_PROVIDER_STATES.UNAVAILABLE
 }
 
 function recommendationsForMusicBrainzState (state) {
@@ -87,6 +112,46 @@ function hasAaaa (report = {}) {
   return Boolean((report.dns?.addresses || []).some((item) => item.family === 6))
 }
 
+function hasA (report = {}) {
+  return Boolean((report.dns?.addresses || []).some((item) => item.family === 4))
+}
+
+function recommendationsForGenericProviderState (state, provider = 'provider') {
+  if (state === GENERIC_PROVIDER_STATES.HEALTHY) return []
+
+  if (state === GENERIC_PROVIDER_STATES.DNS_FAILED) {
+    return [
+      `Verify DNS inside the proxy container can resolve ${provider}.`,
+      'Compare DNS from the Proxmox host, the LXC, and the proxy container.'
+    ]
+  }
+
+  if (state === GENERIC_PROVIDER_STATES.TCP_FAILED) {
+    return [
+      `Check outbound TCP/443 from the proxy container to ${provider}.`,
+      'Verify firewall, bridge, Docker network, and LXC egress rules.'
+    ]
+  }
+
+  if (state === GENERIC_PROVIDER_STATES.TLS_FAILED) {
+    return [
+      `TCP connected to ${provider}, but TLS did not complete.`,
+      'Check TLS inspection, MTU/PMTUD, firewall resets, and proxy/container CA configuration.'
+    ]
+  }
+
+  if (state === GENERIC_PROVIDER_STATES.HTTP_FAILED) {
+    return [
+      `${provider} is reachable at the network layer but returned an HTTP error.`,
+      'Inspect HTTP status, authentication settings, quota/rate-limit headers, and provider configuration.'
+    ]
+  }
+
+  return [
+    `Inspect /debug/diagnose?provider=${provider} for raw failure details.`
+  ]
+}
+
 function buildMusicBrainzNetworkState (report = {}, consecutiveFailures = 0, lastSuccessAt = null) {
   const state = classifyMusicBrainzReport(report)
 
@@ -113,6 +178,38 @@ function buildMusicBrainzNetworkState (report = {}, consecutiveFailures = 0, las
   }
 }
 
+function buildGenericProviderNetworkState (report = {}, config = {}, consecutiveFailures = 0, lastSuccessAt = null) {
+  const state = classifyGenericProviderReport(report)
+  const provider = config.provider || report.provider || 'unknown'
+
+  return {
+    provider,
+    label: config.label || provider,
+    policy: config.policy || 'auto',
+    family: config.requiredFamily || 'auto',
+    fallbackAllowed: config.fallbackAllowed !== false,
+    state,
+    ok: state === GENERIC_PROVIDER_STATES.HEALTHY,
+    failedStep: report.failedStep || null,
+    checkedAt: report.checkedAt || null,
+    lastSuccessAt,
+    consecutiveFailures,
+    target: report.target || { url: config.url || null, hostname: null },
+    dns: {
+      aAvailable: hasA(report),
+      aaaaAvailable: hasAaaa(report),
+      addresses: report.dns?.addresses || [],
+      errors: report.dns?.errors || {}
+    },
+    tcp: report.tcp || null,
+    tls: report.tls || null,
+    http: report.http || null,
+    timingsMs: report.timingsMs || null,
+    error: report.error || null,
+    recommendations: recommendationsForGenericProviderState(state, provider)
+  }
+}
+
 function buildMusicBrainzSummary (details = {}) {
   return {
     policy: MUSICBRAINZ_POLICY.policy,
@@ -127,11 +224,30 @@ function buildMusicBrainzSummary (details = {}) {
   }
 }
 
+function buildGenericProviderSummary (details = {}) {
+  return {
+    policy: details.policy || 'auto',
+    family: details.family || 'auto',
+    fallbackAllowed: details.fallbackAllowed !== false,
+    state: details.state || GENERIC_PROVIDER_STATES.UNKNOWN,
+    ok: Boolean(details.ok),
+    failedStep: details.failedStep || null,
+    lastCheckedAt: details.checkedAt || null,
+    lastSuccessAt: details.lastSuccessAt || null,
+    consecutiveFailures: details.consecutiveFailures || 0
+  }
+}
+
 module.exports = {
   MUSICBRAINZ_STATES,
   MUSICBRAINZ_POLICY,
+  GENERIC_PROVIDER_STATES,
   classifyMusicBrainzReport,
+  classifyGenericProviderReport,
   recommendationsForMusicBrainzState,
+  recommendationsForGenericProviderState,
   buildMusicBrainzNetworkState,
-  buildMusicBrainzSummary
+  buildGenericProviderNetworkState,
+  buildMusicBrainzSummary,
+  buildGenericProviderSummary
 }

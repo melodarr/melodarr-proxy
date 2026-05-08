@@ -497,11 +497,16 @@ Run targeted diagnostics:
 ```bash
 curl "http://localhost:3055/debug/network?refresh=1"
 curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
+curl "http://localhost:3055/debug/diagnose?provider=itunes"
 scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
 ```
 
-The diagnose response includes DNS results, selected IPv6 address/family, TCP/TLS phase timings, low-level socket error fields, and IPv6-only MusicBrainz probe details. Use `failedStep` to distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
+The diagnose response includes DNS results, selected address/family, TCP/TLS
+phase timings, low-level socket error fields, and provider probe details.
+MusicBrainz diagnostics are IPv6-only; iTunes, TheAudioDB, Discogs, and
+Last.fm use the generic auto-family diagnostic path. Use `failedStep` to
+distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
 
 Set:
 
