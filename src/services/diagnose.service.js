@@ -500,13 +500,26 @@ async function diagnoseMusicBrainz () {
   const probeDefinitions = [{ label: '6', family }]
 
   const reports = await Promise.all(probeDefinitions.map(async (probe) => {
-    const result = await performRequest({ url, headers, family: probe.family, timeout })
+    // Retry the probe up to 3 times for transient TLS failures (ECONNRESET).
+    // Docker Desktop's IPv6 path through the Linux VM can intermittently drop
+    // TLS handshake packets due to MTU/PMTUD issues; a single failure is not
+    // conclusive. The retry is diagnostic-only and does not affect the hot path.
+    const maxProbeAttempts = 3
+    let lastResult
+    for (let attempt = 1; attempt <= maxProbeAttempts; attempt++) {
+      lastResult = await performRequest({ url, headers, family: probe.family, timeout })
+      const step = classifyFailedStep(lastResult)
+      if (!step || step === 'http' || step === 'parse') break // success or non-transient
+      if (attempt < maxProbeAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
+      }
+    }
     return buildProbeReport({
       label: probe.label,
       configuredIpFamily: ipFamilyConfig,
       target: { ...target, probeFamily: probe.label },
       dnsBlock,
-      result
+      result: lastResult
     })
   }))
 

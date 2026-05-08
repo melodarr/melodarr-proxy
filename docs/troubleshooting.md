@@ -40,52 +40,71 @@ Common error:
 }
 ```
 
-This usually means the container can open a connection path but the TLS handshake is reset before completion. In Proxmox/LXC environments it is often tied to IPv4/IPv6 routing, Docker network configuration, or upstream filtering.
+This means the container can open a TCP connection but the TLS handshake is
+reset before completion. MusicBrainz is IPv6-only for this proxy — IPv4 is
+never a valid fallback. The failure is always in the network path, not the
+application.
 
-Run:
+**Common causes:**
+
+| Environment | Root Cause |
+| --- | --- |
+| Proxmox / LXC | Docker inside the LXC has IPv6 disabled or no AAAA route. |
+| Docker Desktop (macOS/Windows) | PMTUD black hole — TLS handshake packets exceed effective MTU through the Linux VM; ICMP6 PTB is swallowed. |
+| Linux host | Docker daemon missing `"ipv6": true` or IPv6 forwarding disabled. |
+
+**Diagnose:**
 
 ```bash
 curl -s "http://127.0.0.1:3055/debug/diagnose?provider=musicbrainz"
 curl -s http://127.0.0.1:3055/debug/upstream
 scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
-scripts/proxy-diag.sh mb 4
 ```
 
-Read the diagnose response this way:
+Read the response:
 
-- `failedStep: "dns"` means name resolution failed before a socket was opened.
-- `failedStep: "tcp"` means DNS worked, but TCP/443 routing or firewalling failed.
-- `failedStep: "tls"` means TCP connected, but the TLS handshake was reset or interrupted.
-- `failedStep: "http"` means TLS worked, but MusicBrainz returned an HTTP error.
-- `probes[]` contains side-by-side `auto`, IPv4, and IPv6 results so you can see whether only one family is broken.
+- `failedStep: "dns"` — name resolution failed.
+- `failedStep: "tcp"` — DNS worked, TCP/443 routing failed (`ENETUNREACH`).
+- `failedStep: "tls"` — TCP connected, TLS handshake was reset (`ECONNRESET`).
+- `failedStep: "http"` — TLS worked, MusicBrainz returned an HTTP error.
 
-Default to IPv6 first, then force IPv4 only if IPv6 is unavailable:
+**Fix:**
 
-```env
-MUSICBRAINZ_IP_FAMILY=6
-```
-
-or, only when IPv6 is unavailable:
-
-```env
-MUSICBRAINZ_IP_FAMILY=4
-```
-
-Then recreate the proxy:
+For Proxmox/LXC/Linux:
 
 ```bash
-docker compose up -d --force-recreate proxy
+sudo ./scripts/ensure-docker-ipv6.sh
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --force-recreate
 ```
 
-If MusicBrainz still fails but other providers work, you can temporarily remove MusicBrainz from active providers:
+For Docker Desktop, enable IPv6 in the daemon config (Settings → Docker
+Engine):
 
-```env
-METADATA_PROVIDERS=itunes,theaudiodb,discogs
-PROVIDER_PRIORITY=itunes,theaudiodb,discogs,lastfm
+```json
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "fd00:dead:beef::/64",
+  "ip6tables": true,
+  "experimental": true
+}
 ```
 
-This may avoid upstream-degraded readiness for MusicBrainz, but Lidarr add-artist flows may still need canonical MusicBrainz IDs.
+Then recreate containers:
+
+```bash
+docker compose down --remove-orphans
+docker compose up -d --build proxy redis melodash
+```
+
+The diagnostic probe retries up to 3 times to absorb intermittent PMTUD
+failures. Production MusicBrainz requests also retry (up to 3 attempts with
+backoff). If failures are consistent rather than intermittent, the IPv6 path
+is fundamentally broken — check ISP support, router advertisements, and
+Docker daemon configuration.
+
+> **Never set `MUSICBRAINZ_IP_FAMILY` to `4`.** MusicBrainz does not serve
+> API responses over IPv4. If IPv6 is broken, fix the transport layer.
 
 ## IPv6, Docker, And Proxmox Networking
 
@@ -153,8 +172,9 @@ docker compose up -d --force-recreate
 CTID=<ctid> ./scripts/upgrade-proxmox-lxc.sh
 ```
 
-Do not switch MusicBrainz to IPv4. Melodarr Proxy treats MusicBrainz as
-IPv6-only; IPv4 probes are intentionally not part of the MusicBrainz path.
+> **Do not switch MusicBrainz to IPv4.** Melodarr Proxy treats MusicBrainz as
+> IPv6-only; IPv4 probes are intentionally not part of the MusicBrainz path.
+> This is an immutable invariant — see the README.
 
 ## Redis Disconnected
 

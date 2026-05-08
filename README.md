@@ -478,26 +478,91 @@ The upgrade script pulls both images, runs canary validation, keeps the main con
 
 ## MusicBrainz Connectivity
 
-Some Proxmox/LXC/Docker networks advertise IPv6 but fail when the proxy container tries to reach MusicBrainz over IPv6. Common symptoms:
+MusicBrainz API access requires IPv6. The proxy enforces `MUSICBRAINZ_IP_FAMILY=6`
+and treats this as an immutable invariant — IPv4 fallback is never permitted.
 
-```text
-Client network socket disconnected before secure TLS connection was established
-ECONNRESET
-ENETUNREACH
+If the dashboard reports failures, the error message and `failedStep` tell you
+where the path broke:
+
+| `failedStep` | Symptom | Cause |
+| --- | --- | --- |
+| `dns` | `ENOTFOUND` / `ENODATA` | No AAAA record resolved; container DNS may not support IPv6. |
+| `tcp` | `ENETUNREACH` | No IPv6 default route inside the container. |
+| `tls` | `ECONNRESET` during TLS handshake | IPv6 TCP connects, but TLS packets are dropped or reset (MTU / PMTUD black hole). |
+
+### Proxmox / LXC / Linux Docker Host
+
+Run the included repair script and recreate containers:
+
+```bash
+sudo ./scripts/ensure-docker-ipv6.sh
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --force-recreate
 ```
 
-Check readiness:
+The script enables IPv6 forwarding, adds `ipv6: true` and `ip6tables: true` to
+`/etc/docker/daemon.json`, restarts Docker, and creates the external
+`melodarr-ipv6` network.
+
+### Docker Desktop (macOS / Windows)
+
+Docker Desktop runs containers inside a Linux VM. IPv6 is **not enabled by
+default** in the Docker daemon, which causes two common failure patterns:
+
+1. **`ENETUNREACH`**: The container has no IPv6 route at all.
+2. **`ECONNRESET` during TLS**: IPv6 TCP connects (Docker's userland proxy
+   partially proxies it), but TLS handshake packets exceed the effective MTU
+   through the VM boundary. ICMP6 Packet Too Big responses are swallowed by
+   the VM networking layer, creating a PMTUD black hole. This failure can be
+   **intermittent** — the probe may succeed on retry.
+
+**Fix: Enable IPv6 in Docker Desktop**
+
+1. Open Docker Desktop → **Settings** → **Docker Engine**.
+2. Add or merge these keys into the JSON config:
+
+```json
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "fd00:dead:beef::/64",
+  "ip6tables": true,
+  "experimental": true
+}
+```
+
+3. Click **Apply & restart**.
+4. Tear down and recreate the containers:
+
+```bash
+docker compose down --remove-orphans
+docker compose up -d --build proxy redis melodash
+```
+
+**Verify IPv6 inside the container:**
+
+```bash
+docker exec melodarr-proxy-proxy-1 ip -6 addr show
+docker exec melodarr-proxy-proxy-1 ip -6 route show default
+```
+
+The container should have a `fd00:dead:beef::` address and a default route.
+
+**If TLS failures persist intermittently**, the PMTUD black hole may still
+affect some connections. The diagnostic probe retries up to 3 times to absorb
+transient failures. Production requests already retry up to 3 times with
+exponential backoff. If failures are consistent (not intermittent):
+
+- Try `network_mode: host` on the proxy service (macOS only — this uses the
+  VM's network stack directly, bypassing bridge MTU issues).
+- Check your ISP's IPv6 path: `traceroute6 musicbrainz.org` from the host.
+- Consider a Hurricane Electric IPv6 tunnel if your ISP's native IPv6 is
+  unreliable.
+
+### Checking connectivity
 
 ```bash
 curl -s http://localhost:3055/api/ready
-```
-
-Run targeted diagnostics:
-
-```bash
 curl "http://localhost:3055/debug/network?refresh=1"
 curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
-curl "http://localhost:3055/debug/diagnose?provider=itunes"
 scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
 ```
@@ -508,21 +573,9 @@ MusicBrainz diagnostics are IPv6-only; iTunes, TheAudioDB, Discogs, and
 Last.fm use the generic auto-family diagnostic path. Use `failedStep` to
 distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
 
-Set:
-
-```env
-MUSICBRAINZ_IP_FAMILY=6
-```
-
-MusicBrainz is IPv6-only for Melodarr Proxy. If container-level IPv6 is not
-enabled, run the Docker host/LXC repair helper and recreate the containers:
-
-```bash
-sudo ./scripts/ensure-docker-ipv6.sh
-docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --force-recreate
-```
-
-If MusicBrainz remains unreachable, Melodarr Proxy can still serve fallback providers when enabled, but readiness will show degraded while MusicBrainz is part of `METADATA_PROVIDERS`.
+If MusicBrainz remains unreachable, the proxy can still serve fallback
+providers when enabled, but readiness will show degraded while MusicBrainz is
+part of `METADATA_PROVIDERS`.
 
 ## Updates
 
