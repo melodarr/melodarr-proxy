@@ -647,7 +647,7 @@ const EDITABLE_KEYS = {
   cacheTtlSeconds: { env: 'CACHE_TTL_SECONDS', fallback: 86400, type: 'number' },
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   musicbrainzApiKey: { env: 'MUSICBRAINZ_API_KEY', fallback: '', type: 'string' },
-  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: 'auto', type: 'string' },
+  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: '6', type: 'string' },
   minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number' },
   upstreamTimeoutMs: { env: 'UPSTREAM_TIMEOUT_MS', fallback: 8000, type: 'number' },
   upstreamMaxAttempts: { env: 'UPSTREAM_MAX_ATTEMPTS', fallback: 3, type: 'number' },
@@ -671,6 +671,11 @@ function getRuntimeConfig () {
   const config = {}
 
   for (const [key, spec] of Object.entries(EDITABLE_KEYS)) {
+    if (key === 'musicbrainzIpFamily') {
+      config[key] = { value: '6', source: 'fixed' }
+      continue
+    }
+
     const storedValue = settings.runtime?.[key]
     const envValue = process.env[spec.env]
 
@@ -693,6 +698,10 @@ function getConfigValue (key) {
 
   if (!spec) {
     return undefined
+  }
+
+  if (key === 'musicbrainzIpFamily') {
+    return '6'
   }
 
   // Saved values always win

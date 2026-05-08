@@ -857,26 +857,14 @@ echo
 echo "## Runtime MusicBrainz network preference"
 MB_FAMILY=$(pct exec "$CTID" -- docker exec melodarr-proxy-proxy-1 printenv MUSICBRAINZ_IP_FAMILY 2>/dev/null || true)
 READY_UPSTREAM=$(echo "$READY_BODY" | jq -r '.upstream // ""')
-case "${MB_FAMILY:-auto}" in
-  4|6|auto)
-    if [ -n "$MB_ACTIVE" ] && [ "$READY_UPSTREAM" = "healthy" ]; then
-      record_pass "MUSICBRAINZ_IP_FAMILY=${MB_FAMILY:-auto} with healthy MusicBrainz readiness"
-    else
-      record_fail "MUSICBRAINZ_IP_FAMILY=${MB_FAMILY:-auto}, but MusicBrainz readiness is '$READY_UPSTREAM' (activeProviders=[$ACTIVE_PROVIDERS])"
-    fi
-    ;;
-  *)
-    record_fail "MUSICBRAINZ_IP_FAMILY is invalid: '$MB_FAMILY' (expected 4, 6, or auto)"
-    ;;
-esac
-
-if [ "${MB_FAMILY:-auto}" = "6" ]; then
-  echo "  Note: pinned IPv6 requires working outbound IPv6 from inside the proxy container."
-elif [ "${MB_FAMILY:-auto}" = "4" ]; then
-  echo "  Note: pinned IPv4 is appropriate when container IPv6 is unreachable."
+if [ "${MB_FAMILY:-6}" != "6" ]; then
+  record_fail "MUSICBRAINZ_IP_FAMILY=${MB_FAMILY:-unset}; MusicBrainz must be IPv6-only (expected 6)"
+elif [ -n "$MB_ACTIVE" ] && [ "$READY_UPSTREAM" = "healthy" ]; then
+  record_pass "MUSICBRAINZ_IP_FAMILY=6 with healthy MusicBrainz readiness"
 else
-  echo "  Note: auto is acceptable when readiness is healthy; diagnose shows which family was selected."
+  record_fail "MUSICBRAINZ_IP_FAMILY=6, but MusicBrainz readiness is '$READY_UPSTREAM' (activeProviders=[$ACTIVE_PROVIDERS])"
 fi
+echo "  Note: MusicBrainz is IPv6-only for this proxy; IPv4 fallback is not supported."
 
 # ── 9. Upstream buffer (gated on MB being active) ────────────────
 echo

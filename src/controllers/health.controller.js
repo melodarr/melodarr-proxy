@@ -3,6 +3,7 @@ const cache = require('../cache')
 const upstreamMonitor = require('../monitors/upstream.monitor')
 const { getProviderScore } = require('../providers/scoring')
 const { getAppVersion } = require('../utils/version')
+const { buildNetworkHealthSummary } = require('../infrastructure/network/network-diagnostics.service')
 
 const DEGRADED_UPSTREAM = new Set(['degraded', 'rate_limited', 'timeout'])
 
@@ -26,7 +27,8 @@ function buildLivenessPayload () {
     memory: { status: memoryStatus, usageMb: memoryMb },
     uptime: process.uptime(),
     cache: cacheStatus,
-    providers: providerScores
+    providers: providerScores,
+    network: buildNetworkHealthSummary()
   }
 }
 
@@ -79,7 +81,8 @@ function buildHealthPayload () {
     memory: { status: memoryStatus, usageMb: memoryMb },
     uptime: process.uptime(),
     lastQueryAt: metrics.state.lastQueryAt,
-    providers: providerScores
+    providers: providerScores,
+    network: buildNetworkHealthSummary()
   }
 }
 

@@ -295,7 +295,7 @@ Common variables:
 | `REQUIRE_API_KEY` | Require API keys for metadata endpoints. Default `true` in Compose. |
 | `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` should be a real contact email or URL. |
 | `MUSICBRAINZ_BASE_URL` | MusicBrainz API base URL. |
-| `MUSICBRAINZ_IP_FAMILY` | `6`, `4`, or unset/auto depending on network. Useful for Proxmox/LXC TLS reset troubleshooting. |
+| `MUSICBRAINZ_IP_FAMILY` | Must be `6`. MusicBrainz is treated as IPv6-only by this proxy; IPv4 fallback is not supported. |
 | `CACHE_TTL_SECONDS` | Metadata cache TTL. Compose default is one day. |
 | `METADATA_PROVIDERS` | Enabled providers, comma-separated. Default `musicbrainz,itunes`. |
 | `PROVIDER_PRIORITY` | Merge/fallback preference when providers disagree. |
@@ -477,7 +477,7 @@ The upgrade script pulls both images, runs canary validation, keeps the main con
 
 ## MusicBrainz Connectivity
 
-Some Proxmox/LXC/Docker networks can reach MusicBrainz over one IP family but fail on the other. Common symptoms:
+Some Proxmox/LXC/Docker networks advertise IPv6 but fail when the proxy container tries to reach MusicBrainz over IPv6. Common symptoms:
 
 ```text
 Client network socket disconnected before secure TLS connection was established
@@ -497,21 +497,14 @@ Run targeted diagnostics:
 curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
 scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
-scripts/proxy-diag.sh mb 4
 ```
 
-The diagnose response includes DNS results, selected address/family, TCP/TLS phase timings, low-level socket error fields, and side-by-side `auto`, IPv4, and IPv6 probes. Use `failedStep` to distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
+The diagnose response includes DNS results, selected IPv6 address/family, TCP/TLS phase timings, low-level socket error fields, and IPv6-only MusicBrainz probe details. Use `failedStep` to distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
 
-Then set:
+Set:
 
 ```env
 MUSICBRAINZ_IP_FAMILY=6
-```
-
-or, only when IPv6 is unavailable:
-
-```env
-MUSICBRAINZ_IP_FAMILY=4
 ```
 
 If MusicBrainz remains unreachable, Melodarr Proxy can still serve fallback providers when enabled, but readiness will show degraded while MusicBrainz is part of `METADATA_PROVIDERS`.

@@ -9,17 +9,17 @@ const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { nextRetryDelay, parseRetryAfter } = require('./retry-policy')
 const requestContext = require('../utils/request-context')
 
+const MUSICBRAINZ_REQUIRED_FAMILY = 6
 const musicBrainzAgents = new Map()
 
 function getMusicBrainzHttpsAgent () {
-  const configuredFamily = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-  const family = configuredFamily === '6' ? 6 : configuredFamily === '4' ? 4 : undefined
-  const key = family || 'auto'
+  const family = MUSICBRAINZ_REQUIRED_FAMILY
+  const key = String(family)
 
   if (!musicBrainzAgents.has(key)) {
     musicBrainzAgents.set(key, new https.Agent({
       keepAlive: true,
-      ...(family ? { family } : {})
+      family
     }))
   }
 
@@ -206,8 +206,7 @@ class UpstreamService {
   async musicBrainzGet (path, params) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
     const timeout = getConfigValue('upstreamTimeoutMs')
-    const ipFamilyConfig = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-    const family = ipFamilyConfig === '4' ? 4 : ipFamilyConfig === '6' ? 6 : undefined
+    const family = MUSICBRAINZ_REQUIRED_FAMILY
     const maxAttempts = Math.max(1, Number(getConfigValue('upstreamMaxAttempts')) || 3)
     const retryBaseMs = Math.max(1, Number(getConfigValue('upstreamRetryBaseMs')) || 500)
     const retryMaxMs = Math.max(retryBaseMs, Number(getConfigValue('upstreamRetryMaxMs')) || 30000)

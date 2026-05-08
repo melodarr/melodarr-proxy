@@ -10,6 +10,7 @@ const { buildHealthPayload } = require('./health.controller')
 const { testCustomProvider } = require('../providers/custom.provider')
 const { getConfigValue } = require('../settings/store')
 const { diagnoseMusicBrainz } = require('../services/diagnose.service')
+const { getNetworkDiagnostics } = require('../infrastructure/network/network-diagnostics.service')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { toIsoDate } = require('../utils/dates')
 const providerHealth = require('../health/providerHealth')
@@ -578,6 +579,24 @@ async function diagnoseProvider (req, res) {
   }
 }
 
+async function getNetworkDebug (req, res) {
+  const refresh = String(req.query.refresh || '').trim().toLowerCase()
+  const shouldRefresh = refresh === '1' || refresh === 'true'
+
+  try {
+    const result = await getNetworkDiagnostics({ refresh: shouldRefresh })
+    return res.status(200).json(result)
+  } catch (err) {
+    return res.status(500).json({
+      status: 'error',
+      error: {
+        code: err.code || 'INTERNAL',
+        message: err.message
+      }
+    })
+  }
+}
+
 // Live provider circuit-breaker + scoring snapshot. Mounted as a separate
 // endpoint from the existing /debug/providers (which serves the
 // active-providers config list) — see /debug/providers/health in
@@ -658,4 +677,4 @@ function getMetrics (req, res) {
   res.json(metrics.getStats())
 }
 
-module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getUpstreamHistory, getProvidersDebug, getProvidersMetricsDebug, getMetrics }
+module.exports = { getRequests, getRequestById, getProviders, getCacheState, handleDebugDiscover, handleDebugSearch, handleDebugSongAlbums, getDiff, getPerformance, getAlerts, getHealth, verifyCache, getCluster, getClusterSummary, getOverview, testProviderConfig, diagnoseProvider, getNetworkDebug, getUpstreamHistory, getProvidersDebug, getProvidersMetricsDebug, getMetrics }

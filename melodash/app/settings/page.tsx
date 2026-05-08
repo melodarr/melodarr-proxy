@@ -126,9 +126,7 @@ const providerSettings: Record<string, SettingsField[]> = {
  musicbrainz: [
  { key: "musicbrainzApiKey", label: "API key", type: "password" },
  { key: "musicbrainzIpFamily", label: "IP family", type: "select", options: [
- { value: "auto", label: "Auto" },
- { value: "4", label: "IPv4" },
- { value: "6", label: "IPv6" },
+ { value: "6", label: "IPv6 only" },
  ] },
  ],
  itunes: [

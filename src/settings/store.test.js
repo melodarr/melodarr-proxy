@@ -69,6 +69,18 @@ test('Store Module', async (t) => {
     assert.strictEqual(value, '0.3.0') // fallback
   })
 
+  await t.test('MusicBrainz IP family is fixed to IPv6 only', () => {
+    process.env.MUSICBRAINZ_IP_FAMILY = '4'
+    store.updateRuntimeConfig({ musicbrainzIpFamily: 'auto' })
+
+    const config = store.getRuntimeConfig()
+    assert.strictEqual(config.musicbrainzIpFamily.value, '6')
+    assert.strictEqual(config.musicbrainzIpFamily.source, 'fixed')
+    assert.strictEqual(store.getConfigValue('musicbrainzIpFamily'), '6')
+
+    delete process.env.MUSICBRAINZ_IP_FAMILY
+  })
+
   await t.test('getSessionSecret', () => {
     // Should fallback to empty or generated if not set initially
     assert.strictEqual(typeof store.getSessionSecret(), 'string')

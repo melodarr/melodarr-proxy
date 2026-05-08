@@ -13,13 +13,13 @@
 #   ready                        GET /api/ready
 #   version                      GET /api/version
 #   diagnose                     GET /debug/diagnose?provider=musicbrainz
-#   mb [4|6|auto]                Direct TLS probe to MusicBrainz
+#   mb [6]                       Direct IPv6 TLS probe to MusicBrainz
 #   search <query>               GET /api/search?q=...
 #   login                        Interactive login, store cookie at /tmp/melodarr-proxy.cookie
 #   stats                        GET /api/stats (requires login)
 #   settings                     GET /api/settings (requires login)
 #   logs [N]                     Tail N (default 100) lines from the proxy container
-#   set-ip-family <4|6|auto>     Set MUSICBRAINZ_IP_FAMILY in compose.yml and restart proxy
+#   set-ip-family 6              Set MUSICBRAINZ_IP_FAMILY=6 in compose.yml and restart proxy
 #   compose-cat                  Print the deployed compose.yml
 #   compose-validate             Validate the deployed compose.yml YAML
 #   all                          Run read-only probes (health, ready, version, mb)
@@ -85,16 +85,13 @@ cmd_version () { probe /api/version | pretty; }
 cmd_diagnose () { probe "/debug/diagnose?provider=musicbrainz" | pretty; }
 
 cmd_mb () {
-  local family="${1:-auto}"
-  local flag=""
+  local family="${1:-6}"
   case "$family" in
-    4) flag="-4" ;;
-    6) flag="-6" ;;
-    auto|"") flag="" ;;
-    *) echo "mb: family must be 4, 6, or auto" >&2; exit 2 ;;
+    6|"") ;;
+    *) echo "mb: MusicBrainz is IPv6-only for this proxy; family must be 6" >&2; exit 2 ;;
   esac
-  echo "Direct probe → https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1 (family=${family:-auto})"
-  curl -sS -m 10 ${flag} \
+  echo "Direct probe → https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1 (family=6)"
+  curl -sS -m 10 -6 \
     -H "User-Agent: melodarr-proxy-diag/1.0 (admin@example.com)" \
     -o /dev/null \
     -w "[HTTP %{http_code}] [%{time_total}s] [%{remote_ip}]\n" \
@@ -151,8 +148,8 @@ cmd_compose_validate () {
 cmd_set_ip_family () {
   local family="${1:-}"
   case "$family" in
-    4|6|auto) ;;
-    *) echo "set-ip-family: argument must be 4, 6, or auto" >&2; exit 2 ;;
+    6) ;;
+    *) echo "set-ip-family: MusicBrainz is IPv6-only for this proxy; argument must be 6" >&2; exit 2 ;;
   esac
 
   local py_b64
@@ -196,8 +193,6 @@ cmd_all () {
   echo "=== /api/ready ===";   cmd_ready
   echo "=== /api/version ==="; cmd_version
   echo "=== /debug/diagnose?provider=musicbrainz ==="; cmd_diagnose
-  echo "=== mb (auto) ===";    cmd_mb auto
-  echo "=== mb (4) ===";       cmd_mb 4
   echo "=== mb (6) ===";       cmd_mb 6
 }
 

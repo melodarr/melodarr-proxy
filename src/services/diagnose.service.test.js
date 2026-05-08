@@ -129,13 +129,13 @@ test('diagnose.service helpers', async (t) => {
     const out = svc.summarizeFailure({
       failedStep: 'tls',
       error: { code: 'ECONNRESET' },
-      selectedFamily: 4,
-      configuredFamily: 'auto'
+      selectedFamily: 6,
+      configuredFamily: '6'
     })
 
     assert.match(out.summary, /TLS/)
     assert.match(out.likelyCause, /handshake/)
-    assert.ok(out.recommendations.some((item) => item.includes('IPv4 and IPv6')))
+    assert.ok(out.recommendations.some((item) => item.includes('curl -6')))
   })
 })
 
@@ -158,28 +158,23 @@ test('diagnoseMusicBrainz — DNS failure path returns failedStep dns and no htt
   assert.strictEqual(typeof result.timingsMs.total, 'number')
 })
 
-test('diagnoseMusicBrainz — surfaces partial DNS (v4 ok, v6 fails)', async () => {
-  // With a non-routable RFC5737 test address, the eventual TCP connect will
-  // fail/time out — we just need the DNS block to reflect both records.
+test('diagnoseMusicBrainz — treats missing AAAA as DNS failure and never probes IPv4', async () => {
   const svc = loadServiceWithMocks({
     resolve4: async () => ['192.0.2.1'],
     resolve6: async () => { const e = new Error('no AAAA'); e.code = 'ENODATA'; throw e },
     settings: {
-      musicbrainzBaseUrl: 'https://192.0.2.1', // forces literal-IP path so we don't depend on real DNS in CI
+      musicbrainzBaseUrl: 'https://musicbrainz.example/ws/2',
       upstreamTimeoutMs: 100
     }
   })
 
   const result = await svc.diagnoseMusicBrainz()
-  // Hostname is a literal IP, so v4 resolution returned the IP and v6 errored.
-  assert.strictEqual(Array.isArray(result.dns.addresses), true)
-  assert.strictEqual(Array.isArray(result.probes), true)
-  assert.ok(result.probes.some((probe) => probe.label === '4'))
-  assert.ok(result.probes.some((probe) => probe.label === '6'))
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'dns')
+  assert.strictEqual(result.target.policy, 'ipv6_only')
+  assert.strictEqual(result.target.fallbackAllowed, false)
   assert.ok(result.dns.addresses.some((a) => a.address === '192.0.2.1' && a.family === 4))
   assert.strictEqual(result.dns.errors.v6, 'ENODATA')
-  // We expect the request itself to fail (timeout / unreachable) — failedStep
-  // should be tcp or tls, not dns, since we *did* resolve an address.
-  assert.strictEqual(result.ok, false)
-  assert.notStrictEqual(result.failedStep, 'dns')
+  assert.deepStrictEqual(result.probes, [])
+  assert.match(result.error.message, /No AAAA/)
 })
