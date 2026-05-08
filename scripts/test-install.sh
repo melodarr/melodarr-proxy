@@ -170,7 +170,7 @@ check_lxc_ipv6_to_mb () {
   fi
   local code
   code=$(pct exec "$CTID" -- curl -sS -m 5 -6 -o /dev/null -w "%{http_code}" \
-    -A "test/1.0 (admin@example.com)" \
+    -A "test/1.0 (${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy})" \
     "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1" 2>&1) || true
   if [[ "$code" == "200" ]]; then
     return 0
@@ -189,7 +189,7 @@ check_container_ipv6_to_mb () {
   fi
   local code
   code=$(pct exec "$CTID" -- docker exec "$PROXY_CONTAINER" \
-    sh -c 'curl -sS -m 5 -6 -o /dev/null -w "%{http_code}" -A "test/1.0 (admin@example.com)" "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1"' 2>&1) || true
+    sh -c 'curl -sS -m 5 -6 -o /dev/null -w "%{http_code}" -A "test/1.0 (${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy})" "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1"' 2>&1) || true
   if [[ "$code" == "200" ]]; then
     return 0
   fi

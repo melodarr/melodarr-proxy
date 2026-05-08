@@ -179,6 +179,25 @@ test('diagnoseMusicBrainz — treats missing AAAA as DNS failure and never probe
   assert.match(result.error.message, /No AAAA/)
 })
 
+test('diagnoseMusicBrainz — reports invalid MusicBrainz contact without leaking contact value', async () => {
+  const svc = loadServiceWithMocks({
+    resolve4: async () => ['192.0.2.1'],
+    resolve6: async () => { const e = new Error('no AAAA'); e.code = 'ENODATA'; throw e },
+    settings: {
+      musicbrainzBaseUrl: 'https://musicbrainz.example/ws/2',
+      upstreamTimeoutMs: 100,
+      appContact: 'admin@example.com'
+    }
+  })
+
+  const result = await svc.diagnoseMusicBrainz()
+  assert.strictEqual(result.userAgent.valid, false)
+  assert.strictEqual(result.userAgent.code, 'PLACEHOLDER_CONTACT')
+  assert.match(result.userAgent.recommendation, /APP_CONTACT/)
+  assert.ok(result.diagnosis.recommendations.some((item) => item.includes('APP_CONTACT')))
+  assert.ok(!JSON.stringify(result.userAgent).includes('admin@example.com'))
+})
+
 test('diagnoseGenericProvider — unsupported providers return contract-safe error', async () => {
   const svc = loadServiceWithMocks()
 

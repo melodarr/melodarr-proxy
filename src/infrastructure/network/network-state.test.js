@@ -78,10 +78,29 @@ test('buildMusicBrainzSummary returns compact health-safe shape', () => {
     state: MUSICBRAINZ_STATES.HEALTHY,
     ok: true,
     failedStep: null,
+    userAgentValid: null,
     lastCheckedAt: '2026-05-07T16:00:00Z',
     lastSuccessAt: '2026-05-07T16:00:00Z',
     consecutiveFailures: 0
   })
+})
+
+test('buildMusicBrainzNetworkState carries invalid User-Agent contact diagnostics', () => {
+  const state = buildMusicBrainzNetworkState({
+    ok: false,
+    failedStep: 'http',
+    userAgent: {
+      valid: false,
+      contactType: 'email',
+      code: 'PLACEHOLDER_CONTACT',
+      message: 'APP_CONTACT must be real.',
+      recommendation: 'Set APP_CONTACT to a real email address or contact URL before relying on MusicBrainz.'
+    }
+  }, 1, null)
+
+  assert.strictEqual(state.userAgent.valid, false)
+  assert.ok(state.recommendations.some((item) => item.includes('APP_CONTACT')))
+  assert.strictEqual(buildMusicBrainzSummary(state).userAgentValid, false)
 })
 
 test('classifyGenericProviderReport maps provider transport failures', () => {

@@ -103,6 +103,11 @@ backoff). If failures are consistent rather than intermittent, the IPv6 path
 is fundamentally broken — check ISP support, router advertisements, and
 Docker daemon configuration.
 
+MusicBrainz also requires a meaningful User-Agent identity. Set `APP_CONTACT`
+to a real email address or contact URL; `example.com`, `example.org`, and
+`example.net` placeholder addresses are diagnosed as invalid because they can
+be treated like anonymous/fake clients by upstream policy.
+
 > **Never set `MUSICBRAINZ_IP_FAMILY` to `4`.** MusicBrainz does not serve
 > API responses over IPv4. If IPv6 is broken, fix the transport layer.
 
@@ -122,15 +127,13 @@ Check the host and container paths separately.
 On the host:
 
 ```bash
-curl -4 -I https://musicbrainz.org/
-curl -6 -I https://musicbrainz.org/
+curl -6 -I -H "User-Agent: melodarr-proxy-diag/1.0 (${APP_CONTACT:-operator@melodarr.org})" https://musicbrainz.org/
 ```
 
 From the Compose network:
 
 ```bash
-docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:4,headers:{'User-Agent':'melodarr-proxy-diag/1.0 (admin@example.com)'}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
-docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:6,headers:{'User-Agent':'melodarr-proxy-diag/1.0 (admin@example.com)'}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
+docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:6,headers:{'User-Agent':\`melodarr-proxy-diag/1.0 (\${process.env.APP_CONTACT || 'operator@melodarr.org'})\`}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
 ```
 
 If IPv6 ping works but MusicBrainz still fails during TLS, treat it as a TLS-path failure, not an IPv6 routing failure. Example:
@@ -141,7 +144,7 @@ curl -6 https://musicbrainz.org/ connects to TCP/443
 OpenSSL SSL_connect: SSL_ERROR_SYSCALL
 ```
 
-In that case, collect `/debug/diagnose?provider=musicbrainz` and container-level `curl -4`/`curl -6` results before changing application code. The proxy cannot fix an upstream or network middlebox resetting TLS after TCP connect.
+In that case, collect `/debug/diagnose?provider=musicbrainz` and container-level `curl -6` results before changing application code. The proxy cannot fix an upstream or network middlebox resetting TLS after TCP connect.
 
 Check Docker network configuration:
 

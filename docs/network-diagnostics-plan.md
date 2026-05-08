@@ -17,6 +17,7 @@ Implemented:
 - Generic provider transport registry for iTunes, TheAudioDB, Discogs, and Last.fm.
 - `/debug/diagnose?provider=<name>` supports generic provider DNS/TCP/TLS/HTTP diagnostics.
 - `/debug/network` includes cached generic provider transport states alongside MusicBrainz.
+- MusicBrainz User-Agent contact validation flags placeholder contacts without exposing the operator contact value.
 
 Still planned:
 
@@ -33,6 +34,7 @@ The first implementation target is MusicBrainz because it is the critical metada
 
 - MusicBrainz is IPv6-only for this project.
 - Never attempt IPv4 for MusicBrainz.
+- MusicBrainz `APP_CONTACT` must be a real email address; placeholder domains such as `example.com`, `example.org`, and `example.net` are invalid.
 - Do not use global process hacks such as `NODE_OPTIONS=--dns-result-order=ipv4first`.
 - Do not classify network health from DNS alone.
 - Do not run live network probes inside hot request paths or synchronous health endpoints.
@@ -112,6 +114,7 @@ MusicBrainz policy is non-negotiable:
 ```text
 requiredFamily: 6
 allowFallback: false
+validContactRequired: true
 ```
 
 ## Classification Model

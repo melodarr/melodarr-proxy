@@ -294,7 +294,7 @@ Common variables:
 | `REDIS_URL` | Cache backend URL. Compose uses `redis://redis:6379`. |
 | `ADMIN_PASSWORD` | Optional preconfigured settings password. If empty, first-run setup creates it. |
 | `REQUIRE_API_KEY` | Require API keys for metadata endpoints. Default `true` in Compose. |
-| `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` should be a real contact email or URL. |
+| `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` must be a real contact email address. |
 | `MUSICBRAINZ_BASE_URL` | MusicBrainz API base URL. |
 | `MUSICBRAINZ_IP_FAMILY` | Must be `6`. MusicBrainz is treated as IPv6-only by this proxy; IPv4 fallback is not supported. |
 | `CACHE_TTL_SECONDS` | Metadata cache TTL. Compose default is one day. |
@@ -465,7 +465,7 @@ pveam download local debian-12-standard_12.12-1_amd64.tar.zst
 Common override:
 
 ```bash
-CTID=3055 HOST_PORT=3055 MELODASH_HOST_PORT=55026 APP_CONTACT=you@example.com bash scripts/install-proxmox-lxc.sh
+CTID=3055 HOST_PORT=3055 MELODASH_HOST_PORT=55026 APP_CONTACT=you@your-real-domain.com bash scripts/install-proxmox-lxc.sh
 ```
 
 Upgrade an existing LXC:
@@ -480,6 +480,10 @@ The upgrade script pulls both images, runs canary validation, keeps the main con
 
 MusicBrainz API access requires IPv6. The proxy enforces `MUSICBRAINZ_IP_FAMILY=6`
 and treats this as an immutable invariant — IPv4 fallback is never permitted.
+MusicBrainz also requires a meaningful User-Agent identity. Set `APP_CONTACT`
+to a real operator email address or contact URL; placeholder domains such as
+`example.com`, `example.org`, and `example.net` are flagged by diagnostics and
+can contribute to HTTP rejection or throttling once the network path works.
 
 If the dashboard reports failures, the error message and `failedStep` tell you
 where the path broke:
@@ -572,6 +576,8 @@ phase timings, low-level socket error fields, and provider probe details.
 MusicBrainz diagnostics are IPv6-only; iTunes, TheAudioDB, Discogs, and
 Last.fm use the generic auto-family diagnostic path. Use `failedStep` to
 distinguish DNS, TCP routing, TLS reset, HTTP status, and JSON parse failures.
+The response also reports whether the MusicBrainz User-Agent contact is valid
+without exposing the actual email/contact value.
 
 If MusicBrainz remains unreachable, the proxy can still serve fallback
 providers when enabled, but readiness will show degraded while MusicBrainz is

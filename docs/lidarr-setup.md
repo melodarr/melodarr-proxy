@@ -18,7 +18,7 @@ docker run -d \
   --name melodarr-proxy \
   --restart unless-stopped \
   -p 3055:3000 \
-  -e APP_CONTACT=you@example.com \
+  -e APP_CONTACT=you@your-real-domain.com \
   -e METADATA_PROVIDERS=musicbrainz,itunes \
   ghcr.io/melodarr/melodarr-proxy:v0.3.14
 ```

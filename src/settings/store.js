@@ -643,7 +643,7 @@ function generateRandomName () {
 const EDITABLE_KEYS = {
   appName: { env: 'APP_NAME', fallback: generateRandomName(), type: 'string' },
   appVersion: { env: 'APP_VERSION', fallback: '0.3.0', type: 'string' },
-  appContact: { env: 'APP_CONTACT', fallback: `contact-${crypto.randomBytes(4).toString('hex')}@example.com`, type: 'string' },
+  appContact: { env: 'APP_CONTACT', fallback: 'operator@melodarr.org', type: 'string' },
   cacheTtlSeconds: { env: 'CACHE_TTL_SECONDS', fallback: 86400, type: 'number' },
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   musicbrainzApiKey: { env: 'MUSICBRAINZ_API_KEY', fallback: '', type: 'string' },

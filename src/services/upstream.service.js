@@ -8,6 +8,7 @@ const { getConfigValue } = require('../settings/store')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { nextRetryDelay, parseRetryAfter } = require('./retry-policy')
 const requestContext = require('../utils/request-context')
+const { buildMusicBrainzUserAgent } = require('../utils/musicbrainz-user-agent')
 
 const MUSICBRAINZ_REQUIRED_FAMILY = 6
 const musicBrainzAgents = new Map()
@@ -122,7 +123,7 @@ class UpstreamService {
     const appName = getConfigValue('appName')
     const appVersion = getConfigValue('appVersion')
     const appContact = getConfigValue('appContact')
-    return `${appName}/${appVersion} (${appContact})`
+    return buildMusicBrainzUserAgent({ appName, appVersion, appContact })
   }
 
   getMusicBrainzHeaders () {

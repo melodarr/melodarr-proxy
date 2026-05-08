@@ -154,6 +154,10 @@ function recommendationsForGenericProviderState (state, provider = 'provider') {
 
 function buildMusicBrainzNetworkState (report = {}, consecutiveFailures = 0, lastSuccessAt = null) {
   const state = classifyMusicBrainzReport(report)
+  const recommendations = recommendationsForMusicBrainzState(state)
+  if (report.userAgent && !report.userAgent.valid && report.userAgent.recommendation) {
+    recommendations.push(report.userAgent.recommendation)
+  }
 
   return {
     provider: 'musicbrainz',
@@ -174,7 +178,8 @@ function buildMusicBrainzNetworkState (report = {}, consecutiveFailures = 0, las
     http: report.http || null,
     timingsMs: report.timingsMs || null,
     error: report.error || null,
-    recommendations: recommendationsForMusicBrainzState(state)
+    userAgent: report.userAgent || null,
+    recommendations: Array.from(new Set(recommendations))
   }
 }
 
@@ -218,6 +223,7 @@ function buildMusicBrainzSummary (details = {}) {
     state: details.state || MUSICBRAINZ_STATES.UNKNOWN,
     ok: Boolean(details.ok),
     failedStep: details.failedStep || null,
+    userAgentValid: details.userAgent?.valid ?? null,
     lastCheckedAt: details.checkedAt || null,
     lastSuccessAt: details.lastSuccessAt || null,
     consecutiveFailures: details.consecutiveFailures || 0

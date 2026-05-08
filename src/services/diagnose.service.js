@@ -4,6 +4,10 @@ const https = require('https')
 const { URL } = require('url')
 const { getConfigValue } = require('../settings/store')
 const { getProviderTransport } = require('../infrastructure/network/provider-registry')
+const {
+  buildMusicBrainzUserAgent,
+  musicBrainzUserAgentStatus
+} = require('../utils/musicbrainz-user-agent')
 
 // MusicBrainz and most well-behaved upstreams expose rate-limit info via these
 // headers. We surface them verbatim so operators can see exactly what the
@@ -40,7 +44,32 @@ function getUserAgent () {
   const appName = getConfigValue('appName')
   const appVersion = getConfigValue('appVersion')
   const appContact = getConfigValue('appContact')
-  return `${appName}/${appVersion} (${appContact})`
+  return buildMusicBrainzUserAgent({ appName, appVersion, appContact })
+}
+
+function getMusicBrainzUserAgentStatus () {
+  const appName = getConfigValue('appName')
+  const appVersion = getConfigValue('appVersion')
+  const appContact = getConfigValue('appContact')
+  return musicBrainzUserAgentStatus({ appName, appVersion, appContact })
+}
+
+function appendMusicBrainzIdentityWarning (report, userAgent) {
+  if (!userAgent || userAgent.valid) return report
+
+  const diagnosis = {
+    ...(report.diagnosis || {}),
+    recommendations: Array.from(new Set([
+      ...(report.diagnosis?.recommendations || []),
+      userAgent.recommendation || 'Set APP_CONTACT to a real email address.'
+    ]))
+  }
+
+  return {
+    ...report,
+    userAgent,
+    diagnosis
+  }
 }
 
 async function resolveAddresses (hostname) {
@@ -449,6 +478,7 @@ async function diagnoseMusicBrainz () {
     fallbackAllowed: false
   }
 
+  const userAgent = getMusicBrainzUserAgentStatus()
   const headers = { 'User-Agent': getUserAgent() }
   const apiKey = getConfigValue('musicbrainzApiKey')
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
@@ -457,16 +487,17 @@ async function diagnoseMusicBrainz () {
   try {
     resolved = await resolveAddresses(url.hostname)
   } catch (err) {
-    return {
+    return appendMusicBrainzIdentityWarning({
       provider: 'musicbrainz',
       ok: false,
       failedStep: 'dns',
+      userAgent,
       error: errorDetails(err, { code: 'EDNS', message: err.message, hostname: url.hostname }),
       diagnosis: summarizeFailure({ failedStep: 'dns', error: errorDetails(err, { code: 'EDNS', message: err.message }), configuredFamily: ipFamilyConfig }),
       target,
       dns: { addresses: [], errors: { all: err.message } },
       timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt }
-    }
+    }, userAgent)
   }
 
   const dnsAddresses = [
@@ -477,10 +508,11 @@ async function diagnoseMusicBrainz () {
   if (dnsAddresses.length === 0 || resolved.v6.length === 0) {
     const message = dnsAddresses.length === 0 ? 'No A or AAAA records resolved' : 'No AAAA records resolved for MusicBrainz IPv6-only policy'
     const code = dnsAddresses.length === 0 ? 'ENOTFOUND' : 'ENODATA'
-    return {
+    return appendMusicBrainzIdentityWarning({
       provider: 'musicbrainz',
       ok: false,
       failedStep: 'dns',
+      userAgent,
       error: errorDetails(null, { code, message, hostname: url.hostname }),
       diagnosis: summarizeFailure({ failedStep: 'dns', error: { code }, configuredFamily: ipFamilyConfig }),
       target,
@@ -488,7 +520,7 @@ async function diagnoseMusicBrainz () {
       timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt },
       checkedAt: new Date().toISOString(),
       probes: []
-    }
+    }, userAgent)
   }
 
   const dnsBlock = {
@@ -514,19 +546,20 @@ async function diagnoseMusicBrainz () {
         await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
       }
     }
-    return buildProbeReport({
+    return appendMusicBrainzIdentityWarning(buildProbeReport({
       label: probe.label,
       configuredIpFamily: ipFamilyConfig,
       target: { ...target, probeFamily: probe.label },
       dnsBlock,
       result: lastResult
-    })
+    }), userAgent)
   }))
 
   const primary = reports[0]
 
   return {
     ...primary,
+    userAgent,
     provider: 'musicbrainz',
     checkedAt: new Date().toISOString(),
     probes: reports

@@ -53,6 +53,13 @@ type NetworkProviderState = {
  http?: { status?: number | null; statusText?: string | null } | null
  timingsMs?: { dns?: number | null; tcp?: number | null; tls?: number | null; http?: number | null; total?: number | null } | null
  error?: { code?: string | null; message?: string | null } | null
+ userAgent?: {
+ valid: boolean
+ contactType: string | null
+ code: string | null
+ message: string | null
+ recommendation: string | null
+ } | null
  recommendations: string[]
 }
 
@@ -70,6 +77,7 @@ type NetworkResponse = {
  state: string
  ok: boolean
  failedStep: string | null
+ userAgentValid: boolean | null
  lastCheckedAt: string | null
  lastSuccessAt: string | null
  consecutiveFailures: number
@@ -269,6 +277,7 @@ export default function MBConnectivityPanel () {
  : 'text-muted'
  const networkCheckedAt = mbNetwork?.checkedAt ? new Date(mbNetwork.checkedAt).toLocaleTimeString() : '—'
  const networkAddress = mbNetwork?.dns?.addresses?.find((entry) => entry.family === 6)?.address ?? '—'
+ const userAgentStatus = mbNetwork?.userAgent
 
  return (
  <div className='rounded-xl border bg-card text-card-foreground shadow-sm p-6 flex flex-col gap-3'>
@@ -363,7 +372,19 @@ export default function MBConnectivityPanel () {
  <div className='text-muted'>TLS</div>
  <div className='font-medium'>{mbNetwork ? (mbNetwork.tls?.protocol ?? (mbNetwork.ok ? 'OK' : 'Failed')) : '—'}</div>
  </div>
+ <div>
+ <div className='text-muted'>User-Agent</div>
+ <div className={`font-medium ${userAgentStatus && !userAgentStatus.valid ? 'text-red-700 dark:text-red-400' : ''}`}>
+ {userAgentStatus ? (userAgentStatus.valid ? 'OK' : 'Invalid contact') : '—'}
  </div>
+ </div>
+ </div>
+
+ {userAgentStatus && !userAgentStatus.valid && (
+ <div className='text-xs text-red-700 dark:text-red-400'>
+ MusicBrainz identity: <code>{userAgentStatus.code ?? 'INVALID'}</code> — {userAgentStatus.message}
+ </div>
+ )}
 
  {mbNetwork?.error?.message && (
  <div className='text-xs text-red-700 dark:text-red-400'>

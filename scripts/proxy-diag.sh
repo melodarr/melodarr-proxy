@@ -91,8 +91,9 @@ cmd_mb () {
     *) echo "mb: MusicBrainz is IPv6-only for this proxy; family must be 6" >&2; exit 2 ;;
   esac
   echo "Direct probe → https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1 (family=6)"
+  local app_contact="${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy}"
   curl -sS -m 10 -6 \
-    -H "User-Agent: melodarr-proxy-diag/1.0 (admin@example.com)" \
+    -H "User-Agent: melodarr-proxy-diag/1.0 (${app_contact})" \
     -o /dev/null \
     -w "[HTTP %{http_code}] [%{time_total}s] [%{remote_ip}]\n" \
     "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1" \
