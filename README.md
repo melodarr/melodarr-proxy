@@ -294,7 +294,7 @@ Common variables:
 | `REDIS_URL` | Cache backend URL. Compose uses `redis://redis:6379`. |
 | `ADMIN_PASSWORD` | Optional preconfigured settings password. If empty, first-run setup creates it. |
 | `REQUIRE_API_KEY` | Require API keys for metadata endpoints. Default `true` in Compose. |
-| `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` must be a real contact email address. |
+| `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` must be a real contact email address or contact URL. |
 | `MUSICBRAINZ_BASE_URL` | MusicBrainz API base URL. |
 | `MUSICBRAINZ_IP_FAMILY` | Must be `6`. MusicBrainz is treated as IPv6-only by this proxy; IPv4 fallback is not supported. |
 | `MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS` | MusicBrainz hot-path request spacing. Default `1100`; keep this conservative. |
