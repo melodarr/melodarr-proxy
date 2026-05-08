@@ -2,7 +2,21 @@
 
 ## Status
 
-Planning document. Do not treat this as implemented behavior.
+Implementation in progress.
+
+Implemented:
+
+- MusicBrainz IPv6-only diagnostics.
+- Cached `/debug/network` response.
+- Cached network summary in `/api/health` and `/api/ready`.
+- Background refresh every 15 minutes.
+- Melodash Dashboard network diagnostics inside the MusicBrainz connectivity panel.
+
+Still planned:
+
+- General provider diagnostics for non-MusicBrainz providers.
+- Deeper standalone diagnostics page.
+- Operator export/copy tools.
 
 ## Objective
 
@@ -382,4 +396,3 @@ Integration tests:
 - Do not globally force DNS ordering.
 - Do not replace existing provider health metrics.
 - Do not make health endpoints slow by running live network probes.
-
