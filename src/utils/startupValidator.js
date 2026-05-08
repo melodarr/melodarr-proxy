@@ -1,5 +1,6 @@
 const store = require('../settings/store')
 const logger = require('./logger')
+const { validateMusicBrainzContact } = require('./musicbrainz-user-agent')
 
 function validateStartup () {
   const errors = []
@@ -58,8 +59,8 @@ function validateStartup () {
 
   // Validate general app config
   const appContact = store.getConfigValue('appContact')
-  if (!appContact || typeof appContact !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(appContact)) {
-    errors.push('Invalid appContact configuration (must be a valid email address).')
+  if (!validateMusicBrainzContact(appContact).valid) {
+    errors.push('Invalid appContact configuration (must be a real email address or http(s) contact URL).')
   }
 
   // Validate provider configs

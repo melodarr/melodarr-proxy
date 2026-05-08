@@ -56,6 +56,24 @@ describe('Startup Validator', () => {
     assert.strictEqual(exitSpy.mock.calls.length, 0)
   })
 
+  it('accepts appContact as a valid http(s) contact URL', () => {
+    getConfigValueMock.mock.mockImplementation((key) => {
+      if (key === 'cacheTtlSeconds') return 3600
+      if (key === 'upstreamTimeoutMs') return 5000
+      if (key === 'serverTimeoutMs') return 15000
+      if (key === 'minRequestIntervalMs') return 1100
+      if (key === 'globalRateLimitMax') return 500
+      if (key === 'maxConcurrentRequests') return 20
+      if (key === 'upstreamQueueMax') return 50
+      if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
+      if (key === 'appContact') return 'https://github.com/melodarr/melodarr-proxy'
+      return validConfigValue(key)
+    })
+
+    assert.doesNotThrow(() => validateStartup())
+    assert.strictEqual(exitSpy.mock.calls.length, 0)
+  })
+
   it('fails if cacheTtlSeconds is missing or invalid', () => {
     getConfigValueMock.mock.mockImplementation((key) => {
       if (key === 'cacheTtlSeconds') return -1 // invalid
