@@ -19,10 +19,12 @@ Implemented:
 - `/debug/network` includes cached generic provider transport states alongside MusicBrainz.
 - MusicBrainz User-Agent contact validation flags placeholder contacts without exposing the operator contact value.
 - Dedicated Melodash Diagnostics page with provider transport cards, read-only runbooks, per-provider probes, provider health/metrics snapshots, and copyable debug bundles.
+- Hot-path provider transport policy for iTunes, TheAudioDB, Discogs, Last.fm, custom providers, and enrichment calls.
+- Global default and per-provider request queueing/rate-limit intervals outside the MusicBrainz hot path.
+- Runtime settings and Melodash controls for generic provider IP-family selection.
 
 Still planned:
 
-- Hot-path provider transport policy integration.
 - Diagnostic bundle file download in addition to clipboard copy.
 
 ## Objective
@@ -378,6 +380,13 @@ Recommendations:
 - Add manual recheck action.
 - Add diagnostics export/copy button.
 - Add docs links from Melodash remediation cards.
+
+### Phase 6: Generic Provider Hot Path Policy
+
+- Apply provider IP-family settings to iTunes, Discogs, TheAudioDB, Last.fm, custom providers, discovery, and enrichment.
+- Keep MusicBrainz isolated on the existing IPv6-only transport.
+- Add per-provider request queues and configurable request intervals.
+- Validate `auto`, `4`, and `6` settings before writing runtime settings.
 
 ## Testing Requirements
 

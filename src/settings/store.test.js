@@ -71,14 +71,61 @@ test('Store Module', async (t) => {
 
   await t.test('MusicBrainz IP family is fixed to IPv6 only', () => {
     process.env.MUSICBRAINZ_IP_FAMILY = '4'
-    store.updateRuntimeConfig({ musicbrainzIpFamily: 'auto' })
+    const result = store.updateRuntimeConfig({ musicbrainzIpFamily: 'auto' })
 
     const config = store.getRuntimeConfig()
+    assert.strictEqual(result.applied.musicbrainzIpFamily, undefined)
+    assert.strictEqual(result.skipped.musicbrainzIpFamily, 'Fixed setting')
     assert.strictEqual(config.musicbrainzIpFamily.value, '6')
     assert.strictEqual(config.musicbrainzIpFamily.source, 'fixed')
     assert.strictEqual(store.getConfigValue('musicbrainzIpFamily'), '6')
 
     delete process.env.MUSICBRAINZ_IP_FAMILY
+  })
+
+  await t.test('provider IP family settings only accept auto, 4, or 6', async () => {
+    const invalid = store.updateRuntimeConfig({ itunesIpFamily: 'broken' })
+    assert.strictEqual(invalid.applied.itunesIpFamily, undefined)
+    assert.match(invalid.skipped.itunesIpFamily, /auto, 4, 6/)
+
+    const valid = store.updateRuntimeConfig({ itunesIpFamily: '6', providerIpFamily: '4' })
+    await store.flushSettingsWrites()
+    assert.deepStrictEqual(valid.applied, { itunesIpFamily: '6', providerIpFamily: '4' })
+    assert.strictEqual(store.getConfigValue('itunesIpFamily'), '6')
+    assert.strictEqual(store.getConfigValue('providerIpFamily'), '4')
+
+    store.updateRuntimeConfig({ itunesIpFamily: null, providerIpFamily: null })
+    await store.flushSettingsWrites()
+  })
+
+  await t.test('provider request intervals have a default and per-provider overrides', async () => {
+    const result = store.updateRuntimeConfig({
+      providerMinRequestIntervalMs: '600',
+      itunesMinRequestIntervalMs: '150',
+      lastfmMinRequestIntervalMs: '250',
+      discogsMinRequestIntervalMs: '1250',
+      theAudioDbMinRequestIntervalMs: '900',
+      customProviderMinRequestIntervalMs: '700'
+    })
+    await store.flushSettingsWrites()
+
+    assert.deepStrictEqual(result.skipped, {})
+    assert.strictEqual(store.getConfigValue('providerMinRequestIntervalMs'), 600)
+    assert.strictEqual(store.getConfigValue('itunesMinRequestIntervalMs'), 150)
+    assert.strictEqual(store.getConfigValue('lastfmMinRequestIntervalMs'), 250)
+    assert.strictEqual(store.getConfigValue('discogsMinRequestIntervalMs'), 1250)
+    assert.strictEqual(store.getConfigValue('theAudioDbMinRequestIntervalMs'), 900)
+    assert.strictEqual(store.getConfigValue('customProviderMinRequestIntervalMs'), 700)
+
+    store.updateRuntimeConfig({
+      providerMinRequestIntervalMs: null,
+      itunesMinRequestIntervalMs: null,
+      lastfmMinRequestIntervalMs: null,
+      discogsMinRequestIntervalMs: null,
+      theAudioDbMinRequestIntervalMs: null,
+      customProviderMinRequestIntervalMs: null
+    })
+    await store.flushSettingsWrites()
   })
 
   await t.test('getSessionSecret', () => {

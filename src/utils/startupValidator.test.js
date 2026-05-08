@@ -4,6 +4,19 @@ const { validateStartup } = require('./startupValidator')
 const store = require('../settings/store')
 const logger = require('./logger')
 
+function validConfigValue (key) {
+  const values = {
+    appContact: 'operator@melodarr.org',
+    providerMinRequestIntervalMs: 500,
+    itunesMinRequestIntervalMs: 100,
+    lastfmMinRequestIntervalMs: 200,
+    discogsMinRequestIntervalMs: 1000,
+    theAudioDbMinRequestIntervalMs: 1000,
+    customProviderMinRequestIntervalMs: 500
+  }
+  return values[key]
+}
+
 describe('Startup Validator', () => {
   let exitSpy
   let getConfigValueMock
@@ -34,7 +47,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
-      return undefined
+      return validConfigValue(key)
     })
 
     assert.doesNotThrow(() => validateStartup())
@@ -53,7 +66,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
-      return undefined
+      return validConfigValue(key)
     })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
@@ -71,7 +84,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
-      return undefined
+      return validConfigValue(key)
     })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
@@ -89,7 +102,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'not_a_url'
-      return undefined
+      return validConfigValue(key)
     })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
@@ -107,7 +120,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
-      return undefined
+      return validConfigValue(key)
     })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
@@ -125,7 +138,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return -1
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
-      return undefined
+      return validConfigValue(key)
     })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
@@ -143,7 +156,7 @@ describe('Startup Validator', () => {
       if (key === 'maxConcurrentRequests') return 20
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
-      return undefined
+      return validConfigValue(key)
     })
 
     const originalRedisEnabled = process.env.REDIS_ENABLED

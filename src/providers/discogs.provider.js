@@ -1,10 +1,7 @@
 const axios = require('axios')
-const https = require('https')
 const { getConfigValue } = require('../settings/store')
-
-const httpsAgent = new https.Agent({
-  keepAlive: true
-})
+const { getProviderHttpsAgent, getProviderUserAgent } = require('./http')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 class DiscogsProvider {
   constructor () {
@@ -12,9 +9,7 @@ class DiscogsProvider {
   }
 
   getUserAgent () {
-    const appName = getConfigValue('appName')
-    const appVersion = getConfigValue('appVersion')
-    return `${appName}/${appVersion} +https://github.com`
+    return getProviderUserAgent()
   }
 
   async searchArtist (term) {
@@ -31,12 +26,12 @@ class DiscogsProvider {
 
     try {
       // 1. Search for artist
-      const searchRes = await axios.get('https://api.discogs.com/database/search', {
+      const searchRes = await enqueueProviderRequest('discogs', () => axios.get('https://api.discogs.com/database/search', {
         params: { type: 'artist', q: term },
         headers,
-        httpsAgent,
+        httpsAgent: getProviderHttpsAgent(getConfigValue('discogsIpFamily') || getConfigValue('providerIpFamily')),
         timeout
-      })
+      }))
 
       const artists = searchRes.data?.results || []
       const exactMatch = artists.find(a => a.title?.toLowerCase() === term.toLowerCase()) || artists[0]
@@ -46,12 +41,12 @@ class DiscogsProvider {
       }
 
       // 2. Get artist releases
-      const releasesRes = await axios.get(`https://api.discogs.com/artists/${exactMatch.id}/releases`, {
+      const releasesRes = await enqueueProviderRequest('discogs', () => axios.get(`https://api.discogs.com/artists/${exactMatch.id}/releases`, {
         params: { sort: 'year', sort_order: 'asc', per_page: 100 },
         headers,
-        httpsAgent,
+        httpsAgent: getProviderHttpsAgent(getConfigValue('discogsIpFamily') || getConfigValue('providerIpFamily')),
         timeout
-      })
+      }))
 
       const releases = releasesRes.data?.releases || []
       const albums = releases

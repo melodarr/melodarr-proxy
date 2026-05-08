@@ -224,3 +224,19 @@ test('diagnoseGenericProvider — DNS failure path includes generic provider pol
   assert.strictEqual(result.error.code, 'ENOTFOUND')
   assert.match(result.diagnosis.summary, /DNS/)
 })
+
+test('diagnoseGenericProvider — uses runtime provider IP family policy', async () => {
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e },
+    settings: {
+      itunesIpFamily: '4',
+      providerIpFamily: '6'
+    }
+  })
+
+  const result = await svc.diagnoseGenericProvider('itunes')
+  assert.strictEqual(result.provider, 'itunes')
+  assert.strictEqual(result.target.configuredIpFamily, '4')
+  assert.strictEqual(result.dns.configuredFamily, '4')
+})

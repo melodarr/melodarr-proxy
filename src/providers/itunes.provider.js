@@ -1,6 +1,7 @@
 const axios = require('axios')
 const { getConfigValue } = require('../settings/store')
-const { httpsAgent } = require('./http')
+const { getProviderHttpsAgent, getProviderUserAgent } = require('./http')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 function upgradeArtworkUrl (url) {
   return String(url || '').replace(/100x100bb\.jpg$/, '600x600bb.jpg')
@@ -16,7 +17,7 @@ class ITunesProvider {
   }
 
   async searchArtist (term) {
-    const response = await axios.get('https://itunes.apple.com/search', {
+    const response = await enqueueProviderRequest('itunes', () => axios.get('https://itunes.apple.com/search', {
       params: {
         term,
         media: 'music',
@@ -25,9 +26,12 @@ class ITunesProvider {
         limit: 100,
         country: getConfigValue('itunesCountry') || 'US'
       },
-      httpsAgent,
+      headers: {
+        'User-Agent': getProviderUserAgent()
+      },
+      httpsAgent: getProviderHttpsAgent(getConfigValue('itunesIpFamily') || getConfigValue('providerIpFamily')),
       timeout: getConfigValue('upstreamTimeoutMs') || 10000
-    })
+    }))
 
     const results = response.data?.results || []
     const normalizedTerm = normalizeName(term)

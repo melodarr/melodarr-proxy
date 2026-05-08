@@ -1,13 +1,18 @@
 const axios = require('axios')
-const https = require('https')
 const cache = require('../cache')
 const { getConfigValue } = require('../settings/store')
+const { getProviderHttpsAgent } = require('../providers/http')
 const logger = require('../utils/logger')
 const metrics = require('../metrics')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
-const httpsAgent = new https.Agent({
-  keepAlive: true
-})
+function getProviderAgent (provider) {
+  const keyByProvider = {
+    lastfm: 'lastfmIpFamily',
+    discogs: 'discogsIpFamily'
+  }
+  return getProviderHttpsAgent(getConfigValue(keyByProvider[provider]) || getConfigValue('providerIpFamily'))
+}
 
 async function enrichArtistData (artistName) {
   const lastfmKey = getConfigValue('lastfmApiKey')
@@ -27,11 +32,11 @@ async function enrichArtistData (artistName) {
 
   if (lastfmKey) {
     promises.push(
-      axios.get('https://ws.audioscrobbler.com/2.0/', {
+      enqueueProviderRequest('lastfm', () => axios.get('https://ws.audioscrobbler.com/2.0/', {
         params: { method: 'artist.getinfo', artist: artistName, api_key: lastfmKey, format: 'json' },
-        httpsAgent,
+        httpsAgent: getProviderAgent('lastfm'),
         timeout
-      }).then(res => {
+      })).then(res => {
         const artist = res.data?.artist
         if (artist) {
           enrichment.popularity.listeners = parseInt(artist.stats?.listeners || 0, 10)
@@ -55,15 +60,15 @@ async function enrichArtistData (artistName) {
     const userAgent = `${appName}/${appVersion} +https://github.com`
 
     promises.push(
-      axios.get('https://api.discogs.com/database/search', {
+      enqueueProviderRequest('discogs', () => axios.get('https://api.discogs.com/database/search', {
         params: { type: 'artist', q: artistName },
         headers: {
           'User-Agent': userAgent,
           Authorization: `Discogs token=${discogsToken}`
         },
-        httpsAgent,
+        httpsAgent: getProviderAgent('discogs'),
         timeout
-      }).then(res => {
+      })).then(res => {
         const artists = res.data?.results || []
         const exactMatch = artists.find(a => a.title?.toLowerCase() === artistName.toLowerCase()) || artists[0]
         if (exactMatch && exactMatch.genre) {

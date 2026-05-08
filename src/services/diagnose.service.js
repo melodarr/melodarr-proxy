@@ -54,6 +54,21 @@ function getMusicBrainzUserAgentStatus () {
   return musicBrainzUserAgentStatus({ appName, appVersion, appContact })
 }
 
+function getGenericProviderIpFamily (providerName, fallbackFamily = 'auto') {
+  const keyByProvider = {
+    itunes: 'itunesIpFamily',
+    theaudiodb: 'theAudioDbIpFamily',
+    discogs: 'discogsIpFamily',
+    lastfm: 'lastfmIpFamily'
+  }
+  const provider = String(providerName || '').trim().toLowerCase()
+  const configured = getConfigValue(keyByProvider[provider]) || getConfigValue('providerIpFamily') || fallbackFamily
+  const normalized = String(configured || 'auto').trim().toLowerCase()
+  if (normalized === '4') return 4
+  if (normalized === '6') return 6
+  return 'auto'
+}
+
 function appendMusicBrainzIdentityWarning (report, userAgent) {
   if (!userAgent || userAgent.valid) return report
 
@@ -585,7 +600,8 @@ async function diagnoseGenericProvider (providerName) {
   const timeout = Math.min(getConfigValue('upstreamTimeoutMs') || 8000, 5000)
   const startedAt = Date.now()
   const url = new URL(config.url)
-  const family = config.requiredFamily === 6 || config.requiredFamily === 4 ? config.requiredFamily : undefined
+  const familyPolicy = getGenericProviderIpFamily(config.provider, config.requiredFamily)
+  const family = familyPolicy === 6 || familyPolicy === 4 ? familyPolicy : undefined
   const configuredIpFamily = family ? String(family) : 'auto'
   const target = {
     url: url.toString(),

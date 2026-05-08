@@ -150,11 +150,9 @@ function validateSettings (config) {
       if (!spec) {
         throw new Error(`Unknown setting key: ${key}`)
       }
-      if (spec.type === 'number') {
-        const coerced = Number(value)
-        if (Number.isNaN(coerced) || coerced <= 0) {
-          throw new Error(`Invalid number for ${key}: ${value}`)
-        }
+      const validation = validateEditableValue(value, spec)
+      if (!validation.ok) {
+        throw new Error(`Invalid value for ${key}: ${value}`)
       }
     }
   }
@@ -647,7 +645,7 @@ const EDITABLE_KEYS = {
   cacheTtlSeconds: { env: 'CACHE_TTL_SECONDS', fallback: 86400, type: 'number' },
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   musicbrainzApiKey: { env: 'MUSICBRAINZ_API_KEY', fallback: '', type: 'string' },
-  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: '6', type: 'string' },
+  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: '6', type: 'string', allowedValues: ['6'], fixed: true },
   minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number' },
   upstreamTimeoutMs: { env: 'UPSTREAM_TIMEOUT_MS', fallback: 8000, type: 'number' },
   upstreamMaxAttempts: { env: 'UPSTREAM_MAX_ATTEMPTS', fallback: 3, type: 'number' },
@@ -661,10 +659,39 @@ const EDITABLE_KEYS = {
   itunesCountry: { env: 'ITUNES_COUNTRY', fallback: 'US', type: 'string' },
   customProviders: { env: 'CUSTOM_PROVIDERS', fallback: '[]', type: 'string' },
   providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' },
+  providerMinRequestIntervalMs: { env: 'PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number' },
+  itunesMinRequestIntervalMs: { env: 'ITUNES_MIN_REQUEST_INTERVAL_MS', fallback: 100, type: 'number' },
+  lastfmMinRequestIntervalMs: { env: 'LASTFM_MIN_REQUEST_INTERVAL_MS', fallback: 200, type: 'number' },
+  discogsMinRequestIntervalMs: { env: 'DISCOGS_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number' },
+  theAudioDbMinRequestIntervalMs: { env: 'THEAUDIODB_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number' },
+  customProviderMinRequestIntervalMs: { env: 'CUSTOM_PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number' },
   globalRateLimitMax: { env: 'GLOBAL_RATE_LIMIT_MAX', fallback: 500, type: 'number' },
   serverTimeoutMs: { env: 'SERVER_TIMEOUT_MS', fallback: 15000, type: 'number' },
   maxConcurrentRequests: { env: 'MAX_CONCURRENT_REQUESTS', fallback: 20, type: 'number' },
-  upstreamQueueMax: { env: 'UPSTREAM_QUEUE_MAX', fallback: 50, type: 'number' }
+  upstreamQueueMax: { env: 'UPSTREAM_QUEUE_MAX', fallback: 50, type: 'number' },
+  providerIpFamily: { env: 'PROVIDER_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  itunesIpFamily: { env: 'ITUNES_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  lastfmIpFamily: { env: 'LASTFM_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  discogsIpFamily: { env: 'DISCOGS_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  theAudioDbIpFamily: { env: 'THEAUDIODB_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  customProviderIpFamily: { env: 'CUSTOM_PROVIDER_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] }
+}
+
+function validateEditableValue (value, spec) {
+  if (spec.type === 'number') {
+    const coerced = Number(value)
+    if (Number.isNaN(coerced) || coerced <= 0) {
+      return { ok: false, reason: 'Must be a positive number' }
+    }
+    return { ok: true, value: coerced }
+  }
+
+  const coerced = String(value)
+  if (Array.isArray(spec.allowedValues) && !spec.allowedValues.includes(coerced)) {
+    return { ok: false, reason: `Must be one of: ${spec.allowedValues.join(', ')}` }
+  }
+
+  return { ok: true, value: coerced }
 }
 
 function getRuntimeConfig () {
@@ -731,6 +758,11 @@ function updateRuntimeConfig (updates) {
       continue
     }
 
+    if (spec.fixed) {
+      skipped[key] = 'Fixed setting'
+      continue
+    }
+
     // null is the explicit clear-saved-override sentinel. The saved value is
     // removed and getConfigValue falls back to env (or built-in fallback).
     if (value === null) {
@@ -738,14 +770,14 @@ function updateRuntimeConfig (updates) {
       continue
     }
 
-    const coerced = spec.type === 'number' ? Number(value) : String(value)
+    const validation = validateEditableValue(value, spec)
 
-    if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) {
-      skipped[key] = 'Must be a positive number'
+    if (!validation.ok) {
+      skipped[key] = validation.reason
       continue
     }
 
-    applied[key] = coerced
+    applied[key] = validation.value
   }
 
   const hasApplied = Object.keys(applied).length > 0
@@ -824,12 +856,13 @@ async function validateConfigInMemory (updates, validatorFn) {
   for (const [key, value] of Object.entries(updates)) {
     const spec = EDITABLE_KEYS[key]
     if (!spec) continue
+    if (spec.fixed) continue
     if (value === null) {
       applied[key] = null
     } else {
-      const coerced = spec.type === 'number' ? Number(value) : String(value)
-      if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) continue
-      applied[key] = coerced
+      const validation = validateEditableValue(value, spec)
+      if (!validation.ok) continue
+      applied[key] = validation.value
     }
   }
 

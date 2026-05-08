@@ -22,7 +22,6 @@
 //   - Object result: valid iff it has artistName/albumName/title OR an
 //     `albums` array (the existing aggregateArtist provider contract).
 //   - Anything else (null, string, number) is invalid shape → failure.
-
 const health = require('../health/providerHealth')
 const metrics = require('../health/providerMetrics')
 const globalMetrics = require('../metrics')
@@ -59,7 +58,7 @@ async function safeProviderCall (name, fn, query) {
         reject(err)
       }, timeoutMs)
     })
-    const providerPromise = Promise.resolve().then(() => fn(query))
+    const providerPromise = fn(query)
 
     const result = await Promise.race([
       providerPromise,

@@ -297,15 +297,20 @@ Common variables:
 | `APP_NAME`, `APP_VERSION`, `APP_CONTACT` | MusicBrainz User-Agent identity. `APP_CONTACT` must be a real contact email address. |
 | `MUSICBRAINZ_BASE_URL` | MusicBrainz API base URL. |
 | `MUSICBRAINZ_IP_FAMILY` | Must be `6`. MusicBrainz is treated as IPv6-only by this proxy; IPv4 fallback is not supported. |
+| `MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS` | MusicBrainz hot-path request spacing. Default `1100`; keep this conservative. |
 | `CACHE_TTL_SECONDS` | Metadata cache TTL. Compose default is one day. |
 | `METADATA_PROVIDERS` | Enabled providers, comma-separated. Default `musicbrainz,itunes`. |
 | `PROVIDER_PRIORITY` | Merge/fallback preference when providers disagree. |
+| `PROVIDER_IP_FAMILY` | Generic provider default IP family: `auto`, `4`, or `6`. Does not affect MusicBrainz. |
+| `PROVIDER_MIN_REQUEST_INTERVAL_MS` | Generic provider default request spacing when a provider-specific interval is not set. |
 | `PROVIDER_FAILURE_THRESHOLD` | Consecutive failures before a provider is disabled. Default `3`. |
 | `PROVIDER_COOLDOWN_MS` | Disabled-provider canary cooldown. Default `600000`. |
 | `PROVIDER_REENABLE_SUCCESS_THRESHOLD` | Successes required before reenable. Default `3`. |
 | `PROVIDER_REENABLE_WINDOW_MS` | Time window for those successes. Default `300000`. |
 | `THEAUDIODB_API_KEY`, `LASTFM_API_KEY`, `DISCOGS_TOKEN` | Optional provider credentials. |
 | `ITUNES_COUNTRY` | iTunes storefront country. Default `US`. |
+| `ITUNES_IP_FAMILY`, `THEAUDIODB_IP_FAMILY`, `LASTFM_IP_FAMILY`, `DISCOGS_IP_FAMILY`, `CUSTOM_PROVIDER_IP_FAMILY` | Per-provider IP-family override for non-MusicBrainz providers. |
+| `ITUNES_MIN_REQUEST_INTERVAL_MS`, `THEAUDIODB_MIN_REQUEST_INTERVAL_MS`, `LASTFM_MIN_REQUEST_INTERVAL_MS`, `DISCOGS_MIN_REQUEST_INTERVAL_MS`, `CUSTOM_PROVIDER_MIN_REQUEST_INTERVAL_MS` | Per-provider request spacing overrides. |
 | `ALERT_SLACK_WEBHOOK` | Optional Slack webhook for provider-disabled alerts. |
 
 Provider details are documented in [docs/providers.md](docs/providers.md).

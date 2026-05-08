@@ -47,8 +47,7 @@ async function processQueue () {
 
   try {
     const minInterval = getConfiguredMinRequestIntervalMs()
-    // Arbitrary concurrency limit of 3 for upstream
-    const maxConcurrency = 3
+    const maxConcurrency = 1
 
     while (waitingQueue.length > 0 && activeRequests < maxConcurrency) {
       const now = Date.now()
@@ -143,11 +142,13 @@ class UpstreamService {
     const timeout = Math.min(configured, 5000)
 
     try {
-      const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
-        headers: this.getMusicBrainzHeaders(),
-        httpsAgent: getMusicBrainzHttpsAgent(),
-        timeout,
-        validateStatus: () => true
+      const res = await enqueueRequest(async () => {
+        return await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
+          headers: this.getMusicBrainzHeaders(),
+          httpsAgent: getMusicBrainzHttpsAgent(),
+          timeout,
+          validateStatus: () => true
+        })
       })
 
       if (res.status === 200) {

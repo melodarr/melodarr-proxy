@@ -27,6 +27,20 @@ function validateStartup () {
     errors.push('Invalid minRequestIntervalMs configuration (must be a non-negative number).')
   }
 
+  for (const key of [
+    'providerMinRequestIntervalMs',
+    'itunesMinRequestIntervalMs',
+    'lastfmMinRequestIntervalMs',
+    'discogsMinRequestIntervalMs',
+    'theAudioDbMinRequestIntervalMs',
+    'customProviderMinRequestIntervalMs'
+  ]) {
+    const value = store.getConfigValue(key)
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      errors.push(`Invalid ${key} configuration (must be a non-negative number).`)
+    }
+  }
+
   const globalRateLimitMax = store.getConfigValue('globalRateLimitMax')
   if (typeof globalRateLimitMax !== 'number' || !Number.isFinite(globalRateLimitMax) || globalRateLimitMax <= 0) {
     errors.push('Invalid globalRateLimitMax configuration (must be a positive number).')
@@ -40,6 +54,12 @@ function validateStartup () {
   const upstreamQueueMax = store.getConfigValue('upstreamQueueMax')
   if (typeof upstreamQueueMax !== 'number' || !Number.isFinite(upstreamQueueMax) || upstreamQueueMax <= 0) {
     errors.push('Invalid upstreamQueueMax configuration (must be a positive number).')
+  }
+
+  // Validate general app config
+  const appContact = store.getConfigValue('appContact')
+  if (!appContact || typeof appContact !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(appContact)) {
+    errors.push('Invalid appContact configuration (must be a valid email address).')
   }
 
   // Validate provider configs

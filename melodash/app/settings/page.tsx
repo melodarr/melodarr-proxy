@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import {
  AlertTriangle,
@@ -8,6 +8,8 @@ import {
  Check,
  Copy,
  Database,
+ Eye,
+ EyeOff,
  GripVertical,
  KeyRound,
  Loader2,
@@ -117,9 +119,16 @@ const identityFields = [
 
 const cacheFields = [
  { key: "cacheTtlSeconds", label: "Cache TTL", type: "number", suffix: "seconds" },
- { key: "minRequestIntervalMs", label: "MusicBrainZ request interval", type: "number", suffix: "ms" },
+ { key: "minRequestIntervalMs", label: "MusicBrainz request interval", type: "number", suffix: "ms" },
+ { key: "providerMinRequestIntervalMs", label: "Default provider request interval", type: "number", suffix: "ms" },
  { key: "upstreamTimeoutMs", label: "Upstream timeout", type: "number", suffix: "ms" },
  { key: "slowRequestMs", label: "Slow request threshold", type: "number", suffix: "ms" },
+];
+
+const ipFamilyOptions = [
+ { value: "auto", label: "Auto" },
+ { value: "4", label: "IPv4" },
+ { value: "6", label: "IPv6" },
 ];
 
 const providerSettings: Record<string, SettingsField[]> = {
@@ -131,15 +140,23 @@ const providerSettings: Record<string, SettingsField[]> = {
  ],
  itunes: [
  { key: "itunesCountry", label: "Country", type: "text" },
+ { key: "itunesMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
+ { key: "itunesIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
  theaudiodb: [
  { key: "theAudioDbApiKey", label: "API key", type: "password" },
+ { key: "theAudioDbMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
+ { key: "theAudioDbIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
  lastfm: [
  { key: "lastfmApiKey", label: "API key", type: "password" },
+ { key: "lastfmMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
+ { key: "lastfmIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
  discogs: [
  { key: "discogsToken", label: "Token", type: "password" },
+ { key: "discogsMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
+ { key: "discogsIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
 };
 
@@ -326,7 +343,17 @@ export default function SettingsPage() {
  const [providerTestResults, setProviderTestResults] = useState<Record<string, ProviderTestResult>>({});
  const [draggedProvider, setDraggedProvider] = useState<string | null>(null);
  const [copiedProvider, setCopiedProvider] = useState<string | null>(null);
- 
+ const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+
+ const togglePasswordVisibility = useCallback((fieldKey: string) => {
+  setVisiblePasswords((prev) => {
+   const next = new Set(prev);
+   if (next.has(fieldKey)) next.delete(fieldKey);
+   else next.add(fieldKey);
+   return next;
+  });
+ }, []);
+
  const [customProviders, setCustomProviders] = useState<CustomProviderConfig[]>([]);
  const [editingProvider, setEditingProvider] = useState<CustomProviderConfig | null>(null);
 
@@ -560,6 +587,8 @@ export default function SettingsPage() {
 
  function renderField(field: SettingsField) {
  const source = config[field.key]?.source;
+ const isPassword = field.type === "password";
+ const revealed = isPassword && visiblePasswords.has(field.key);
 
  return (
  <label key={field.key} className="block">
@@ -570,12 +599,24 @@ export default function SettingsPage() {
  <div className="relative">
  <input
  className={inputClass()}
- type={field.type}
+ type={isPassword && !revealed ? "password" : field.type === "password" ? "text" : field.type}
  min={field.type === "number" ? 1 : undefined}
  placeholder={field.placeholder}
  value={form[field.key] ?? readConfig(config, field.key)}
  onChange={(event) => updateField(field.key, event.target.value)}
+ style={isPassword ? { paddingRight: "2.5rem" } : undefined}
  />
+ {isPassword && (
+ <button
+ type="button"
+ tabIndex={-1}
+ onClick={() => togglePasswordVisibility(field.key)}
+ className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted transition-colors hover:text-primary"
+ aria-label={revealed ? "Hide value" : "Show value"}
+ >
+ {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+ </button>
+ )}
  {field.suffix && <span className="pointer-events-none absolute right-3 top-2 text-sm text-muted">{field.suffix}</span>}
  </div>
  </label>
@@ -585,6 +626,8 @@ export default function SettingsPage() {
  function renderProviderSetting(field: SettingsField) {
  const source = config[field.key]?.source;
  const value = form[field.key] ?? readConfig(config, field.key);
+ const isPassword = field.type === "password";
+ const revealed = isPassword && visiblePasswords.has(field.key);
 
  return (
  <label key={field.key} className="block">
@@ -603,13 +646,29 @@ export default function SettingsPage() {
  ))}
  </select>
  ) : (
+ <div className="relative">
  <input
  className={inputClass()}
- type={field.type}
+ type={isPassword && !revealed ? "password" : field.type === "password" ? "text" : field.type}
+ min={field.type === "number" ? 1 : undefined}
  placeholder={field.placeholder}
  value={value}
  onChange={(event) => updateField(field.key, event.target.value)}
+ style={isPassword || field.suffix ? { paddingRight: isPassword ? "2.5rem" : "3.5rem" } : undefined}
  />
+ {isPassword && (
+ <button
+ type="button"
+ tabIndex={-1}
+ onClick={() => togglePasswordVisibility(field.key)}
+ className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted transition-colors hover:text-primary"
+ aria-label={revealed ? "Hide value" : "Show value"}
+ >
+ {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+ </button>
+ )}
+ {field.suffix && !isPassword && <span className="pointer-events-none absolute right-3 top-2 text-sm text-muted">{field.suffix}</span>}
+ </div>
  )}
  </label>
  );
@@ -690,26 +749,50 @@ export default function SettingsPage() {
  <div className="space-y-4">
  <label className="block">
  <span className="mb-2 block text-sm font-medium text-secondary ">Password</span>
+ <div className="relative">
  <input
  className={inputClass()}
- type="password"
+ type={visiblePasswords.has("_login") ? "text" : "password"}
  minLength={8}
  value={password}
  onChange={(event) => setPassword(event.target.value)}
  required
+ style={{ paddingRight: "2.5rem" }}
  />
+ <button
+ type="button"
+ tabIndex={-1}
+ onClick={() => togglePasswordVisibility("_login")}
+ className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted transition-colors hover:text-primary"
+ aria-label={visiblePasswords.has("_login") ? "Hide password" : "Show password"}
+ >
+ {visiblePasswords.has("_login") ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+ </button>
+ </div>
  </label>
  {needsSetup && (
  <label className="block">
  <span className="mb-2 block text-sm font-medium text-secondary ">Confirm password</span>
+ <div className="relative">
  <input
  className={inputClass()}
- type="password"
+ type={visiblePasswords.has("_confirm") ? "text" : "password"}
  minLength={8}
  value={confirmPassword}
  onChange={(event) => setConfirmPassword(event.target.value)}
  required
+ style={{ paddingRight: "2.5rem" }}
  />
+ <button
+ type="button"
+ tabIndex={-1}
+ onClick={() => togglePasswordVisibility("_confirm")}
+ className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted transition-colors hover:text-primary"
+ aria-label={visiblePasswords.has("_confirm") ? "Hide password" : "Show password"}
+ >
+ {visiblePasswords.has("_confirm") ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+ </button>
+ </div>
  </label>
  )}
  </div>
@@ -906,6 +989,20 @@ export default function SettingsPage() {
  </Section>
 
  <Section title="Custom Providers" icon={<Braces className="h-5 w-5" />}>
+ <div className="mb-6 rounded-lg border border-border bg-page p-4">
+ {renderProviderSetting({
+ key: "customProviderIpFamily",
+ label: "Global Custom Provider IP family",
+ type: "select",
+ options: ipFamilyOptions
+ })}
+ {renderProviderSetting({
+ key: "customProviderMinRequestIntervalMs",
+ label: "Custom provider request interval",
+ type: "number",
+ suffix: "ms"
+ })}
+ </div>
  <div className="space-y-4">
  {customProviders.map((cp) => (
  <div key={cp.id} className="flex items-center justify-between rounded-lg border border-border bg-page p-4">
@@ -1034,6 +1131,7 @@ function CustomProviderModal({
  const [customResult, setCustomResult] = useState<CustomProviderResult | null>(null);
  const [testingCustomProvider, setTestingCustomProvider] = useState(false);
  const [copiedCustomLogs, setCopiedCustomLogs] = useState(false);
+ const [tokenVisible, setTokenVisible] = useState(false);
 
  function updateField(key: keyof CustomProviderConfig, value: string) {
  setForm((current) => ({ ...current, [key]: value }));
@@ -1145,7 +1243,18 @@ function CustomProviderModal({
  </label>
  <label className="block">
  <span className="mb-2 block text-sm font-medium text-secondary ">Token</span>
- <input className={inputClass()} type="password" value={form.token ?? ""} onChange={(e) => updateField("token", e.target.value)} />
+ <div className="relative">
+ <input className={inputClass()} type={tokenVisible ? "text" : "password"} value={form.token ?? ""} onChange={(e) => updateField("token", e.target.value)} style={{ paddingRight: "2.5rem" }} />
+ <button
+  type="button"
+  tabIndex={-1}
+  onClick={() => setTokenVisible((v) => !v)}
+  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted transition-colors hover:text-primary"
+  aria-label={tokenVisible ? "Hide token" : "Show token"}
+ >
+  {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+ </button>
+ </div>
  </label>
  </div>
 
