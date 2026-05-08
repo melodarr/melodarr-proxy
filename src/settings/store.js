@@ -150,6 +150,9 @@ function validateSettings (config) {
       if (!spec) {
         throw new Error(`Unknown setting key: ${key}`)
       }
+      if (spec.fixed) {
+        continue
+      }
       const validation = validateEditableValue(value, spec)
       if (!validation.ok) {
         throw new Error(`Invalid value for ${key}: ${value}`)
@@ -646,7 +649,7 @@ const EDITABLE_KEYS = {
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   musicbrainzApiKey: { env: 'MUSICBRAINZ_API_KEY', fallback: '', type: 'string' },
   musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: '6', type: 'string', allowedValues: ['6'], fixed: true },
-  minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number' },
+  minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number', min: 0 },
   upstreamTimeoutMs: { env: 'UPSTREAM_TIMEOUT_MS', fallback: 8000, type: 'number' },
   upstreamMaxAttempts: { env: 'UPSTREAM_MAX_ATTEMPTS', fallback: 3, type: 'number' },
   upstreamRetryBaseMs: { env: 'UPSTREAM_RETRY_BASE_MS', fallback: 500, type: 'number' },
@@ -659,12 +662,12 @@ const EDITABLE_KEYS = {
   itunesCountry: { env: 'ITUNES_COUNTRY', fallback: 'US', type: 'string' },
   customProviders: { env: 'CUSTOM_PROVIDERS', fallback: '[]', type: 'string' },
   providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' },
-  providerMinRequestIntervalMs: { env: 'PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number' },
-  itunesMinRequestIntervalMs: { env: 'ITUNES_MIN_REQUEST_INTERVAL_MS', fallback: 100, type: 'number' },
-  lastfmMinRequestIntervalMs: { env: 'LASTFM_MIN_REQUEST_INTERVAL_MS', fallback: 200, type: 'number' },
-  discogsMinRequestIntervalMs: { env: 'DISCOGS_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number' },
-  theAudioDbMinRequestIntervalMs: { env: 'THEAUDIODB_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number' },
-  customProviderMinRequestIntervalMs: { env: 'CUSTOM_PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number' },
+  providerMinRequestIntervalMs: { env: 'PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number', min: 0 },
+  itunesMinRequestIntervalMs: { env: 'ITUNES_MIN_REQUEST_INTERVAL_MS', fallback: 100, type: 'number', min: 0 },
+  lastfmMinRequestIntervalMs: { env: 'LASTFM_MIN_REQUEST_INTERVAL_MS', fallback: 200, type: 'number', min: 0 },
+  discogsMinRequestIntervalMs: { env: 'DISCOGS_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number', min: 0 },
+  theAudioDbMinRequestIntervalMs: { env: 'THEAUDIODB_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number', min: 0 },
+  customProviderMinRequestIntervalMs: { env: 'CUSTOM_PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number', min: 0 },
   globalRateLimitMax: { env: 'GLOBAL_RATE_LIMIT_MAX', fallback: 500, type: 'number' },
   serverTimeoutMs: { env: 'SERVER_TIMEOUT_MS', fallback: 15000, type: 'number' },
   maxConcurrentRequests: { env: 'MAX_CONCURRENT_REQUESTS', fallback: 20, type: 'number' },
@@ -680,8 +683,9 @@ const EDITABLE_KEYS = {
 function validateEditableValue (value, spec) {
   if (spec.type === 'number') {
     const coerced = Number(value)
-    if (Number.isNaN(coerced) || coerced <= 0) {
-      return { ok: false, reason: 'Must be a positive number' }
+    const min = Number.isFinite(spec.min) ? spec.min : 1
+    if (Number.isNaN(coerced) || coerced < min) {
+      return { ok: false, reason: min === 0 ? 'Must be a non-negative number' : 'Must be a positive number' }
     }
     return { ok: true, value: coerced }
   }

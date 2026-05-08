@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
+import { fetchWithFallback } from '@/lib/proxy'
 
 type UpstreamEntry = {
  ts: string
@@ -89,9 +90,9 @@ const AFFECTED_KEY = 'mb.affectedArtists.v1'
 const MAX_AFFECTED = 50
 
 const fetcher = async (url: string) => {
- const r = await fetch(url)
- if (!r.ok && r.status !== 503) throw new Error(`HTTP ${r.status}`)
- return r.json()
+ const r = await fetchWithFallback(url)
+  if (!r.ok && r.status !== 503) throw new Error(`HTTP ${r.status}`)
+  return r.json()
 }
 
 function summarize (entries: UpstreamEntry[]) {

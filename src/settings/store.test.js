@@ -128,6 +128,20 @@ test('Store Module', async (t) => {
     await store.flushSettingsWrites()
   })
 
+  await t.test('provider request intervals accept 0ms overrides', async () => {
+    const result = store.updateRuntimeConfig({
+      minRequestIntervalMs: 0,
+      providerMinRequestIntervalMs: 0,
+      itunesMinRequestIntervalMs: 0
+    })
+    await store.flushSettingsWrites()
+
+    assert.deepStrictEqual(result.skipped, {})
+    assert.strictEqual(store.getConfigValue('minRequestIntervalMs'), 0)
+    assert.strictEqual(store.getConfigValue('providerMinRequestIntervalMs'), 0)
+    assert.strictEqual(store.getConfigValue('itunesMinRequestIntervalMs'), 0)
+  })
+
   await t.test('getSessionSecret', () => {
     // Should fallback to empty or generated if not set initially
     assert.strictEqual(typeof store.getSessionSecret(), 'string')
@@ -452,4 +466,32 @@ test('settings rollback rejects malformed, missing, and invalid stored versions'
     fresh.store.rollbackSettings(badId),
     /Unknown setting key: definitelyNotASetting/
   )
+})
+
+test('settings rollback accepts legacy fixed-key overrides and restores canonical fixed value', async (t) => {
+  const fresh = loadFreshStore()
+  t.after(fresh.cleanup)
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'safe-before-legacy-fixed' })
+  await fresh.store.flushSettingsWrites()
+
+  const badFixedId = '1700000000002-1234567890abcdee'
+  const versionsDir = path.join(fresh.dir, 'settings.versions')
+  fs.mkdirSync(versionsDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(versionsDir, `${badFixedId}.json`),
+    JSON.stringify({ runtime: { musicbrainzIpFamily: '4' } })
+  )
+  fs.writeFileSync(
+    path.join(versionsDir, 'index.json'),
+    JSON.stringify({
+      current: badFixedId,
+      lastKnownGood: badFixedId,
+      versions: [{ id: badFixedId, timestamp: new Date().toISOString(), hash: 'x', size: 1, reason: 'test', actor: 'test' }]
+    })
+  )
+
+  const rollback = await fresh.store.rollbackSettings(badFixedId)
+  assert.equal(rollback.ok, true)
+  assert.strictEqual(fresh.store.getConfigValue('musicbrainzIpFamily'), '6')
 })

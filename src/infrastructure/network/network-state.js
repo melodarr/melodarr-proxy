@@ -186,12 +186,13 @@ function buildMusicBrainzNetworkState (report = {}, consecutiveFailures = 0, las
 function buildGenericProviderNetworkState (report = {}, config = {}, consecutiveFailures = 0, lastSuccessAt = null) {
   const state = classifyGenericProviderReport(report)
   const provider = config.provider || report.provider || 'unknown'
+  const family = report.target?.configuredIpFamily || (report.tcp?.selectedFamily ? String(report.tcp.selectedFamily) : null) || config.requiredFamily || 'auto'
 
   return {
     provider,
     label: config.label || provider,
     policy: config.policy || 'auto',
-    family: config.requiredFamily || 'auto',
+    family,
     fallbackAllowed: config.fallbackAllowed !== false,
     state,
     ok: state === GENERIC_PROVIDER_STATES.HEALTHY,

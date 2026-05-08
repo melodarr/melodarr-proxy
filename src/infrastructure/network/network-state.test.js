@@ -117,6 +117,9 @@ test('buildGenericProviderNetworkState keeps adaptive providers on auto policy w
     ok: false,
     failedStep: 'http',
     checkedAt: '2026-05-07T16:00:00Z',
+    target: {
+      configuredIpFamily: '4'
+    },
     error: { code: 'HTTP_403' },
     dns: {
       addresses: [
@@ -136,7 +139,7 @@ test('buildGenericProviderNetworkState keeps adaptive providers on auto policy w
   assert.strictEqual(state.provider, 'itunes')
   assert.strictEqual(state.label, 'Apple Music')
   assert.strictEqual(state.policy, 'auto')
-  assert.strictEqual(state.family, 'auto')
+  assert.strictEqual(state.family, '4')
   assert.strictEqual(state.fallbackAllowed, true)
   assert.strictEqual(state.state, GENERIC_PROVIDER_STATES.HTTP_FAILED)
   assert.strictEqual(state.consecutiveFailures, 3)
