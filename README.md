@@ -486,7 +486,7 @@ The upgrade script pulls both images, runs canary validation, keeps the main con
 MusicBrainz API access requires IPv6. The proxy enforces `MUSICBRAINZ_IP_FAMILY=6`
 and treats this as an immutable invariant — IPv4 fallback is never permitted.
 MusicBrainz also requires a meaningful User-Agent identity. Set `APP_CONTACT`
-to a real operator email address; placeholder domains such as `example.com`,
+to a real operator email address or contact URL; placeholder domains such as `example.com`,
 `example.org`, and `example.net` are flagged by diagnostics and can contribute
 to HTTP rejection or throttling once the network path works.
 
