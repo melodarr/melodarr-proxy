@@ -1,4 +1,5 @@
 const { getConfigValue } = require('../settings/store')
+const { parseRetryAfter } = require('./retry-policy')
 
 const queues = new Map()
 
@@ -15,9 +16,21 @@ function getProviderMinRequestIntervalMs (name) {
     case 'discogs': key = 'discogsMinRequestIntervalMs'; break
     case 'theaudiodb': key = 'theAudioDbMinRequestIntervalMs'; break
     case 'musicbrainz': key = 'minRequestIntervalMs'; break
-    default:
+    default: {
+      let customProviders = []
+      try {
+        const rawConfig = getConfigValue('customProviders')
+        customProviders = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '[]') : (rawConfig || [])
+      } catch (err) {
+        // Ignored
+      }
+      const customConfig = customProviders.find(p => p.id === name)
+      if (customConfig && typeof customConfig.minRequestIntervalMs === 'number' && Number.isFinite(customConfig.minRequestIntervalMs) && customConfig.minRequestIntervalMs >= 0) {
+        return customConfig.minRequestIntervalMs
+      }
       key = 'customProviderMinRequestIntervalMs'
       break
+    }
   }
 
   if (name === 'musicbrainz') {
@@ -34,7 +47,8 @@ function getQueueState (name) {
       lastRequestTime: 0,
       activeRequests: 0,
       waitingQueue: [],
-      isProcessing: false
+      isProcessing: false,
+      pausedUntil: 0
     })
   }
   return queues.get(name)
@@ -52,6 +66,12 @@ async function processQueue (name, state) {
 
     while (state.waitingQueue.length > 0 && state.activeRequests < maxConcurrency) {
       const now = Date.now()
+
+      if (state.pausedUntil > now) {
+        await new Promise(resolve => setTimeout(resolve, state.pausedUntil - now))
+        continue
+      }
+
       const timeSinceLast = now - state.lastRequestTime
 
       if (timeSinceLast < minInterval) {
@@ -94,6 +114,17 @@ async function enqueueProviderRequest (name, fn) {
         const result = await fn()
         resolve(result)
       } catch (err) {
+        const status = err.response?.status
+        if (status === 429 || status === 503) {
+          const retryAfterHeader = err.response?.headers?.['retry-after']
+          let pauseMs = 5000 // default penalty if no header
+          if (retryAfterHeader) {
+            const parsed = parseRetryAfter(retryAfterHeader)
+            if (parsed !== null && parsed > 0) pauseMs = parsed
+          }
+          const pauseTime = Date.now() + pauseMs
+          if (pauseTime > state.pausedUntil) state.pausedUntil = pauseTime
+        }
         reject(err)
       }
     }

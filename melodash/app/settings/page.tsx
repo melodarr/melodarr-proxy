@@ -101,6 +101,8 @@ type CustomProviderConfig = {
  queryAuthName?: string;
  token?: string;
  mapping: CustomMapping;
+ minRequestIntervalMs?: number;
+ ipFamily?: "auto" | "4" | "6";
 };
 
 const providerOptions = [
@@ -114,7 +116,7 @@ const providerOptions = [
 const identityFields = [
  { key: "appName", label: "Product name", type: "text" },
  { key: "appVersion", label: "Version", type: "text" },
- { key: "appContact", label: "Contact for API User-Agent", type: "email" },
+ { key: "appContact", label: "Contact for API User-Agent", type: "text", placeholder: "e.g., admin@domain.com or https://..." },
 ];
 
 const cacheFields = [
@@ -1040,7 +1042,8 @@ export default function SettingsPage() {
  searchPath: "",
  queryParam: "q",
  authType: "none",
- mapping: {}
+ mapping: {},
+ ipFamily: "auto"
  })}
  className="inline-flex items-center gap-2 rounded-md border border-dashed border-border bg-page px-4 py-3 text-sm text-secondary transition-colors hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5 w-full justify-center"
  >
@@ -1133,7 +1136,7 @@ function CustomProviderModal({
  const [copiedCustomLogs, setCopiedCustomLogs] = useState(false);
  const [tokenVisible, setTokenVisible] = useState(false);
 
- function updateField(key: keyof CustomProviderConfig, value: string) {
+ function updateField<K extends keyof CustomProviderConfig>(key: K, value: CustomProviderConfig[K]) {
  setForm((current) => ({ ...current, [key]: value }));
  }
 
@@ -1169,6 +1172,8 @@ function CustomProviderModal({
  queryAuthName: form.queryAuthName,
  query: testQuery || "Radiohead",
  mapping,
+ minRequestIntervalMs: form.minRequestIntervalMs,
+ ipFamily: form.ipFamily,
  }),
  });
  const result = await response.json() as CustomProviderResult;
@@ -1254,6 +1259,32 @@ function CustomProviderModal({
  >
   {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
  </button>
+ </div>
+ </label>
+ <label className="block">
+ <span className="mb-2 block text-sm font-medium text-secondary ">IP family</span>
+ <select className={inputClass()} value={form.ipFamily || "auto"} onChange={(e) => updateField("ipFamily", e.target.value as any)}>
+ <option value="auto">Auto</option>
+ <option value="4">IPv4</option>
+ <option value="6">IPv6</option>
+ </select>
+ </label>
+ <label className="block">
+ <span className="mb-2 block text-sm font-medium text-secondary ">Request interval</span>
+ <div className="relative">
+ <input
+ className={inputClass()}
+ type="number"
+ min={1}
+ value={form.minRequestIntervalMs ?? ""}
+ onChange={(e) => {
+ const val = parseInt(e.target.value, 10);
+ updateField("minRequestIntervalMs", isNaN(val) ? undefined : val);
+ }}
+ placeholder="e.g. 1000"
+ style={{ paddingRight: "2.5rem" }}
+ />
+ <span className="pointer-events-none absolute right-3 top-2 text-sm text-muted">ms</span>
  </div>
  </label>
  </div>

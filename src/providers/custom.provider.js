@@ -152,7 +152,7 @@ async function testCustomProvider (body = {}) {
   const response = await enqueueProviderRequest('custom', () => axios.get(url, {
     headers: buildHeaders(config),
     params: buildParams(config),
-    httpsAgent: getProviderHttpsAgent(getConfigValue('customProviderIpFamily') || getConfigValue('providerIpFamily')),
+    httpsAgent: getProviderHttpsAgent(config.ipFamily || getConfigValue('providerIpFamily')),
     timeout: getConfigValue('upstreamTimeoutMs') || 10000
   }))
   const raw = response.data
@@ -176,7 +176,7 @@ function createCustomProvider (config) {
       const response = await enqueueProviderRequest(config.id || 'custom', () => axios.get(url, {
         headers: buildHeaders(config),
         params: buildParams(config),
-        httpsAgent: getProviderHttpsAgent(getConfigValue('customProviderIpFamily') || getConfigValue('providerIpFamily')),
+        httpsAgent: getProviderHttpsAgent(config.ipFamily || getConfigValue('providerIpFamily')),
         timeout: getConfigValue('upstreamTimeoutMs') || 10000
       }))
       const result = mapCustomResponse(response.data, config.mapping)

@@ -2,6 +2,9 @@ const PLACEHOLDER_DOMAINS = new Set([
   'example.com',
   'example.org',
   'example.net',
+  'test.com',
+  'test.org',
+  'test.net',
   'invalid',
   'localhost',
   'test'
@@ -19,7 +22,13 @@ function normalizeContact (contact) {
 
 function isPlaceholderHostname (hostname) {
   const normalized = String(hostname || '').toLowerCase()
-  return PLACEHOLDER_DOMAINS.has(normalized) || normalized.endsWith('.example.com') || normalized.endsWith('.example.org') || normalized.endsWith('.example.net')
+  return PLACEHOLDER_DOMAINS.has(normalized) ||
+    normalized.endsWith('.example.com') ||
+    normalized.endsWith('.example.org') ||
+    normalized.endsWith('.example.net') ||
+    normalized.endsWith('.test.com') ||
+    normalized.endsWith('.test.org') ||
+    normalized.endsWith('.test.net')
 }
 
 function parseContactUrl (contact) {
