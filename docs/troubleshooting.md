@@ -146,10 +146,15 @@ If host IPv6 works but Docker IPv6 does not, enable IPv6 in Docker inside the LX
 Useful recovery commands:
 
 ```bash
+cd /opt/melodarr-proxy/src-branch-build
+sudo ./scripts/ensure-docker-ipv6.sh
+cd /opt/melodarr-proxy
+docker compose up -d --force-recreate
 CTID=<ctid> ./scripts/upgrade-proxmox-lxc.sh
-scripts/proxy-diag.sh set-ip-family 4
-scripts/proxy-diag.sh set-ip-family 6
 ```
+
+Do not switch MusicBrainz to IPv4. Melodarr Proxy treats MusicBrainz as
+IPv6-only; IPv4 probes are intentionally not part of the MusicBrainz path.
 
 ## Redis Disconnected
 

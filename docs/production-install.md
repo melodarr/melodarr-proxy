@@ -87,22 +87,21 @@ ADMIN_PASSWORD=change-this-long-password
 SETTINGS_SESSION_SECRET=change-this-random-secret
 ```
 
-Create the external Docker network expected by the bundled Compose file:
+Enable Docker IPv6 and create the external Docker network expected by the
+bundled Compose file:
 
 ```bash
-docker network create --ipv6 --subnet fd00:dead:beef:1::/64 melodarr-ipv6
+sudo ./scripts/ensure-docker-ipv6.sh
 ```
 
-If your host or LXC does not support Docker IPv6, create the network without IPv6:
-
-```bash
-docker network create melodarr-ipv6
-```
+Do not create `melodarr-ipv6` without IPv6. MusicBrainz is treated as
+IPv6-only by Melodarr Proxy, so an IPv4-only Docker network will leave
+MusicBrainz diagnostics and readiness degraded.
 
 Build and start proxy, Redis, and Melodash:
 
 ```bash
-docker compose up -d --build proxy redis melodash
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --build proxy redis melodash
 ```
 
 Verify:

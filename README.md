@@ -131,12 +131,13 @@ For deployments that need the external IPv6 Docker network used by older
 Melodarr installs:
 
 ```bash
-docker network create --ipv6 --subnet fd00:dead:beef:1::/64 melodarr-ipv6
+sudo ./scripts/ensure-docker-ipv6.sh
 docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --build proxy redis melodash
 ```
 
-`manage.sh` and the Compose smoke test use the self-contained default network
-unless `USE_IPV6_NETWORK=1` is set.
+`manage.sh` and the Compose smoke test use the IPv6 Docker network by default.
+Set `USE_IPV6_NETWORK=0` only for development flows that do not need
+MusicBrainz connectivity.
 
 Check active endpoints:
 
@@ -494,6 +495,7 @@ curl -s http://localhost:3055/api/ready
 Run targeted diagnostics:
 
 ```bash
+curl "http://localhost:3055/debug/network?refresh=1"
 curl "http://localhost:3055/debug/diagnose?provider=musicbrainz"
 scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
@@ -505,6 +507,14 @@ Set:
 
 ```env
 MUSICBRAINZ_IP_FAMILY=6
+```
+
+MusicBrainz is IPv6-only for Melodarr Proxy. If container-level IPv6 is not
+enabled, run the Docker host/LXC repair helper and recreate the containers:
+
+```bash
+sudo ./scripts/ensure-docker-ipv6.sh
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --force-recreate
 ```
 
 If MusicBrainz remains unreachable, Melodarr Proxy can still serve fallback providers when enabled, but readiness will show degraded while MusicBrainz is part of `METADATA_PROVIDERS`.

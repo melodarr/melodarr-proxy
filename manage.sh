@@ -7,7 +7,7 @@ cd "$ROOT_DIR" || exit 1
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
-USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-0}"
+USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-1}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-melodarr-ipv6}"
 DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
@@ -21,7 +21,7 @@ compose_cmd() {
     compose_files+=(-f docker-compose.ipv6.yml)
   fi
 
-  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" docker compose "${compose_files[@]}" "$@"
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" DOCKER_IPV6_SUBNET="$DOCKER_IPV6_SUBNET" docker compose "${compose_files[@]}" "$@"
 }
 
 run_proxy_lint() {
@@ -61,7 +61,11 @@ ensure_network() {
   fi
 
   echo "Creating Docker IPv6 network ${DOCKER_NETWORK} (${DOCKER_IPV6_SUBNET})..."
-  docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null
+  if ! docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null; then
+    echo "ERROR: unable to create IPv6 Docker network ${DOCKER_NETWORK}."
+    echo "Run scripts/ensure-docker-ipv6.sh as root on the Docker host/LXC, then retry."
+    exit 1
+  fi
 }
 
 pause() {

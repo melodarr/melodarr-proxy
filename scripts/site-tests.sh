@@ -866,6 +866,23 @@ else
 fi
 echo "  Note: MusicBrainz is IPv6-only for this proxy; IPv4 fallback is not supported."
 
+PROXY_IPV6_NETWORK=$(pct exec "$CTID" -- env PROXY_CONTAINER=melodarr-proxy-proxy-1 bash -lc '
+  set -e
+  networks=$(docker inspect "$PROXY_CONTAINER" --format "{{range \$name, \$net := .NetworkSettings.Networks}}{{println \$name}}{{end}}" 2>/dev/null)
+  for network in $networks; do
+    if docker network inspect "$network" 2>/dev/null | grep -q "\"EnableIPv6\": true"; then
+      printf "%s" "$network"
+      exit 0
+    fi
+  done
+  exit 1
+' 2>/dev/null || true)
+if [ -n "$PROXY_IPV6_NETWORK" ]; then
+  record_pass "proxy container is attached to IPv6 Docker network ($PROXY_IPV6_NETWORK)"
+else
+  record_fail "proxy container is not attached to an IPv6-enabled Docker network"
+fi
+
 # ── 9. Upstream buffer (gated on MB being active) ────────────────
 echo
 echo "## Upstream buffer provider counts"

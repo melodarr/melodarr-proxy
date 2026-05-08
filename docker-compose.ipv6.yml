@@ -1,3 +1,14 @@
+services:
+  proxy:
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 0
+      net.ipv6.conf.default.disable_ipv6: 0
+
+  melodash:
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 0
+      net.ipv6.conf.default.disable_ipv6: 0
+
 networks:
   default:
     name: ${DOCKER_NETWORK:-melodarr-ipv6}

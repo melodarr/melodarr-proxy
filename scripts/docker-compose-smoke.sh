@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
-USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-0}"
+USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-1}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-melodarr-ipv6}"
 DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
@@ -20,7 +20,7 @@ compose() {
     compose_files+=(-f docker-compose.ipv6.yml)
   fi
 
-  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" docker compose "${compose_files[@]}" "$@"
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" DOCKER_IPV6_SUBNET="$DOCKER_IPV6_SUBNET" docker compose "${compose_files[@]}" "$@"
 }
 
 cleanup() {
@@ -29,8 +29,11 @@ cleanup() {
 trap cleanup EXIT
 
 if use_ipv6_network && ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
-  docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null 2>&1 ||
-    docker network create "$DOCKER_NETWORK" >/dev/null
+  if ! docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null; then
+    echo "FAIL Docker IPv6 network: unable to create ${DOCKER_NETWORK} (${DOCKER_IPV6_SUBNET})"
+    echo "Run scripts/ensure-docker-ipv6.sh as root on the Docker host/LXC, then retry."
+    exit 1
+  fi
 fi
 
 echo "Building and starting proxy, Redis, and Melodash..."

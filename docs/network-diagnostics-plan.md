@@ -11,6 +11,9 @@ Implemented:
 - Cached network summary in `/api/health` and `/api/ready`.
 - Background refresh every 15 minutes.
 - Melodash Dashboard network diagnostics inside the MusicBrainz connectivity panel.
+- Source Compose and smoke-test flows use the IPv6 Docker network by default.
+- `scripts/ensure-docker-ipv6.sh` configures Docker daemon IPv6 and creates the Melodarr IPv6 network.
+- Site/install tests verify the proxy container is attached to an IPv6-enabled Docker network.
 
 Still planned:
 
