@@ -18,11 +18,12 @@ Implemented:
 - `/debug/diagnose?provider=<name>` supports generic provider DNS/TCP/TLS/HTTP diagnostics.
 - `/debug/network` includes cached generic provider transport states alongside MusicBrainz.
 - MusicBrainz User-Agent contact validation flags placeholder contacts without exposing the operator contact value.
+- Dedicated Melodash Diagnostics page with provider transport cards, read-only runbooks, per-provider probes, provider health/metrics snapshots, and copyable debug bundles.
 
 Still planned:
 
-- Deeper standalone diagnostics page.
-- Operator export/copy tools.
+- Hot-path provider transport policy integration.
+- Diagnostic bundle file download in addition to clipboard copy.
 
 ## Objective
 
