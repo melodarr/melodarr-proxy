@@ -49,6 +49,22 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+COMPOSE_PROXY_IMAGE="$(
+  docker compose config --format json 2>/dev/null \
+    | jq -r '.services.proxy.image // empty' \
+    || true
+)"
+
+if [[ -z "$COMPOSE_PROXY_IMAGE" ]]; then
+  echo "[ERROR] docker compose service 'proxy' must use image: (build-only compose is unsupported by this updater)"
+  exit 1
+fi
+
+if [[ "$COMPOSE_PROXY_IMAGE" == *"@"* ]]; then
+  echo "[ERROR] docker compose service 'proxy' image cannot be digest-pinned for this updater: $COMPOSE_PROXY_IMAGE"
+  exit 1
+fi
+
 CONTAINER_ID="$(docker compose ps -q proxy 2>/dev/null || true)"
 if [[ -z "$CONTAINER_ID" ]]; then
   echo "[ERROR] Proxy container not found"
@@ -96,6 +112,9 @@ fi
 
 echo "[INFO] Pulling image..."
 docker pull "$TARGET_IMAGE"
+
+echo "[INFO] Retagging image for compose proxy service: $COMPOSE_PROXY_IMAGE"
+docker tag "$TARGET_IMAGE" "$COMPOSE_PROXY_IMAGE"
 
 echo "[INFO] Restarting with docker compose..."
 docker compose down
