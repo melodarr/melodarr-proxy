@@ -91,4 +91,4 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: ${MELODARR_DOCKER_IPV6_SUBNET:-fd00:dead:beef:3055::/64}
+        - subnet: ${DOCKER_NETWORK_IPV6_SUBNET:-fd00:dead:beef:3055::/64}
