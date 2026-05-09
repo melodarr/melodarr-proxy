@@ -63,7 +63,8 @@ router.get('/admin/keys', requireSettingsAuth, getAllKeys)
 router.delete('/admin/keys/:key', requireSettingsAuth, requireSettingsCsrf, revokeKey)
 
 // Main proxy route (requires proxy to be running)
-const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 })
+const { getConfigValue } = require('../settings/store')
+const proxyRateLimiter = rateLimit({ windowMs: 60 * 1000, max: () => getConfigValue('globalRateLimitMax') || 500 })
 const proxyAuthMiddleware = require('../middleware/proxyAuth.middleware')
 
 // Settings-auth protected version metadata

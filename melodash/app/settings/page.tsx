@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import {
  AlertTriangle,
  Braces,
@@ -321,6 +321,7 @@ async function postSettings(path: string, body?: Record<string, unknown>) {
 }
 
 export default function SettingsPage() {
+ const { mutate: mutateGlobal } = useSWRConfig();
  const { data: status, mutate: mutateStatus, error: statusError, isLoading: statusLoading } = useSWR<SettingsStatus>(
  "/api/settings/status",
  fetcher,
@@ -339,6 +340,7 @@ export default function SettingsPage() {
  const [message, setMessage] = useState<Message>(null);
  const [saving, setSaving] = useState(false);
  const [authBusy, setAuthBusy] = useState(false);
+ const [refreshing, setRefreshing] = useState(false);
  const [generatingName, setGeneratingName] = useState(false);
  const [providerTestQuery, setProviderTestQuery] = useState("Radiohead");
  const [testingProvider, setTestingProvider] = useState<string | null>(null);
@@ -407,7 +409,20 @@ export default function SettingsPage() {
  }, [form.metadataProviders, form.providerPriority, allAvailableProviders]);
 
  async function refreshAll() {
- await Promise.all([mutateStatus(), mutateSettings()]);
+ setRefreshing(true);
+ try {
+ const nextStatus = await mutateStatus();
+ const effectiveStatus = nextStatus ?? status;
+ if (effectiveStatus?.authenticated) {
+ await mutateGlobal("/api/settings");
+ } else {
+ await mutateSettings(undefined, { revalidate: false });
+ }
+ } catch (error) {
+ setMessage({ type: "error", text: error instanceof Error ? error.message : "Refresh failed." });
+ } finally {
+ setRefreshing(false);
+ }
  }
 
  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -708,11 +723,12 @@ export default function SettingsPage() {
  <>
  <button
  type="button"
- onClick={() => refreshAll()}
- className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm text-primary transition-colors hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5"
+ onClick={refreshAll}
+ disabled={refreshing || statusLoading || settingsLoading}
+ className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm text-primary transition-colors hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5 disabled:opacity-60"
  >
- <RefreshCw className="h-4 w-4" />
- Refresh
+ <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+ {refreshing ? "Refreshing" : "Refresh"}
  </button>
  <button
  type="button"
