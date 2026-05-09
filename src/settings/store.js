@@ -523,6 +523,10 @@ function listApiKeys () {
   }))
 }
 
+function hasApiKeys () {
+  return (settings.apiKeys || []).length > 0
+}
+
 function deleteApiKey (id) {
   reloadSettings()
 
@@ -902,6 +906,7 @@ module.exports = {
   getRuntimeConfig,
   getSessionSecret,
   hasAdminPassword,
+  hasApiKeys,
   listApiKeys,
   resetPassword,
   updateRuntimeConfig,
