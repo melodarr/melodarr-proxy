@@ -184,7 +184,16 @@ export default function NetworkDiagnosticsPage() {
         <DetailRow label="Fallback" value={musicbrainz?.fallbackAllowed === false ? "disabled" : "allowed"} />
         <DetailRow label="AAAA" value={musicbrainz?.dns?.aaaaAvailable ? "available" : "missing"} />
         <DetailRow label="Failed step" value={musicbrainz?.failedStep || "-"} />
-        <DetailRow label="User-Agent" value={musicbrainz?.userAgent?.valid === false ? "invalid" : "valid"} />
+        <DetailRow
+         label="User-Agent"
+         value={
+          musicbrainz?.userAgent?.valid === true
+           ? "valid"
+           : musicbrainz?.userAgent?.valid === false
+             ? "invalid"
+             : "-"
+         }
+        />
         <DetailRow label="Total latency" value={musicbrainz?.timingsMs?.total ? `${musicbrainz.timingsMs.total}ms` : "-"} />
        </div>
        {musicbrainz?.recommendations?.length ? (
