@@ -45,6 +45,7 @@ function loadController ({
   sessionSecret = SESSION_SECRET,
   verifyPassword = () => false,
   bootstrapAdminPassword = () => {},
+  hasApiKeys = () => false,
   getRuntimeConfig = () => ({}),
   updateRuntimeConfig = () => ({ applied: {}, cleared: {}, skipped: {} }),
   clearRuntimeOverride = () => ({ ok: true, cleared: true, key: 'unspecified', newValue: null, newSource: 'default' }),
@@ -81,6 +82,7 @@ function loadController ({
       hasAdminPassword: () => hasAdminPassword,
       canBootstrapAdmin: () => canBootstrapAdmin,
       getSessionSecret: () => sessionSecret,
+      hasApiKeys,
       verifyPassword,
       bootstrapAdminPassword,
       getRuntimeConfig,
@@ -162,6 +164,16 @@ test('getSettingsStatus reflects hasAdminPassword correctly', () => {
   c.getSettingsStatus({ headers: {} }, res)
   assert.equal(res.body.enabled, false)
   assert.equal(res.body.setupRequired, true)
+})
+
+test('getSettings reports proxy API auth mode', () => {
+  const c = loadController({ hasApiKeys: () => true })
+  const req = makeReqWithValidCookie()
+  const res = makeRes()
+  c.getSettings(req, res)
+  assert.equal(res.body.apiAuth.hasApiKeys, true)
+  assert.equal(typeof res.body.apiAuth.requireApiKey, 'boolean')
+  assert.equal(typeof res.body.apiAuth.unauthenticatedAllowed, 'boolean')
 })
 
 // ── setupSettings ─────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import {
  SlidersHorizontal,
  Sparkles,
  TestTube2,
+ Trash2,
  X,
 } from "lucide-react";
 import { fetchJson, fetcher } from "@/lib/fetcher";
@@ -64,6 +65,8 @@ import {
   CustomProviderResult,
   MappingField,
   CustomProviderConfig,
+  ProxyApiKeysPayload,
+  CreatedProxyApiKey,
 } from "./types";
 import {
   inputClass,
@@ -193,6 +196,11 @@ export default function SettingsPage() {
  error: settingsError,
  isLoading: settingsLoading,
  } = useSWR<SettingsPayload>(status?.authenticated ? "/api/settings" : null, fetcher);
+ const {
+ data: apiKeys,
+ mutate: mutateApiKeys,
+ isLoading: apiKeysLoading,
+ } = useSWR<ProxyApiKeysPayload>(status?.authenticated ? "/api/admin/keys" : null, fetcher);
 
  const [password, setPassword] = useState("");
  const [confirmPassword, setConfirmPassword] = useState("");
@@ -207,6 +215,11 @@ export default function SettingsPage() {
  const [providerTestResults, setProviderTestResults] = useState<Record<string, ProviderTestResult>>({});
  const [draggedProvider, setDraggedProvider] = useState<string | null>(null);
  const [copiedProvider, setCopiedProvider] = useState<string | null>(null);
+ const [copiedProxyKey, setCopiedProxyKey] = useState(false);
+ const [apiKeyBusy, setApiKeyBusy] = useState(false);
+ const [newApiKeyName, setNewApiKeyName] = useState("Lidarr");
+ const [newApiKeyQuota, setNewApiKeyQuota] = useState("60");
+ const [createdApiKey, setCreatedApiKey] = useState<CreatedProxyApiKey | null>(null);
  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
 
  const togglePasswordVisibility = useCallback((fieldKey: string) => {
@@ -353,6 +366,57 @@ export default function SettingsPage() {
  } finally {
  setSaving(false);
  }
+ }
+
+ async function handleCreateProxyApiKey(event: FormEvent<HTMLFormElement>) {
+ event.preventDefault();
+ setApiKeyBusy(true);
+ setMessage(null);
+ setCreatedApiKey(null);
+
+ try {
+ const created = await fetchJson<CreatedProxyApiKey>("/api/admin/keys/create", {
+ method: "POST",
+ credentials: "include",
+ headers: { "content-type": "application/json" },
+ body: JSON.stringify({
+ name: newApiKeyName.trim() || "Lidarr",
+ quota: Number(newApiKeyQuota) || 60,
+ }),
+ });
+ setCreatedApiKey(created);
+ setMessage({ type: "success", text: "Proxy API key created. Store it now; it is shown once." });
+ await mutateApiKeys();
+ } catch (error) {
+ setMessage({ type: "error", text: error instanceof Error ? error.message : "API key creation failed." });
+ } finally {
+ setApiKeyBusy(false);
+ }
+ }
+
+ async function handleRevokeProxyApiKey(id: string) {
+ setApiKeyBusy(true);
+ setMessage(null);
+
+ try {
+ await fetchJson(`/api/admin/keys/${encodeURIComponent(id)}`, {
+ method: "DELETE",
+ credentials: "include",
+ });
+ setMessage({ type: "success", text: "Proxy API key revoked." });
+ if (createdApiKey?.id === id) setCreatedApiKey(null);
+ await mutateApiKeys();
+ } catch (error) {
+ setMessage({ type: "error", text: error instanceof Error ? error.message : "API key revoke failed." });
+ } finally {
+ setApiKeyBusy(false);
+ }
+ }
+
+ async function copyProxyKey(value: string) {
+ await navigator.clipboard.writeText(value);
+ setCopiedProxyKey(true);
+ window.setTimeout(() => setCopiedProxyKey(false), 1500);
  }
 
  async function handleResetProvidersToEnv() {
@@ -992,6 +1056,121 @@ export default function SettingsPage() {
 
   {activeTab === "api-keys" && (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <Section title="Proxy API Keys" icon={<KeyRound className="h-5 w-5" />}>
+        <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
+          Lidarr calls <code>/api/search</code> and SkyHook metadata endpoints directly. If proxy API keys exist, Lidarr must send one as an <code>X-Api-Key</code> header, <code>api_key</code> query parameter, or path key.
+        </div>
+        <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-border bg-page p-4">
+            <div className="text-xs uppercase tracking-wide text-muted">Proxy auth</div>
+            <div className={`mt-2 text-sm font-medium ${settings?.apiAuth?.requireApiKey ? "text-amber-300" : "text-emerald-300"}`}>
+              {settings?.apiAuth?.requireApiKey ? "API key required" : "No key required"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-page p-4">
+            <div className="text-xs uppercase tracking-wide text-muted">Configured keys</div>
+            <div className="mt-2 text-sm font-medium text-primary">{apiKeys?.keys?.length ?? 0}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-page p-4">
+            <div className="text-xs uppercase tracking-wide text-muted">Lidarr status</div>
+            <div className={`mt-2 text-sm font-medium ${settings?.apiAuth?.unauthenticatedAllowed ? "text-emerald-300" : "text-amber-300"}`}>
+              {settings?.apiAuth?.unauthenticatedAllowed ? "Unauthenticated calls allowed" : "Configure Lidarr key"}
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleCreateProxyApiKey} className="grid grid-cols-1 gap-4 rounded-lg border border-border bg-page p-4 md:grid-cols-[minmax(0,1fr)_160px_auto] md:items-end">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-secondary">Key name</span>
+            <input
+              className={inputClass()}
+              value={newApiKeyName}
+              onChange={(event) => setNewApiKeyName(event.target.value)}
+              placeholder="Lidarr"
+              required
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-secondary">Quota/min</span>
+            <input
+              className={inputClass()}
+              type="number"
+              min={1}
+              value={newApiKeyQuota}
+              onChange={(event) => setNewApiKeyQuota(event.target.value)}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={apiKeyBusy}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
+          >
+            {apiKeyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+            Create key
+          </button>
+        </form>
+
+        {createdApiKey && (
+          <div className="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <div className="mb-2 text-sm font-medium text-emerald-100">New key shown once</div>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-emerald-500/20 bg-black/30 px-3 py-2 text-xs text-emerald-100">{createdApiKey.key}</code>
+              <button
+                type="button"
+                onClick={() => copyProxyKey(createdApiKey.key)}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 transition-colors hover:bg-emerald-500/20"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copiedProxyKey ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <div className="mt-3 space-y-1 text-xs leading-5 text-emerald-100/80">
+              <div>Header: <code>X-Api-Key: {createdApiKey.key}</code></div>
+              <div>Query: <code>/api/search?type=all&amp;query=Radiohead&amp;api_key={createdApiKey.key}</code></div>
+              <div>Path-key base for Lidarr: <code>{typeof window !== "undefined" ? window.location.origin : ""}/api/{createdApiKey.key}</code></div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 overflow-hidden rounded-lg border border-border">
+          <div className="grid grid-cols-[minmax(0,1fr)_120px_120px_120px_auto] gap-3 border-b border-border bg-page px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted">
+            <div>Name</div>
+            <div>Quota/min</div>
+            <div>Usage</div>
+            <div>Last used</div>
+            <div></div>
+          </div>
+          {apiKeysLoading ? (
+            <div className="px-4 py-5 text-sm text-secondary">Loading proxy API keys...</div>
+          ) : (apiKeys?.keys ?? []).length === 0 ? (
+            <div className="px-4 py-5 text-sm leading-6 text-secondary">
+              No proxy API keys are configured. Unless <code>REQUIRE_API_KEY=true</code> is forcing auth, proxy requests are accepted without a key.
+            </div>
+          ) : (
+            (apiKeys?.keys ?? []).map((key) => (
+              <div key={key.id} className="grid grid-cols-[minmax(0,1fr)_120px_120px_120px_auto] items-center gap-3 border-b border-border px-4 py-3 text-sm last:border-b-0">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-primary">{key.name}</div>
+                  <div className="mt-1 font-mono text-xs text-muted">{key.id}</div>
+                </div>
+                <div className="text-secondary">{key.quotaPerMinute}</div>
+                <div className="text-secondary">{key.usage}</div>
+                <div className="truncate text-xs text-muted">{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "Never"}</div>
+                <button
+                  type="button"
+                  onClick={() => handleRevokeProxyApiKey(key.id)}
+                  disabled={apiKeyBusy}
+                  className="inline-flex items-center justify-center rounded-md border border-red-500/30 bg-red-500/10 p-2 text-red-700 transition-colors hover:bg-red-500/20 dark:text-red-300 disabled:opacity-60"
+                  aria-label={`Revoke ${key.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </Section>
+
       <Section title="Provider API Keys" icon={<KeyRound className="h-5 w-5" />}>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {renderField({ key: "musicbrainzApiKey", label: "MusicBrainz API Key", type: "password" })}

@@ -20,6 +20,11 @@ export type SettingsPayload = {
   envPasswordConfigured?: boolean;
   bootstrapAvailable?: boolean;
  };
+ apiAuth?: {
+  requireApiKey?: boolean;
+  hasApiKeys?: boolean;
+  unauthenticatedAllowed?: boolean;
+ };
  server?: Record<string, RuntimeEntry>;
 };
 
@@ -36,6 +41,25 @@ export type ProviderTestResult = {
  sampleAlbums?: Array<{ name: string; year?: number | null }>;
  error?: string;
  details?: Record<string, unknown>;
+};
+
+export type ProxyApiKey = {
+ id: string;
+ name: string;
+ quotaPerMinute: number;
+ usage: number;
+ createdAt?: string | null;
+ lastUsedAt?: string | null;
+};
+
+export type ProxyApiKeysPayload = {
+ keys: ProxyApiKey[];
+};
+
+export type CreatedProxyApiKey = {
+ id: string;
+ key: string;
+ message?: string;
 };
 
 export type SettingsField = {
