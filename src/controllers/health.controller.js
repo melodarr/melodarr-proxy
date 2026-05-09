@@ -33,16 +33,16 @@ function buildLivenessPayload () {
 }
 
 function getNetworkStatus () {
-  const mbz = metrics.providerStats.get('musicbrainz')
+  const networkSummary = buildNetworkHealthSummary()
+  const mbz = networkSummary && networkSummary.musicbrainz
+
   if (!mbz) return 'ok'
 
-  const successes = mbz.successes ?? mbz.success ?? 0
-  const total = mbz.total ?? mbz.requests ?? (successes + (mbz.failures ?? 0) + (mbz.timeouts ?? 0))
-  const successRate = total > 0 ? (successes / total) : 0
-  const ipv6Ok = (mbz.successRate ?? successRate) > 0
-  const timeouts = mbz.timeouts || 0
+  if (mbz.ok === false) {
+    return 'degraded'
+  }
 
-  if (!ipv6Ok && timeouts > 0) {
+  if (typeof mbz.state === 'string' && DEGRADED_UPSTREAM.has(mbz.state)) {
     return 'degraded'
   }
 
