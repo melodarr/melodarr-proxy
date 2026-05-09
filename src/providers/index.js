@@ -356,7 +356,9 @@ async function aggregateArtist (term) {
     // Priority bonus
     const pw = getPriorityWeight(candidate.imageSource)
     if (pw > 0) {
-      score += Math.floor(pw / 1000)
+      // Keep provider priority as a secondary signal so resolution, source, and HTTPS still matter.
+      const priorityBonus = Math.min(25, Math.floor(pw / 1000000) * 5)
+      score += priorityBonus
     }
 
     // Adaptive health multiplier
