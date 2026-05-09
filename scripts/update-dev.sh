@@ -49,11 +49,15 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-COMPOSE_PROXY_IMAGE="$(
-  docker compose config --format json 2>/dev/null \
-    | jq -r '.services.proxy.image // empty' \
-    || true
-)"
+if ! COMPOSE_CONFIG_JSON="$(docker compose config --format json 2>/dev/null)"; then
+  echo "[ERROR] Unable to read docker compose config for service detection"
+  exit 1
+fi
+
+if ! COMPOSE_PROXY_IMAGE="$(jq -r '.services.proxy.image // empty' <<<"$COMPOSE_CONFIG_JSON" 2>/dev/null)"; then
+  echo "[ERROR] Unable to parse docker compose config for proxy image"
+  exit 1
+fi
 
 if [[ -z "$COMPOSE_PROXY_IMAGE" ]]; then
   echo "[ERROR] docker compose service 'proxy' must use image: (build-only compose is unsupported by this updater)"
