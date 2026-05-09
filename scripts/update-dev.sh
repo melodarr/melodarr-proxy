@@ -17,15 +17,36 @@
 set -euo pipefail
 
 AUTO_APPROVE=false
-if [[ "${1:-}" == "--yes" ]]; then
-  AUTO_APPROVE=true
-elif [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  echo "Usage: scripts/update-dev.sh [--yes]"
-  exit 0
-elif [[ -n "${1:-}" ]]; then
-  echo "[ERROR] Unknown argument: $1"
-  exit 1
-fi
+TARGET_TAG=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes)
+      AUTO_APPROVE=true
+      shift
+      ;;
+    --tag)
+      if [[ -z "${2:-}" ]]; then
+        echo "[ERROR] --tag requires a value"
+        exit 1
+      fi
+      TARGET_TAG="$2"
+      shift 2
+      ;;
+    --help|-h)
+      echo "Usage: scripts/update-dev.sh [--yes] [--tag TAG]"
+      echo ""
+      echo "Options:"
+      echo "  --yes        Skip confirmation prompt"
+      echo "  --tag TAG    Use specific tag instead of auto-discovering latest dev tag"
+      exit 0
+      ;;
+    *)
+      echo "[ERROR] Unknown argument: $1"
+      exit 1
+      ;;
+  esac
+done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -88,22 +109,52 @@ echo "[INFO] Proxy container: $CONTAINER_NAME"
 echo "[INFO] Current version: $CURRENT_VERSION"
 echo "[INFO] Current image: $CURRENT_IMAGE"
 
-LATEST_TAG="$(
-  curl -s "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" \
-    | jq -r '.tags[]' \
-    | grep dev \
-    | sort -V \
-    | tail -n 1 \
-    || true
-)"
+if [[ -z "$TARGET_TAG" ]]; then
+  echo "[INFO] Auto-discovering latest dev tag via GitHub API..."
+  
+  GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  AUTH_HEADER=""
+  if [[ -n "$GH_TOKEN" ]]; then
+    AUTH_HEADER="Authorization: Bearer $GH_TOKEN"
+  elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    GH_TOKEN="$(gh auth token 2>/dev/null || true)"
+    if [[ -n "$GH_TOKEN" ]]; then
+      AUTH_HEADER="Authorization: Bearer $GH_TOKEN"
+    fi
+  fi
 
-if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
-  echo "[ERROR] Could not determine latest dev version"
-  exit 1
+  if [[ -n "$AUTH_HEADER" ]]; then
+    LATEST_TAG="$(
+      curl -sS -H "$AUTH_HEADER" \
+        "https://api.github.com/orgs/melodarr/packages/container/melodarr-proxy/versions?per_page=100" \
+        | jq -r '.[].metadata.container.tags[]' \
+        | grep dev \
+        | sort -V \
+        | tail -n 1 \
+        || true
+    )"
+  else
+    echo "[WARN] No GitHub token found (GH_TOKEN/GITHUB_TOKEN env or gh CLI); attempting unauthenticated registry query"
+    LATEST_TAG="$(
+      curl -sS "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" \
+        | jq -r '.tags[]' \
+        | grep dev \
+        | sort -V \
+        | tail -n 1 \
+        || true
+    )"
+  fi
+
+  if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
+    echo "[ERROR] Could not determine latest dev version. Use --tag to specify explicitly."
+    exit 1
+  fi
+  
+  TARGET_TAG="$LATEST_TAG"
 fi
 
-TARGET_IMAGE="$IMAGE_REPO:$LATEST_TAG"
-echo "[INFO] Latest dev tag: $LATEST_TAG"
+TARGET_IMAGE="$IMAGE_REPO:$TARGET_TAG"
+echo "[INFO] Target tag: $TARGET_TAG"
 echo "[INFO] Target image: $TARGET_IMAGE"
 
 if [[ "$AUTO_APPROVE" = false ]]; then
