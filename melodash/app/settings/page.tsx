@@ -411,9 +411,9 @@ export default function SettingsPage() {
  async function refreshAll() {
  setRefreshing(true);
  try {
-  const nextStatus = await mutateStatus();
-  const effectiveStatus = nextStatus ?? status;
-  if (effectiveStatus?.authenticated) {
+ const nextStatus = await mutateStatus();
+ const effectiveStatus = nextStatus ?? status;
+ if (effectiveStatus?.authenticated) {
  await mutateGlobal("/api/settings");
  } else {
  await mutateSettings(undefined, { revalidate: false });
