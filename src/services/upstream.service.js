@@ -310,22 +310,22 @@ class UpstreamService {
           status,
           retryAfterHeader
         })
-        if (decision.retryAfterMs) {
+        if (decision.retryAfterMs !== null) {
           applyCoolingOff(decision.retryAfterMs)
         } else if (status === 429 || status === 503) {
-          // If 429/503 but no Retry-After, apply the exponential backoff as global cooling off
-          applyCoolingOff(5000)
+          // If 429/503 but no Retry-After, apply the computed retry backoff as global cooling off.
+          applyCoolingOff(decision.delayMs)
         }
       } else if ((status === 429 || status === 503) && retryAfterHeader) {
         // Capture Retry-After even when we won't retry (e.g. final attempt),
         // so operators see what the server told us.
         decision.retryAfterMs = parseRetryAfter(retryAfterHeader)
-        if (decision.retryAfterMs) {
+        if (decision.retryAfterMs !== null) {
           applyCoolingOff(decision.retryAfterMs)
         }
       } else if (status === 429 || status === 503) {
-        // Final attempt with no Retry-After, use the default backoff max or retryBaseMs
-        applyCoolingOff(5000)
+        // Final attempt with no Retry-After, use the configured base backoff as cooling off.
+        applyCoolingOff(retryBaseMs)
       }
 
       upstreamBuffer.record({
