@@ -107,9 +107,24 @@ CONTAINER_NAME="$(docker inspect "$CONTAINER_ID" --format '{{.Name}}' 2>/dev/nul
 CURRENT_VERSION="$(docker exec "$CONTAINER_ID" node -e "console.log(process.env.APP_VERSION || 'unknown')" 2>/dev/null || echo "unknown")"
 CURRENT_IMAGE="$(docker inspect "$CONTAINER_ID" --format '{{.Config.Image}}' 2>/dev/null || echo "unknown")"
 
+# Extract compose project metadata from container labels
+COMPOSE_PROJECT="$(docker inspect "$CONTAINER_ID" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+COMPOSE_WORKING_DIR="$(docker inspect "$CONTAINER_ID" --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+COMPOSE_CONFIG_FILES="$(docker inspect "$CONTAINER_ID" --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null || true)"
+
 echo "[INFO] Proxy container: $CONTAINER_NAME"
 echo "[INFO] Current version: $CURRENT_VERSION"
 echo "[INFO] Current image: $CURRENT_IMAGE"
+
+if [[ -n "$COMPOSE_PROJECT" ]]; then
+  echo "[INFO] Compose project: $COMPOSE_PROJECT"
+fi
+if [[ -n "$COMPOSE_WORKING_DIR" ]]; then
+  echo "[INFO] Compose working dir: $COMPOSE_WORKING_DIR"
+fi
+if [[ -n "$COMPOSE_CONFIG_FILES" ]]; then
+  echo "[INFO] Compose config files: $COMPOSE_CONFIG_FILES"
+fi
 
 if [[ -z "$TARGET_TAG" ]]; then
   echo "[INFO] Auto-discovering latest dev tag via GitHub API..."
@@ -215,9 +230,27 @@ docker pull "$TARGET_IMAGE"
 echo "[INFO] Retagging image for compose proxy service: $COMPOSE_PROXY_IMAGE"
 docker tag "$TARGET_IMAGE" "$COMPOSE_PROXY_IMAGE"
 
+# Build docker compose command with project metadata from container labels
+COMPOSE_CMD="docker compose"
+if [[ -n "$COMPOSE_PROJECT" ]]; then
+  COMPOSE_CMD="$COMPOSE_CMD -p $COMPOSE_PROJECT"
+fi
+if [[ -n "$COMPOSE_CONFIG_FILES" ]]; then
+  # Split comma-separated config files and add -f flag for each
+  IFS=',' read -ra CONFIG_FILES <<< "$COMPOSE_CONFIG_FILES"
+  for config_file in "${CONFIG_FILES[@]}"; do
+    COMPOSE_CMD="$COMPOSE_CMD -f $config_file"
+  done
+fi
+
 echo "[INFO] Restarting with docker compose..."
-docker compose down
-docker compose up -d
+if [[ -n "$COMPOSE_WORKING_DIR" && -d "$COMPOSE_WORKING_DIR" ]]; then
+  echo "[INFO] Using compose working directory: $COMPOSE_WORKING_DIR"
+  cd "$COMPOSE_WORKING_DIR"
+fi
+
+eval "$COMPOSE_CMD down"
+eval "$COMPOSE_CMD up -d"
 
 echo "[INFO] Waiting for health..."
 for _ in {1..10}; do
