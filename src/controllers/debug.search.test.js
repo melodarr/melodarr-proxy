@@ -39,7 +39,7 @@ const heavyStubs = {
   './health.controller': { buildHealthPayload: () => ({ status: 'ok' }) },
   '../providers/custom.provider': { testCustomProvider: async () => ({}) },
   '../settings/store': { getConfigValue: (key) => key === 'cacheTtlSeconds' ? 7200 : null },
-  '../services/diagnose.service': { diagnoseMusicBrainz: async () => ({}) },
+  '../services/diagnose.service': { diagnoseMusicBrainz: async () => ({}), diagnoseGenericProvider: async () => ({}) },
   '../diagnostics/upstream-buffer': { query: () => ({ entries: [], filteredCount: 0, totalCount: 0, maxSize: 100 }) },
   '../utils/logger': { error () {}, warn () {}, info () {}, debug () {} }
 }

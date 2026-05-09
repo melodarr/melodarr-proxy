@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
+import { fetchWithFallback } from '@/lib/proxy'
 
 type UpstreamEntry = {
  ts: string
@@ -32,13 +33,66 @@ type ReadyResponse = {
  }
 }
 
+type NetworkProviderState = {
+ provider: string
+ policy: string
+ family: number
+ fallbackAllowed: boolean
+ state: string
+ ok: boolean
+ failedStep: string | null
+ checkedAt: string | null
+ lastSuccessAt: string | null
+ consecutiveFailures: number
+ dns?: {
+ aaaaAvailable: boolean
+ addresses: Array<{ address: string; family: number }>
+ errors: Record<string, string>
+ }
+ tcp?: { connected?: boolean; selectedAddress?: string | null; selectedFamily?: number | null } | null
+ tls?: { protocol?: string | null; authorizationError?: string | null } | null
+ http?: { status?: number | null; statusText?: string | null } | null
+ timingsMs?: { dns?: number | null; tcp?: number | null; tls?: number | null; http?: number | null; total?: number | null } | null
+ error?: { code?: string | null; message?: string | null } | null
+ userAgent?: {
+ valid: boolean
+ contactType: string | null
+ code: string | null
+ message: string | null
+ recommendation: string | null
+ } | null
+ recommendations: string[]
+}
+
+type NetworkResponse = {
+ status: string
+ checkedAt: string | null
+ providers: {
+ musicbrainz?: NetworkProviderState
+ }
+ summary: {
+ musicbrainz?: {
+ policy: string
+ family: number
+ fallbackAllowed: boolean
+ state: string
+ ok: boolean
+ failedStep: string | null
+ userAgentValid: boolean | null
+ lastCheckedAt: string | null
+ lastSuccessAt: string | null
+ consecutiveFailures: number
+ }
+ }
+}
+
 const AFFECTED_KEY = 'mb.affectedArtists.v1'
 const MAX_AFFECTED = 50
 
 const fetcher = async (url: string) => {
- const r = await fetch(url)
- if (!r.ok && r.status !== 503) throw new Error(`HTTP ${r.status}`)
- return r.json()
+ const r = await fetchWithFallback(url)
+  if (!r.ok && r.status !== 503) throw new Error(`HTTP ${r.status}`)
+  return r.json()
 }
 
 function summarize (entries: UpstreamEntry[]) {
@@ -91,6 +145,12 @@ export default function MBConnectivityPanel () {
  { refreshInterval: 5000 }
  )
 
+ const { data: network, error: networkErr, mutate: refreshNetwork } = useSWR<NetworkResponse>(
+ '/debug/network',
+ fetcher,
+ { refreshInterval: 15000 }
+ )
+
  const { data: ready, error: readyErr } = useSWR<ReadyResponse>(
  '/api/ready',
  fetcher,
@@ -102,6 +162,7 @@ export default function MBConnectivityPanel () {
  const [affected, setAffected] = useState<string[]>([])
  const [hydrated, setHydrated] = useState(false)
  const [showCleanup, setShowCleanup] = useState(false)
+ const [isRefreshingNetwork, setIsRefreshingNetwork] = useState(false)
 
  useEffect(() => {
  try {
@@ -142,6 +203,16 @@ export default function MBConnectivityPanel () {
  }
  }
 
+ const runNetworkRefresh = async () => {
+ setIsRefreshingNetwork(true)
+ try {
+ const refreshed = await fetcher('/debug/network?refresh=1')
+ await refreshNetwork(refreshed, { revalidate: false })
+ } finally {
+ setIsRefreshingNetwork(false)
+ }
+ }
+
  const readyUpstream = ready?.upstream ?? null
  const isHealthy = readyUpstream === 'healthy'
  const isNotApplicable = readyUpstream === 'not_applicable'
@@ -179,6 +250,7 @@ export default function MBConnectivityPanel () {
  }
 
  const stats = summarize(upstream.entries)
+ const mbNetwork = network?.providers.musicbrainz
  const consecutiveFailures = ready.upstreamDetail?.consecutiveFailures ?? 0
  const lastError = ready.upstreamDetail?.lastError
  const lastCheckedAt = ready.upstreamDetail?.lastCheckedAt
@@ -197,6 +269,16 @@ export default function MBConnectivityPanel () {
 
  const cleanupCommand =
  'pct exec 163 -- bash -lc "cd /opt/melodarr-proxy && LIDARR_API_KEY=YOUR_KEY ./scripts/cleanup-lidarr-artists.sh"'
+
+ const networkStateLabel = mbNetwork?.state ? mbNetwork.state.replace(/^MUSICBRAINZ_/, '').replace(/_/g, ' ') : 'UNKNOWN'
+ const networkStatusClass = mbNetwork?.ok
+ ? 'text-emerald-700 dark:text-emerald-400'
+ : mbNetwork
+ ? 'text-red-700 dark:text-red-400'
+ : 'text-muted'
+ const networkCheckedAt = mbNetwork?.checkedAt ? new Date(mbNetwork.checkedAt).toLocaleTimeString() : '—'
+ const networkAddress = mbNetwork?.dns?.addresses?.find((entry) => entry.family === 6)?.address ?? '—'
+ const userAgentStatus = mbNetwork?.userAgent
 
  return (
  <div className='rounded-xl border bg-card text-card-foreground shadow-sm p-6 flex flex-col gap-3'>
@@ -230,6 +312,94 @@ export default function MBConnectivityPanel () {
 
  <div className='text-xs text-muted'>
  ok: {stats.success} · tls: {stats.tls} · dns: {stats.dns} · tcp: {stats.tcp} · http: {stats.http}
+ </div>
+
+ <div className='border-t border-border/50 pt-3 mt-1 space-y-3'>
+ <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+ <div>
+ <div className='text-xs font-medium text-secondary'>Network diagnostics</div>
+ <div className={`text-sm font-semibold ${networkStatusClass}`}>{networkStateLabel}</div>
+ </div>
+ <button
+ type='button'
+ onClick={runNetworkRefresh}
+ disabled={isRefreshingNetwork}
+ className='text-xs px-3 py-1 rounded border border-border text-secondary hover:text-primary hover:bg-page disabled:opacity-60'
+ >
+ {isRefreshingNetwork ? 'Checking…' : 'Recheck'}
+ </button>
+ </div>
+
+ {networkErr && (
+ <div className='text-xs text-red-700 dark:text-red-400'>
+ Network diagnostics unavailable: {networkErr instanceof Error ? networkErr.message : 'unknown error'}
+ </div>
+ )}
+
+ {!network && !networkErr && (
+ <div className='text-xs text-muted'>Loading network diagnostics…</div>
+ )}
+
+ <div className='grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4'>
+ <div>
+ <div className='text-muted'>Policy</div>
+ <div className='font-medium'>{mbNetwork?.policy ?? 'ipv6_only'}</div>
+ </div>
+ <div>
+ <div className='text-muted'>Family</div>
+ <div className='font-medium'>IPv{mbNetwork?.family ?? 6}</div>
+ </div>
+ <div>
+ <div className='text-muted'>Fallback</div>
+ <div className='font-medium'>{mbNetwork?.fallbackAllowed ? 'Allowed' : 'Disabled'}</div>
+ </div>
+ <div>
+ <div className='text-muted'>Checked</div>
+ <div className='font-medium'>{networkCheckedAt}</div>
+ </div>
+ <div>
+ <div className='text-muted'>AAAA</div>
+ <div className='font-medium'>{mbNetwork ? (mbNetwork.dns?.aaaaAvailable ? 'OK' : 'Missing') : '—'}</div>
+ </div>
+ <div>
+ <div className='text-muted'>IPv6 address</div>
+ <div className='truncate font-medium' title={networkAddress}>{networkAddress}</div>
+ </div>
+ <div>
+ <div className='text-muted'>TCP</div>
+ <div className='font-medium'>{mbNetwork ? (mbNetwork.tcp?.connected ? 'OK' : 'Failed') : '—'}</div>
+ </div>
+ <div>
+ <div className='text-muted'>TLS</div>
+ <div className='font-medium'>{mbNetwork ? (mbNetwork.tls?.protocol ?? (mbNetwork.ok ? 'OK' : 'Failed')) : '—'}</div>
+ </div>
+ <div>
+ <div className='text-muted'>User-Agent</div>
+ <div className={`font-medium ${userAgentStatus && !userAgentStatus.valid ? 'text-red-700 dark:text-red-400' : ''}`}>
+ {userAgentStatus ? (userAgentStatus.valid ? 'OK' : 'Invalid contact') : '—'}
+ </div>
+ </div>
+ </div>
+
+ {userAgentStatus && !userAgentStatus.valid && (
+ <div className='text-xs text-red-700 dark:text-red-400'>
+ MusicBrainz identity: <code>{userAgentStatus.code ?? 'INVALID'}</code> — {userAgentStatus.message}
+ </div>
+ )}
+
+ {mbNetwork?.error?.message && (
+ <div className='text-xs text-red-700 dark:text-red-400'>
+ Network error: <code>{mbNetwork.error.code ?? '?'}</code> — {mbNetwork.error.message}
+ </div>
+ )}
+
+ {mbNetwork?.recommendations && mbNetwork.recommendations.length > 0 && !mbNetwork.ok && (
+ <ul className='space-y-1 text-xs text-secondary'>
+ {mbNetwork.recommendations.slice(0, 3).map((item) => (
+ <li key={item}>· {item}</li>
+ ))}
+ </ul>
+ )}
  </div>
 
  {lastError && (

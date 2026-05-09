@@ -170,7 +170,7 @@ check_lxc_ipv6_to_mb () {
   fi
   local code
   code=$(pct exec "$CTID" -- curl -sS -m 5 -6 -o /dev/null -w "%{http_code}" \
-    -A "test/1.0 (admin@example.com)" \
+    -A "test/1.0 (${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy})" \
     "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1" 2>&1) || true
   if [[ "$code" == "200" ]]; then
     return 0
@@ -189,7 +189,7 @@ check_container_ipv6_to_mb () {
   fi
   local code
   code=$(pct exec "$CTID" -- docker exec "$PROXY_CONTAINER" \
-    sh -c 'curl -sS -m 5 -6 -o /dev/null -w "%{http_code}" -A "test/1.0 (admin@example.com)" "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1"' 2>&1) || true
+    sh -c 'curl -sS -m 5 -6 -o /dev/null -w "%{http_code}" -A "test/1.0 (${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy})" "https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1"' 2>&1) || true
   if [[ "$code" == "200" ]]; then
     return 0
   fi
@@ -197,16 +197,24 @@ check_container_ipv6_to_mb () {
   return 1
 }
 
-check_docker_ipv6_enabled () {
+check_proxy_container_ipv6_network () {
   if [[ -z "$CTID" ]]; then
     FAIL_DETAIL="skipped (no CTID)"
     return 0
   fi
-  if pct exec "$CTID" -- bash -lc \
-    'docker network inspect bridge 2>/dev/null | grep -q "\"EnableIPv6\": true"' >/dev/null 2>&1; then
+  if pct exec "$CTID" -- env PROXY_CONTAINER="$PROXY_CONTAINER" bash -lc '
+    set -e
+    networks=$(docker inspect "$PROXY_CONTAINER" --format "{{range \$name, \$net := .NetworkSettings.Networks}}{{println \$name}}{{end}}" 2>/dev/null)
+    for network in $networks; do
+      if docker network inspect "$network" 2>/dev/null | grep -q "\"EnableIPv6\": true"; then
+        exit 0
+      fi
+    done
+    exit 1
+  ' >/dev/null 2>&1; then
     return 0
   fi
-  FAIL_DETAIL='docker bridge network has no IPv6 — see hints below'
+  FAIL_DETAIL="proxy container is not attached to an IPv6-enabled Docker network"
   return 1
 }
 
@@ -228,7 +236,7 @@ main () {
   run_test "proxy reports redis connected"                   check_redis_connected
   run_test "melodash serves HTML on its host port"           check_melodash_html
   run_test "LXC can reach MusicBrainz over IPv6"             check_lxc_ipv6_to_mb
-  run_test "Docker bridge has IPv6 enabled"                  check_docker_ipv6_enabled
+  run_test "proxy container Docker network has IPv6 enabled" check_proxy_container_ipv6_network
   run_test "proxy CONTAINER can reach MusicBrainz over IPv6" check_container_ipv6_to_mb
   run_test "proxy upstream resolves to healthy"              check_upstream_healthy
   run_test "end-to-end /api/search returns results"          check_search_e2e
@@ -244,9 +252,8 @@ main () {
   printf '    * "container IPv6→MB" fail + "LXC IPv6→MB" pass = Docker IPv6 missing.\n'
   printf '      One-time fix on the LXC:\n'
   printf '        cat > /etc/docker/daemon.json <<JSON\n'
-  printf '        { "ipv6": true, "fixed-cidr-v6": "fd00:dead:beef::/64", "ip6tables": true, "experimental": true }\n'
-  printf '        JSON\n'
-  printf '        systemctl restart docker\n'
+  printf '        cd /opt/melodarr-proxy/src-branch-build\n'
+  printf '        ./scripts/ensure-docker-ipv6.sh\n'
   printf '        cd /opt/melodarr-proxy && docker compose up -d --force-recreate\n'
   printf '    * "LXC IPv6→MB" fail = the LXC itself has no IPv6 default route.\n'
   printf '    * upstream unreachable but search returns ECONNRESET = network layer\n'

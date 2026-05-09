@@ -25,7 +25,6 @@ function loadSafeCall ({ shouldUseValue = true, timeoutMs = 8000 } = {}) {
       getConfigValue: (key) => key === 'upstreamTimeoutMs' ? timeoutMs : undefined
     }
   }
-
   const { safeProviderCall } = require('./safeProviderCall')
   return { safeProviderCall, healthCalls, metricsCalls }
 }

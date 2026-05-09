@@ -1,12 +1,14 @@
 const cache = require('./cache')
 const tracer = require('./tracer')
 const upstreamMonitor = require('./monitors/upstream.monitor')
+const networkDiagnostics = require('./infrastructure/network/network-diagnostics.service')
 
 const ALERTS_KEY = 'system_alerts'
 const PERFORMANCE_VIEW_KEY = 'query_performance_view'
 
 // Run every minute
 const JOB_INTERVAL_MS = 60000
+const NETWORK_DIAGNOSTICS_INTERVAL_MS = networkDiagnostics.DEFAULT_REFRESH_INTERVAL_MS
 
 async function updateMaterializedViews () {
   if (!cache.isRedisHealthy || !cache.redis) return
@@ -91,6 +93,10 @@ function startJobs () {
     runAlertsEngine()
   }, JOB_INTERVAL_MS)
 
+  const networkInterval = setInterval(() => {
+    networkDiagnostics.refreshNetworkDiagnostics().catch(() => {})
+  }, NETWORK_DIAGNOSTICS_INTERVAL_MS)
+
   const heartbeatInterval = setInterval(heartbeat, 5000)
 
   // run once on startup
@@ -98,11 +104,12 @@ function startJobs () {
     updateMaterializedViews()
     runAlertsEngine()
     heartbeat()
+    networkDiagnostics.refreshNetworkDiagnostics().catch(() => {})
   }, 1000)
 
   upstreamMonitor.start()
 
-  for (const timer of [viewInterval, heartbeatInterval, startupTimer]) {
+  for (const timer of [viewInterval, networkInterval, heartbeatInterval, startupTimer]) {
     if (timer.unref) {
       timer.unref()
     }

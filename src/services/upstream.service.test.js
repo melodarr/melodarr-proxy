@@ -73,9 +73,10 @@ function setupMocks () {
 
 test('Upstream Service', async (t) => {
   await t.test('probe - returns healthy on 200', async () => {
-    const { upstreamService } = setupMocks()
+    const { upstreamService, axiosRequests } = setupMocks()
     const result = await upstreamService.probe()
     assert.strictEqual(result.status, 'healthy')
+    assert.strictEqual(axiosRequests[0].options.httpsAgent.options.family, 6)
   })
 
   await t.test('probe - returns rate_limited on 429', async () => {
@@ -154,10 +155,11 @@ test('Upstream Service', async (t) => {
   })
 
   await t.test('musicBrainzGet - records ring entry on success', async () => {
-    const { upstreamService, upstreamBuffer } = setupMocks()
+    const { upstreamService, upstreamBuffer, axiosRequests } = setupMocks()
     await upstreamService.musicBrainzGet('/ok-success')
     const { entries } = upstreamBuffer.query({ provider: 'musicbrainz' })
     assert.strictEqual(entries.length, 1)
+    assert.strictEqual(axiosRequests[0].options.httpsAgent.options.family, 6)
     assert.strictEqual(entries[0].provider, 'musicbrainz')
     assert.strictEqual(entries[0].path, '/ok-success')
     assert.strictEqual(entries[0].attempt, 1)

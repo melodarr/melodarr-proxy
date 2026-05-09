@@ -1,6 +1,7 @@
 const axios = require('axios')
-const { httpsAgent } = require('./http')
+const { getProviderHttpsAgent } = require('./http')
 const { getConfigValue } = require('../settings/store')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 function normalizePath (path) {
   if (!path) return ''
@@ -148,12 +149,12 @@ async function testCustomProvider (body = {}) {
   }
 
   const url = buildUrl({ ...config, query: body.query || 'Radiohead' })
-  const response = await axios.get(url, {
+  const response = await enqueueProviderRequest('custom', () => axios.get(url, {
     headers: buildHeaders(config),
     params: buildParams(config),
-    httpsAgent,
+    httpsAgent: getProviderHttpsAgent(config.ipFamily || getConfigValue('providerIpFamily')),
     timeout: getConfigValue('upstreamTimeoutMs') || 10000
-  })
+  }))
   const raw = response.data
   const result = mapCustomResponse(raw, config.mapping)
 
@@ -172,12 +173,12 @@ function createCustomProvider (config) {
     name: config.id,
     searchArtist: async (query) => {
       const url = buildUrl({ ...config, query })
-      const response = await axios.get(url, {
+      const response = await enqueueProviderRequest(config.id || 'custom', () => axios.get(url, {
         headers: buildHeaders(config),
         params: buildParams(config),
-        httpsAgent,
+        httpsAgent: getProviderHttpsAgent(config.ipFamily || getConfigValue('providerIpFamily')),
         timeout: getConfigValue('upstreamTimeoutMs') || 10000
-      })
+      }))
       const result = mapCustomResponse(response.data, config.mapping)
       if (result.errors && result.errors.length > 0) {
         throw new Error(`Custom provider mapping failed: ${result.errors.map(e => e.message).join(', ')}`)

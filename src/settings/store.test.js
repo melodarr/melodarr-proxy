@@ -69,6 +69,79 @@ test('Store Module', async (t) => {
     assert.strictEqual(value, '0.3.0') // fallback
   })
 
+  await t.test('MusicBrainz IP family is fixed to IPv6 only', () => {
+    process.env.MUSICBRAINZ_IP_FAMILY = '4'
+    const result = store.updateRuntimeConfig({ musicbrainzIpFamily: 'auto' })
+
+    const config = store.getRuntimeConfig()
+    assert.strictEqual(result.applied.musicbrainzIpFamily, undefined)
+    assert.strictEqual(result.skipped.musicbrainzIpFamily, 'Fixed setting')
+    assert.strictEqual(config.musicbrainzIpFamily.value, '6')
+    assert.strictEqual(config.musicbrainzIpFamily.source, 'fixed')
+    assert.strictEqual(store.getConfigValue('musicbrainzIpFamily'), '6')
+
+    delete process.env.MUSICBRAINZ_IP_FAMILY
+  })
+
+  await t.test('provider IP family settings only accept auto, 4, or 6', async () => {
+    const invalid = store.updateRuntimeConfig({ itunesIpFamily: 'broken' })
+    assert.strictEqual(invalid.applied.itunesIpFamily, undefined)
+    assert.match(invalid.skipped.itunesIpFamily, /auto, 4, 6/)
+
+    const valid = store.updateRuntimeConfig({ itunesIpFamily: '6', providerIpFamily: '4' })
+    await store.flushSettingsWrites()
+    assert.deepStrictEqual(valid.applied, { itunesIpFamily: '6', providerIpFamily: '4' })
+    assert.strictEqual(store.getConfigValue('itunesIpFamily'), '6')
+    assert.strictEqual(store.getConfigValue('providerIpFamily'), '4')
+
+    store.updateRuntimeConfig({ itunesIpFamily: null, providerIpFamily: null })
+    await store.flushSettingsWrites()
+  })
+
+  await t.test('provider request intervals have a default and per-provider overrides', async () => {
+    const result = store.updateRuntimeConfig({
+      providerMinRequestIntervalMs: '600',
+      itunesMinRequestIntervalMs: '150',
+      lastfmMinRequestIntervalMs: '250',
+      discogsMinRequestIntervalMs: '1250',
+      theAudioDbMinRequestIntervalMs: '900',
+      customProviderMinRequestIntervalMs: '700'
+    })
+    await store.flushSettingsWrites()
+
+    assert.deepStrictEqual(result.skipped, {})
+    assert.strictEqual(store.getConfigValue('providerMinRequestIntervalMs'), 600)
+    assert.strictEqual(store.getConfigValue('itunesMinRequestIntervalMs'), 150)
+    assert.strictEqual(store.getConfigValue('lastfmMinRequestIntervalMs'), 250)
+    assert.strictEqual(store.getConfigValue('discogsMinRequestIntervalMs'), 1250)
+    assert.strictEqual(store.getConfigValue('theAudioDbMinRequestIntervalMs'), 900)
+    assert.strictEqual(store.getConfigValue('customProviderMinRequestIntervalMs'), 700)
+
+    store.updateRuntimeConfig({
+      providerMinRequestIntervalMs: null,
+      itunesMinRequestIntervalMs: null,
+      lastfmMinRequestIntervalMs: null,
+      discogsMinRequestIntervalMs: null,
+      theAudioDbMinRequestIntervalMs: null,
+      customProviderMinRequestIntervalMs: null
+    })
+    await store.flushSettingsWrites()
+  })
+
+  await t.test('provider request intervals accept 0ms overrides', async () => {
+    const result = store.updateRuntimeConfig({
+      minRequestIntervalMs: 0,
+      providerMinRequestIntervalMs: 0,
+      itunesMinRequestIntervalMs: 0
+    })
+    await store.flushSettingsWrites()
+
+    assert.deepStrictEqual(result.skipped, {})
+    assert.strictEqual(store.getConfigValue('minRequestIntervalMs'), 0)
+    assert.strictEqual(store.getConfigValue('providerMinRequestIntervalMs'), 0)
+    assert.strictEqual(store.getConfigValue('itunesMinRequestIntervalMs'), 0)
+  })
+
   await t.test('getSessionSecret', () => {
     // Should fallback to empty or generated if not set initially
     assert.strictEqual(typeof store.getSessionSecret(), 'string')
@@ -393,4 +466,32 @@ test('settings rollback rejects malformed, missing, and invalid stored versions'
     fresh.store.rollbackSettings(badId),
     /Unknown setting key: definitelyNotASetting/
   )
+})
+
+test('settings rollback accepts legacy fixed-key overrides and restores canonical fixed value', async (t) => {
+  const fresh = loadFreshStore()
+  t.after(fresh.cleanup)
+
+  fresh.store.updateRuntimeConfig({ appVersion: 'safe-before-legacy-fixed' })
+  await fresh.store.flushSettingsWrites()
+
+  const badFixedId = '1700000000002-1234567890abcdee'
+  const versionsDir = path.join(fresh.dir, 'settings.versions')
+  fs.mkdirSync(versionsDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(versionsDir, `${badFixedId}.json`),
+    JSON.stringify({ runtime: { musicbrainzIpFamily: '4' } })
+  )
+  fs.writeFileSync(
+    path.join(versionsDir, 'index.json'),
+    JSON.stringify({
+      current: badFixedId,
+      lastKnownGood: badFixedId,
+      versions: [{ id: badFixedId, timestamp: new Date().toISOString(), hash: 'x', size: 1, reason: 'test', actor: 'test' }]
+    })
+  )
+
+  const rollback = await fresh.store.rollbackSettings(badFixedId)
+  assert.equal(rollback.ok, true)
+  assert.strictEqual(fresh.store.getConfigValue('musicbrainzIpFamily'), '6')
 })

@@ -1,11 +1,7 @@
 const axios = require('axios')
-const https = require('https')
 const { getConfigValue } = require('../settings/store')
-const { pickLargestImage } = require('./http')
-
-const httpsAgent = new https.Agent({
-  keepAlive: true
-})
+const { pickLargestImage, getProviderHttpsAgent, getProviderUserAgent } = require('./http')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 class LastFmProvider {
   constructor () {
@@ -20,17 +16,20 @@ class LastFmProvider {
 
     try {
       const [infoResponse, albumsResponse] = await Promise.allSettled([
-        axios.get('https://ws.audioscrobbler.com/2.0/', {
+        enqueueProviderRequest('lastfm', () => axios.get('https://ws.audioscrobbler.com/2.0/', {
           params: {
             method: 'artist.getinfo',
             artist: term,
             api_key: apiKey,
             format: 'json'
           },
-          httpsAgent,
+          headers: {
+            'User-Agent': getProviderUserAgent()
+          },
+          httpsAgent: getProviderHttpsAgent(getConfigValue('lastfmIpFamily') || getConfigValue('providerIpFamily')),
           timeout: getConfigValue('upstreamTimeoutMs') || 10000
-        }),
-        axios.get('https://ws.audioscrobbler.com/2.0/', {
+        })),
+        enqueueProviderRequest('lastfm', () => axios.get('https://ws.audioscrobbler.com/2.0/', {
           params: {
             method: 'artist.gettopalbums',
             artist: term,
@@ -38,9 +37,12 @@ class LastFmProvider {
             format: 'json',
             limit: 50
           },
-          httpsAgent,
+          headers: {
+            'User-Agent': getProviderUserAgent()
+          },
+          httpsAgent: getProviderHttpsAgent(getConfigValue('lastfmIpFamily') || getConfigValue('providerIpFamily')),
           timeout: getConfigValue('upstreamTimeoutMs') || 10000
-        })
+        }))
       ])
 
       if (albumsResponse.status === 'rejected') {

@@ -8,18 +8,19 @@ const { getConfigValue } = require('../settings/store')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { nextRetryDelay, parseRetryAfter } = require('./retry-policy')
 const requestContext = require('../utils/request-context')
+const { buildMusicBrainzUserAgent } = require('../utils/musicbrainz-user-agent')
 
+const MUSICBRAINZ_REQUIRED_FAMILY = 6
 const musicBrainzAgents = new Map()
 
 function getMusicBrainzHttpsAgent () {
-  const configuredFamily = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-  const family = configuredFamily === '6' ? 6 : configuredFamily === '4' ? 4 : undefined
-  const key = family || 'auto'
+  const family = MUSICBRAINZ_REQUIRED_FAMILY
+  const key = String(family)
 
   if (!musicBrainzAgents.has(key)) {
     musicBrainzAgents.set(key, new https.Agent({
       keepAlive: true,
-      ...(family ? { family } : {})
+      family
     }))
   }
 
@@ -46,8 +47,7 @@ async function processQueue () {
 
   try {
     const minInterval = getConfiguredMinRequestIntervalMs()
-    // Arbitrary concurrency limit of 3 for upstream
-    const maxConcurrency = 3
+    const maxConcurrency = 1
 
     while (waitingQueue.length > 0 && activeRequests < maxConcurrency) {
       const now = Date.now()
@@ -122,7 +122,7 @@ class UpstreamService {
     const appName = getConfigValue('appName')
     const appVersion = getConfigValue('appVersion')
     const appContact = getConfigValue('appContact')
-    return `${appName}/${appVersion} (${appContact})`
+    return buildMusicBrainzUserAgent({ appName, appVersion, appContact })
   }
 
   getMusicBrainzHeaders () {
@@ -142,11 +142,13 @@ class UpstreamService {
     const timeout = Math.min(configured, 5000)
 
     try {
-      const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
-        headers: this.getMusicBrainzHeaders(),
-        httpsAgent: getMusicBrainzHttpsAgent(),
-        timeout,
-        validateStatus: () => true
+      const res = await enqueueRequest(async () => {
+        return await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
+          headers: this.getMusicBrainzHeaders(),
+          httpsAgent: getMusicBrainzHttpsAgent(),
+          timeout,
+          validateStatus: () => true
+        })
       })
 
       if (res.status === 200) {
@@ -206,8 +208,7 @@ class UpstreamService {
   async musicBrainzGet (path, params) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
     const timeout = getConfigValue('upstreamTimeoutMs')
-    const ipFamilyConfig = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-    const family = ipFamilyConfig === '4' ? 4 : ipFamilyConfig === '6' ? 6 : undefined
+    const family = MUSICBRAINZ_REQUIRED_FAMILY
     const maxAttempts = Math.max(1, Number(getConfigValue('upstreamMaxAttempts')) || 3)
     const retryBaseMs = Math.max(1, Number(getConfigValue('upstreamRetryBaseMs')) || 500)
     const retryMaxMs = Math.max(retryBaseMs, Number(getConfigValue('upstreamRetryMaxMs')) || 30000)

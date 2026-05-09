@@ -6,6 +6,8 @@ function makeRes () {
   return {
     statusCode: 200,
     body: undefined,
+    headers: {},
+    setHeader (name, value) { this.headers[name] = value; return this },
     status (code) { this.statusCode = code; return this },
     json (body) { this.body = body; return this }
   }
@@ -41,6 +43,7 @@ test('rateLimit blocks with 429 once limit is reached', () => {
 
   assert.equal(nextCalled, false)
   assert.equal(res.statusCode, 429)
+  assert.ok(Number(res.headers['Retry-After']) > 0)
 })
 
 test('rateLimit response includes retryAfter field', () => {

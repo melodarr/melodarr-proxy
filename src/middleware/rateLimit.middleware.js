@@ -46,9 +46,11 @@ const rateLimit = (options = {}) => {
 
     if (timestamps.length >= max) {
       logger.warn('Rate limit exceeded', { ip, path: req.path })
+      const retryAfterSeconds = Math.ceil((timestamps[0] + windowMs - now) / 1000)
+      res.setHeader('Retry-After', retryAfterSeconds)
       return res.status(429).json({
         error: message,
-        retryAfter: Math.ceil((timestamps[0] + windowMs - now) / 1000)
+        retryAfter: retryAfterSeconds
       })
     }
 

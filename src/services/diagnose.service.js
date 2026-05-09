@@ -3,6 +3,11 @@ const net = require('net')
 const https = require('https')
 const { URL } = require('url')
 const { getConfigValue } = require('../settings/store')
+const { getProviderTransport } = require('../infrastructure/network/provider-registry')
+const {
+  buildMusicBrainzUserAgent,
+  musicBrainzUserAgentStatus
+} = require('../utils/musicbrainz-user-agent')
 
 // MusicBrainz and most well-behaved upstreams expose rate-limit info via these
 // headers. We surface them verbatim so operators can see exactly what the
@@ -39,18 +44,47 @@ function getUserAgent () {
   const appName = getConfigValue('appName')
   const appVersion = getConfigValue('appVersion')
   const appContact = getConfigValue('appContact')
-  return `${appName}/${appVersion} (${appContact})`
+  return buildMusicBrainzUserAgent({ appName, appVersion, appContact })
 }
 
-function resolveFamily () {
-  const configured = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-  if (configured === '4') return 4
-  if (configured === '6') return 6
-  return undefined
+function getMusicBrainzUserAgentStatus () {
+  const appName = getConfigValue('appName')
+  const appVersion = getConfigValue('appVersion')
+  const appContact = getConfigValue('appContact')
+  return musicBrainzUserAgentStatus({ appName, appVersion, appContact })
 }
 
-function familyLabel (family) {
-  return family === 4 || family === 6 ? String(family) : 'auto'
+function getGenericProviderIpFamily (providerName, fallbackFamily = 'auto') {
+  const keyByProvider = {
+    itunes: 'itunesIpFamily',
+    theaudiodb: 'theAudioDbIpFamily',
+    discogs: 'discogsIpFamily',
+    lastfm: 'lastfmIpFamily'
+  }
+  const provider = String(providerName || '').trim().toLowerCase()
+  const configured = getConfigValue(keyByProvider[provider]) || getConfigValue('providerIpFamily') || fallbackFamily
+  const normalized = String(configured || 'auto').trim().toLowerCase()
+  if (normalized === '4') return 4
+  if (normalized === '6') return 6
+  return 'auto'
+}
+
+function appendMusicBrainzIdentityWarning (report, userAgent) {
+  if (!userAgent || userAgent.valid) return report
+
+  const diagnosis = {
+    ...(report.diagnosis || {}),
+    recommendations: Array.from(new Set([
+      ...(report.diagnosis?.recommendations || []),
+      userAgent.recommendation || 'Set APP_CONTACT to a real email address.'
+    ]))
+  }
+
+  return {
+    ...report,
+    userAgent,
+    diagnosis
+  }
 }
 
 async function resolveAddresses (hostname) {
@@ -111,7 +145,7 @@ function errorDetails (err, fallback = {}) {
   }
 }
 
-function summarizeFailure ({ failedStep, error, selectedFamily, configuredFamily }) {
+function summarizeFailure ({ failedStep, error, selectedFamily }) {
   if (!failedStep) {
     return {
       summary: 'MusicBrainz responded successfully.',
@@ -134,10 +168,10 @@ function summarizeFailure ({ failedStep, error, selectedFamily, configuredFamily
   }
 
   if (failedStep === 'tcp') {
-    const familyHint = selectedFamily ? `IPv${selectedFamily}` : configuredFamily && configuredFamily !== 'auto' ? `IPv${configuredFamily}` : 'the selected IP family'
+    const familyHint = selectedFamily ? `IPv${selectedFamily}` : 'IPv6'
     const recommendations = [
       `Check outbound TCP/443 routing for ${familyHint} from the proxy container.`,
-      'Run the report with auto, IPv4, and IPv6 results side by side and set MUSICBRAINZ_IP_FAMILY to the working family.'
+      'MusicBrainz is IPv6-only for this proxy; do not attempt IPv4 fallback.'
     ]
 
     if (code === 'ENETUNREACH' || code === 'EHOSTUNREACH') {
@@ -156,9 +190,9 @@ function summarizeFailure ({ failedStep, error, selectedFamily, configuredFamily
       summary: `TCP connected, but TLS did not complete (${code}).`,
       likelyCause: 'The connection is being reset or interrupted during the TLS handshake.',
       recommendations: [
-        'Compare IPv4 and IPv6 results; TLS resets on both families often point to upstream/network filtering or middlebox behavior.',
-        'Check whether another host on the same Docker/LXC network can complete `curl -v https://musicbrainz.org/`.',
-        'If only one IP family fails, pin MUSICBRAINZ_IP_FAMILY to the working family.'
+        'Check whether another host on the same Docker/LXC network can complete `curl -6 -v https://musicbrainz.org/`.',
+        'Compare Proxmox host, LXC, and proxy container IPv6 behavior.',
+        'Check MTU, PMTUD, firewall inspection, and upstream reset behavior on the IPv6 path.'
       ]
     }
   }
@@ -188,6 +222,77 @@ function summarizeFailure ({ failedStep, error, selectedFamily, configuredFamily
     summary: `MusicBrainz probe failed at ${failedStep}.`,
     likelyCause: 'Unknown diagnostic state.',
     recommendations: ['Inspect the raw error object and recent /debug/upstream entries.']
+  }
+}
+
+function summarizeGenericFailure ({ provider, failedStep, error, selectedFamily }) {
+  const providerLabel = provider || 'provider'
+  if (!failedStep) {
+    return {
+      summary: `${providerLabel} responded successfully.`,
+      likelyCause: null,
+      recommendations: []
+    }
+  }
+
+  const code = error?.code || 'UNKNOWN'
+  const familyHint = selectedFamily ? `IPv${selectedFamily}` : 'the selected network family'
+
+  if (failedStep === 'dns') {
+    return {
+      summary: `DNS resolution failed before connecting to ${providerLabel}.`,
+      likelyCause: 'The runtime cannot resolve the provider host from its current DNS configuration.',
+      recommendations: [
+        'Check container/LXC DNS servers and outbound DNS policy.',
+        'Compare host DNS resolution with container DNS resolution.'
+      ]
+    }
+  }
+
+  if (failedStep === 'tcp') {
+    return {
+      summary: `TCP connection to ${providerLabel} failed before TLS completed (${code}).`,
+      likelyCause: `The selected address is unreachable or blocked over ${familyHint}.`,
+      recommendations: [
+        `Check outbound TCP/443 routing for ${familyHint} from the proxy container.`,
+        'Verify firewall, bridge, Docker network, and LXC egress rules.'
+      ]
+    }
+  }
+
+  if (failedStep === 'tls') {
+    return {
+      summary: `TCP connected to ${providerLabel}, but TLS did not complete (${code}).`,
+      likelyCause: 'The connection is being reset or interrupted during the TLS handshake.',
+      recommendations: [
+        'Check TLS inspection, CA configuration, MTU/PMTUD, and provider-side resets.',
+        'Compare curl behavior from the Proxmox host, LXC, and proxy container.'
+      ]
+    }
+  }
+
+  if (failedStep === 'http') {
+    return {
+      summary: `${providerLabel} returned an HTTP error (${code}).`,
+      likelyCause: 'The network path worked, but the provider rejected or rate-limited the request.',
+      recommendations: [
+        'Inspect HTTP status, authentication settings, provider quota, and rate-limit headers.'
+      ]
+    }
+  }
+
+  if (failedStep === 'parse') {
+    return {
+      summary: `${providerLabel} returned HTTP 2xx, but the body was not valid JSON.`,
+      likelyCause: 'The upstream response body is not the expected JSON payload.',
+      recommendations: ['Inspect content-type, body byte count, and response headers.']
+    }
+  }
+
+  return {
+    summary: `${providerLabel} probe failed at ${failedStep}.`,
+    likelyCause: 'Unknown diagnostic state.',
+    recommendations: ['Inspect the raw error object and recent provider metrics.']
   }
 }
 
@@ -301,7 +406,7 @@ function performRequest ({ url, headers, family, timeout }) {
   })
 }
 
-function buildProbeReport ({ label, configuredIpFamily, target, dnsBlock, result }) {
+function buildProbeReport ({ label, configuredIpFamily, target, dnsBlock, result, provider = 'musicbrainz', summarize = summarizeFailure }) {
   const t = timings(result.phaseAt)
   const failedStep = classifyFailedStep(result)
   const ok = !failedStep
@@ -343,7 +448,7 @@ function buildProbeReport ({ label, configuredIpFamily, target, dnsBlock, result
     return {
       ...common,
       error,
-      diagnosis: summarizeFailure({ failedStep, error, selectedFamily: result.selectedFamily, configuredFamily: configuredIpFamily }),
+      diagnosis: summarize({ provider, failedStep, error, selectedFamily: result.selectedFamily, configuredFamily: configuredIpFamily }),
       http: {
         status: result.httpStatus,
         statusText: result.httpStatusText,
@@ -368,20 +473,27 @@ function buildProbeReport ({ label, configuredIpFamily, target, dnsBlock, result
   return {
     ...common,
     error,
-    diagnosis: summarizeFailure({ failedStep, error, selectedFamily: result.selectedFamily, configuredFamily: configuredIpFamily })
+    diagnosis: summarize({ provider, failedStep, error, selectedFamily: result.selectedFamily, configuredFamily: configuredIpFamily })
   }
 }
 
 async function diagnoseMusicBrainz () {
   const baseUrl = getConfigValue('musicbrainzBaseUrl')
   const timeout = Math.min(getConfigValue('upstreamTimeoutMs') || 8000, 5000)
-  const family = resolveFamily()
-  const ipFamilyConfig = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
+  const family = 6
+  const ipFamilyConfig = '6'
   const startedAt = Date.now()
 
   const url = new URL(`${baseUrl}/artist/?query=test&fmt=json&limit=1`)
-  const target = { url: url.toString(), hostname: url.hostname, configuredIpFamily: ipFamilyConfig }
+  const target = {
+    url: url.toString(),
+    hostname: url.hostname,
+    configuredIpFamily: ipFamilyConfig,
+    policy: 'ipv6_only',
+    fallbackAllowed: false
+  }
 
+  const userAgent = getMusicBrainzUserAgentStatus()
   const headers = { 'User-Agent': getUserAgent() }
   const apiKey = getConfigValue('musicbrainzApiKey')
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
@@ -390,15 +502,130 @@ async function diagnoseMusicBrainz () {
   try {
     resolved = await resolveAddresses(url.hostname)
   } catch (err) {
-    return {
+    return appendMusicBrainzIdentityWarning({
       provider: 'musicbrainz',
       ok: false,
       failedStep: 'dns',
+      userAgent,
       error: errorDetails(err, { code: 'EDNS', message: err.message, hostname: url.hostname }),
       diagnosis: summarizeFailure({ failedStep: 'dns', error: errorDetails(err, { code: 'EDNS', message: err.message }), configuredFamily: ipFamilyConfig }),
       target,
       dns: { addresses: [], errors: { all: err.message } },
       timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt }
+    }, userAgent)
+  }
+
+  const dnsAddresses = [
+    ...resolved.v4.map((a) => ({ address: a, family: 4 })),
+    ...resolved.v6.map((a) => ({ address: a, family: 6 }))
+  ]
+
+  if (dnsAddresses.length === 0 || resolved.v6.length === 0) {
+    const message = dnsAddresses.length === 0 ? 'No A or AAAA records resolved' : 'No AAAA records resolved for MusicBrainz IPv6-only policy'
+    const code = dnsAddresses.length === 0 ? 'ENOTFOUND' : 'ENODATA'
+    return appendMusicBrainzIdentityWarning({
+      provider: 'musicbrainz',
+      ok: false,
+      failedStep: 'dns',
+      userAgent,
+      error: errorDetails(null, { code, message, hostname: url.hostname }),
+      diagnosis: summarizeFailure({ failedStep: 'dns', error: { code }, configuredFamily: ipFamilyConfig }),
+      target,
+      dns: { addresses: dnsAddresses, configuredFamily: ipFamilyConfig, errors: resolved.errors },
+      timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt },
+      checkedAt: new Date().toISOString(),
+      probes: []
+    }, userAgent)
+  }
+
+  const dnsBlock = {
+    addresses: dnsAddresses,
+    configuredFamily: ipFamilyConfig,
+    errors: resolved.errors
+  }
+
+  const probeDefinitions = [{ label: '6', family }]
+
+  const reports = await Promise.all(probeDefinitions.map(async (probe) => {
+    // Retry the probe up to 3 times for transient TLS failures (ECONNRESET).
+    // Docker Desktop's IPv6 path through the Linux VM can intermittently drop
+    // TLS handshake packets due to MTU/PMTUD issues; a single failure is not
+    // conclusive. The retry is diagnostic-only and does not affect the hot path.
+    const maxProbeAttempts = 3
+    let lastResult
+    for (let attempt = 1; attempt <= maxProbeAttempts; attempt++) {
+      lastResult = await performRequest({ url, headers, family: probe.family, timeout })
+      const step = classifyFailedStep(lastResult)
+      if (!step || step === 'http' || step === 'parse') break // success or non-transient
+      if (attempt < maxProbeAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
+      }
+    }
+    return appendMusicBrainzIdentityWarning(buildProbeReport({
+      label: probe.label,
+      configuredIpFamily: ipFamilyConfig,
+      target: { ...target, probeFamily: probe.label },
+      dnsBlock,
+      result: lastResult
+    }), userAgent)
+  }))
+
+  const primary = reports[0]
+
+  return {
+    ...primary,
+    userAgent,
+    provider: 'musicbrainz',
+    checkedAt: new Date().toISOString(),
+    probes: reports
+  }
+}
+
+async function diagnoseGenericProvider (providerName) {
+  const config = getProviderTransport(providerName)
+  if (!config || config.provider === 'musicbrainz') {
+    const provider = String(providerName || '').trim().toLowerCase()
+    const supported = ['itunes', 'theaudiodb', 'discogs', 'lastfm'].join(', ')
+    return {
+      provider,
+      ok: false,
+      failedStep: 'unsupported',
+      error: {
+        code: 'UNSUPPORTED_PROVIDER',
+        message: `No generic diagnose pipeline for provider: ${provider}. Supported generic providers: ${supported}.`
+      }
+    }
+  }
+
+  const timeout = Math.min(getConfigValue('upstreamTimeoutMs') || 8000, 5000)
+  const startedAt = Date.now()
+  const url = new URL(config.url)
+  const familyPolicy = getGenericProviderIpFamily(config.provider, config.requiredFamily)
+  const family = familyPolicy === 6 || familyPolicy === 4 ? familyPolicy : undefined
+  const configuredIpFamily = family ? String(family) : 'auto'
+  const target = {
+    url: url.toString(),
+    hostname: url.hostname,
+    configuredIpFamily,
+    policy: config.policy || 'auto',
+    fallbackAllowed: config.fallbackAllowed !== false
+  }
+
+  let resolved
+  try {
+    resolved = await resolveAddresses(url.hostname)
+  } catch (err) {
+    const error = errorDetails(err, { code: 'EDNS', message: err.message, hostname: url.hostname })
+    return {
+      provider: config.provider,
+      ok: false,
+      failedStep: 'dns',
+      error,
+      diagnosis: summarizeGenericFailure({ provider: config.provider, failedStep: 'dns', error }),
+      target,
+      dns: { addresses: [], errors: { all: err.message } },
+      timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt },
+      checkedAt: new Date().toISOString()
     }
   }
 
@@ -408,60 +635,56 @@ async function diagnoseMusicBrainz () {
   ]
 
   if (dnsAddresses.length === 0) {
+    const error = errorDetails(null, { code: 'ENOTFOUND', message: 'No A or AAAA records resolved', hostname: url.hostname })
     return {
-      provider: 'musicbrainz',
+      provider: config.provider,
       ok: false,
       failedStep: 'dns',
-      error: errorDetails(null, { code: 'ENOTFOUND', message: 'No A or AAAA records resolved', hostname: url.hostname }),
-      diagnosis: summarizeFailure({ failedStep: 'dns', error: { code: 'ENOTFOUND' }, configuredFamily: ipFamilyConfig }),
+      error,
+      diagnosis: summarizeGenericFailure({ provider: config.provider, failedStep: 'dns', error }),
       target,
-      dns: { addresses: [], errors: resolved.errors },
-      timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt }
+      dns: { addresses: [], configuredFamily: configuredIpFamily, errors: resolved.errors },
+      timingsMs: { dns: Date.now() - startedAt, tcp: null, tls: null, http: null, total: Date.now() - startedAt },
+      checkedAt: new Date().toISOString()
     }
   }
 
   const dnsBlock = {
     addresses: dnsAddresses,
-    configuredFamily: ipFamilyConfig,
+    configuredFamily: configuredIpFamily,
     errors: resolved.errors
   }
 
-  const probeDefinitions = [
-    { label: 'auto', family: undefined },
-    { label: '4', family: 4 },
-    { label: '6', family: 6 }
-  ]
-
-  const reports = await Promise.all(probeDefinitions.map(async (probe) => {
-    const result = await performRequest({ url, headers, family: probe.family, timeout })
-    return buildProbeReport({
-      label: probe.label,
-      configuredIpFamily: ipFamilyConfig,
-      target: { ...target, probeFamily: probe.label },
-      dnsBlock,
-      result
-    })
-  }))
-
-  const primaryLabel = familyLabel(family)
-  const primary = reports.find((probe) => probe.label === primaryLabel) || reports[0]
+  const headers = { 'User-Agent': getUserAgent() }
+  const result = await performRequest({ url, headers, family, timeout })
+  const report = buildProbeReport({
+    label: configuredIpFamily,
+    configuredIpFamily,
+    target: { ...target, probeFamily: configuredIpFamily },
+    dnsBlock,
+    result,
+    provider: config.provider,
+    summarize: summarizeGenericFailure
+  })
 
   return {
-    ...primary,
-    provider: 'musicbrainz',
+    ...report,
+    provider: config.provider,
     checkedAt: new Date().toISOString(),
-    probes: reports
+    probes: [report]
   }
 }
 
 module.exports = {
   diagnoseMusicBrainz,
+  diagnoseGenericProvider,
   // Exported for unit tests:
   classifyFailedStep,
   timings,
   pickHeaders,
   errorDetails,
   summarizeFailure,
+  summarizeGenericFailure,
   RATE_LIMIT_HEADER_NAMES,
   RELEVANT_HEADER_NAMES
 }

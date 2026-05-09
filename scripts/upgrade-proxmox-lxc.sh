@@ -205,14 +205,12 @@ else
 fi
 
 probe_musicbrainz_family () {
-  local family="$1"
-  docker run --rm --network "$NETWORK" -e FAMILY="$family" "$CANARY_IMAGE" node -e '
+  docker run --rm --network "$NETWORK" -e APP_CONTACT="${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy}" "$CANARY_IMAGE" node -e '
     const https = require("https")
-    const family = Number(process.env.FAMILY)
     const req = https.get("https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1", {
-      family,
+      family: 6,
       timeout: 5000,
-      headers: { "User-Agent": "melodarr-proxy-upgrade/1.0 (admin@example.com)" }
+      headers: { "User-Agent": `melodarr-proxy-upgrade/1.0 (${process.env.APP_CONTACT})` }
     }, (res) => {
       res.resume()
       process.exit(res.statusCode >= 200 && res.statusCode < 500 ? 0 : 1)
@@ -222,24 +220,20 @@ probe_musicbrainz_family () {
       console.error(error.code || error.message)
       process.exit(1)
     })
-  ' >/tmp/musicbrainz-family-${family}.log 2>&1
+  ' >/tmp/musicbrainz-family-6.log 2>&1
 }
 
 echo "Probing MusicBrainz connectivity from Docker network $NETWORK..."
 MUSICBRAINZ_FAMILY=""
 MUSICBRAINZ_REACHABLE=1
-if probe_musicbrainz_family 6; then
+if probe_musicbrainz_family; then
   MUSICBRAINZ_FAMILY="6"
-elif probe_musicbrainz_family 4; then
-  MUSICBRAINZ_FAMILY="4"
 else
   MUSICBRAINZ_REACHABLE=0
   MUSICBRAINZ_FAMILY="6"
-  echo "⚠️  Cannot reach MusicBrainz from Docker network $NETWORK over IPv4 or IPv6."
+  echo "⚠️  Cannot reach MusicBrainz from Docker network $NETWORK over IPv6."
   echo "--- IPv6 probe ---"
   cat /tmp/musicbrainz-family-6.log 2>/dev/null || true
-  echo "--- IPv4 probe ---"
-  cat /tmp/musicbrainz-family-4.log 2>/dev/null || true
   echo "Continuing with application canary validation. MusicBrainz will remain degraded until network connectivity is fixed."
 fi
 
@@ -248,7 +242,7 @@ set_compose_env_value MUSICBRAINZ_IP_FAMILY "$MUSICBRAINZ_FAMILY"
 
 echo "Running canary container on network $NETWORK..."
 docker rm -f melodarr-proxy-canary >/dev/null 2>&1 || true
-CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e MUSICBRAINZ_IP_FAMILY="$MUSICBRAINZ_FAMILY" -e APP_NAME=melodarr-proxy-canary -e APP_VERSION=canary -e APP_CONTACT=admin@example.com "$CANARY_IMAGE")
+CANARY_ID=$(docker run -d --name melodarr-proxy-canary --cap-add=NET_ADMIN --network "$NETWORK" -p 3056:3000 -e REDIS_URL=redis://redis:6379 -e MUSICBRAINZ_IP_FAMILY="$MUSICBRAINZ_FAMILY" -e APP_NAME=melodarr-proxy-canary -e APP_VERSION=canary -e APP_CONTACT="${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy}" "$CANARY_IMAGE")
 
 echo "Waiting 5s for canary to initialize..."
 sleep 5

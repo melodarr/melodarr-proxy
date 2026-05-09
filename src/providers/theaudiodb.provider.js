@@ -1,6 +1,7 @@
 const axios = require('axios')
 const { getConfigValue } = require('../settings/store')
-const { httpsAgent } = require('./http')
+const { getProviderHttpsAgent, getProviderUserAgent } = require('./http')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 function imageResource (url, coverType) {
   return url
@@ -23,11 +24,14 @@ class TheAudioDbProvider {
       throw new Error('TheAudioDB API key not configured')
     }
 
-    const response = await axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/search.php`, {
+    const response = await enqueueProviderRequest('theaudiodb', () => axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/search.php`, {
       params: { s: term },
-      httpsAgent,
+      headers: {
+        'User-Agent': getProviderUserAgent()
+      },
+      httpsAgent: getProviderHttpsAgent(getConfigValue('theAudioDbIpFamily') || getConfigValue('providerIpFamily')),
       timeout: getConfigValue('upstreamTimeoutMs') || 10000
-    })
+    }))
 
     const artistData = response.data?.artists || []
     const artistsArray = Array.isArray(artistData) ? artistData : [artistData]
@@ -60,11 +64,14 @@ class TheAudioDbProvider {
 
     const [profile, response] = await Promise.allSettled([
       this.searchArtistProfile(term),
-      axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/searchalbum.php`, {
+      enqueueProviderRequest('theaudiodb', () => axios.get(`https://www.theaudiodb.com/api/v1/json/${encodeURIComponent(apiKey)}/searchalbum.php`, {
         params: { s: term },
-        httpsAgent,
+        headers: {
+          'User-Agent': getProviderUserAgent()
+        },
+        httpsAgent: getProviderHttpsAgent(getConfigValue('theAudioDbIpFamily') || getConfigValue('providerIpFamily')),
         timeout: getConfigValue('upstreamTimeoutMs') || 10000
-      })
+      }))
     ])
 
     const albumsData = response.status === 'fulfilled' ? response.value.data?.album || [] : []
