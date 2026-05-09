@@ -112,6 +112,11 @@ echo "[INFO] Current image: $CURRENT_IMAGE"
 if [[ -z "$TARGET_TAG" ]]; then
   echo "[INFO] Auto-discovering latest dev tag via GitHub API..."
   
+  # Helper function to extract latest dev tag from tag list
+  extract_latest_dev_tag() {
+    grep dev | sort -V | tail -n 1 || true
+  }
+  
   GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
   if [[ -z "$GH_TOKEN" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     GH_TOKEN="$(gh auth token 2>/dev/null || true)"
@@ -122,10 +127,10 @@ if [[ -z "$TARGET_TAG" ]]; then
     # Token passed via config file to avoid process listing exposure
     CURL_CONFIG=$(mktemp)
     trap "rm -f '$CURL_CONFIG'" EXIT
-    echo "header = \"Authorization: Bearer $GH_TOKEN\"" > "$CURL_CONFIG"
+    printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" > "$CURL_CONFIG"
     chmod 600 "$CURL_CONFIG"
     
-    API_RESPONSE="$(curl -sS -K "$CURL_CONFIG" \
+    API_RESPONSE="$(curl -sS -w "\n%{http_code}" -K "$CURL_CONFIG" \
       "https://api.github.com/orgs/melodarr/packages/container/melodarr-proxy/versions?per_page=100" 2>&1)"
     CURL_EXIT=$?
     
@@ -137,11 +142,19 @@ if [[ -z "$TARGET_TAG" ]]; then
       exit 1
     fi
     
-    LATEST_TAG="$(echo "$API_RESPONSE" | jq -r '.[].metadata.container.tags[]' 2>/dev/null | grep dev | sort -V | tail -n 1 || true)"
+    HTTP_CODE="$(echo "$API_RESPONSE" | tail -n 1)"
+    API_BODY="$(echo "$API_RESPONSE" | sed '$d')"
+    
+    if [[ "$HTTP_CODE" != "200" ]]; then
+      echo "[ERROR] GitHub API returned HTTP $HTTP_CODE. Check auth token and retry, or use --tag."
+      exit 1
+    fi
+    
+    LATEST_TAG="$(echo "$API_BODY" | jq -r '.[].metadata.container.tags[]' 2>/dev/null | extract_latest_dev_tag)"
   else
     echo "[WARN] No GitHub token found (GH_TOKEN/GITHUB_TOKEN variables or gh CLI); attempting unauthenticated registry query"
     
-    REGISTRY_RESPONSE="$(curl -sS "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" 2>&1)"
+    REGISTRY_RESPONSE="$(curl -sS -w "\n%{http_code}" "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" 2>&1)"
     CURL_EXIT=$?
     
     if [[ $CURL_EXIT -ne 0 ]]; then
@@ -149,7 +162,15 @@ if [[ -z "$TARGET_TAG" ]]; then
       exit 1
     fi
     
-    LATEST_TAG="$(echo "$REGISTRY_RESPONSE" | jq -r '.tags[]' 2>/dev/null | grep dev | sort -V | tail -n 1 || true)"
+    HTTP_CODE="$(echo "$REGISTRY_RESPONSE" | tail -n 1)"
+    REGISTRY_BODY="$(echo "$REGISTRY_RESPONSE" | sed '$d')"
+    
+    if [[ "$HTTP_CODE" != "200" ]]; then
+      echo "[ERROR] GHCR registry returned HTTP $HTTP_CODE (likely requires auth). Set GH_TOKEN or use --tag."
+      exit 1
+    fi
+    
+    LATEST_TAG="$(echo "$REGISTRY_BODY" | jq -r '.tags[]' 2>/dev/null | extract_latest_dev_tag)"
   fi
 
   if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
