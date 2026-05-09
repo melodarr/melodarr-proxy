@@ -186,7 +186,7 @@ class UpstreamService {
         let pauseMs = 5000
         if (retryAfterHeader) {
           const retryAfterMs = parseRetryAfter(retryAfterHeader)
-          if (retryAfterMs) pauseMs = retryAfterMs
+          if (retryAfterMs !== null) pauseMs = retryAfterMs
         }
         applyCoolingOff(pauseMs)
         return {
@@ -199,7 +199,7 @@ class UpstreamService {
         let pauseMs = 5000
         if (retryAfterHeader) {
           const retryAfterMs = parseRetryAfter(retryAfterHeader)
-          if (retryAfterMs) pauseMs = retryAfterMs
+          if (retryAfterMs !== null) pauseMs = retryAfterMs
         }
         applyCoolingOff(pauseMs)
         return {

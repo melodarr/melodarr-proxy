@@ -1069,3 +1069,98 @@ test('handleSongAlbums handles errors', async () => {
   assert.equal(res.statusCode, 502)
   assert.equal(res.body.error, 'Albums failed')
 })
+
+test('handleSearch uses 5-minute TTL for empty results', async () => {
+  const cacheStore = new Map()
+  const { controller } = loadController({
+    cacheStore,
+    discoverArtists: async () => []
+  })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: 'no results' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.length, 0)
+
+  const cached = cacheStore.get('search:no results')
+  assert.ok(cached, 'Result should be cached')
+  assert.equal(cached.ttlSeconds, 300, 'Empty results should use 5-minute (300s) TTL')
+})
+
+test('handleSearch uses 30-day TTL for non-empty results', async () => {
+  const cacheStore = new Map()
+  const { controller } = loadController({
+    cacheStore,
+    discoverArtists: async () => [{
+      artistName: 'Test Artist',
+      type: 'artist',
+      source: 'musicbrainz',
+      id: 'test-id',
+      ids: { musicbrainzArtistId: 'test-id' }
+    }]
+  })
+  const res = makeResponse()
+  await controller.handleSearch({ query: { q: 'found artist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.length, 1)
+
+  const cached = cacheStore.get('search:found artist')
+  assert.ok(cached, 'Result should be cached')
+  assert.equal(cached.ttlSeconds, 86400 * 30, 'Non-empty results should use 30-day TTL')
+})
+
+test('handleArtistLookup uses 5-minute TTL for empty results', async () => {
+  const cacheStore = new Map()
+  const { controller } = loadController({
+    cacheStore,
+    aggregateArtist: async () => ({
+      artistName: '',
+      id: '',
+      albums: [],
+      providers: [],
+      providerCount: 0,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+  await controller.handleArtistLookup({ query: { term: 'no results' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.length, 0)
+
+  const cached = cacheStore.get('artist:no results')
+  assert.ok(cached, 'Result should be cached')
+  assert.equal(cached.ttlSeconds, 300, 'Empty results should use 5-minute (300s) TTL')
+})
+
+test('handleArtistLookup uses 30-day TTL for non-empty results', async () => {
+  const cacheStore = new Map()
+  const { controller } = loadController({
+    cacheStore,
+    aggregateArtist: async () => ({
+      artistName: 'Test Artist',
+      id: 'test-id',
+      albums: [{
+        name: 'Test Album',
+        year: 2020,
+        provider: 'musicbrainz',
+        ids: { musicbrainzReleaseGroupId: 'rg-test' }
+      }],
+      providers: [{ name: 'musicbrainz' }],
+      providerCount: 1,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+  await controller.handleArtistLookup({ query: { term: 'found artist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.length, 1)
+
+  const cached = cacheStore.get('artist:found artist')
+  assert.ok(cached, 'Result should be cached')
+  assert.equal(cached.ttlSeconds, 86400 * 30, 'Non-empty results should use 30-day TTL')
+})

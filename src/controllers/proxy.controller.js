@@ -394,7 +394,10 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
   }
 
   // Use a shorter negative cache TTL (5 minutes) for empty results
-  const SWR_TTL_SECONDS = (!response.results || response.results.length === 0) ? 300 : 86400 * 30 // 5m negative cache, 30d SWR
+  // Check if we have valid artist data (non-empty artistName and id)
+  const hasValidArtist = response.artistName && response.artistName.trim().length > 0 &&
+                         (response.foreignArtistId || response.id)
+  const SWR_TTL_SECONDS = hasValidArtist ? 86400 * 30 : 300 // 5m negative cache, 30d SWR
   const startCacheSet = Date.now()
   await cache.set(cacheKey, response, SWR_TTL_SECONDS)
   tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
