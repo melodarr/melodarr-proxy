@@ -113,19 +113,14 @@ if [[ -z "$TARGET_TAG" ]]; then
   echo "[INFO] Auto-discovering latest dev tag via GitHub API..."
   
   GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-  AUTH_HEADER=""
-  if [[ -n "$GH_TOKEN" ]]; then
-    AUTH_HEADER="Authorization: Bearer $GH_TOKEN"
-  elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  if [[ -z "$GH_TOKEN" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     GH_TOKEN="$(gh auth token 2>/dev/null || true)"
-    if [[ -n "$GH_TOKEN" ]]; then
-      AUTH_HEADER="Authorization: Bearer $GH_TOKEN"
-    fi
   fi
 
-  if [[ -n "$AUTH_HEADER" ]]; then
+  if [[ -n "$GH_TOKEN" ]]; then
+    # Query GitHub API with auth (limited to 100 most recent versions; sufficient for dev tag discovery)
     LATEST_TAG="$(
-      curl -sS -H "$AUTH_HEADER" \
+      curl -sS -H "Authorization: Bearer $GH_TOKEN" \
         "https://api.github.com/orgs/melodarr/packages/container/melodarr-proxy/versions?per_page=100" \
         | jq -r '.[].metadata.container.tags[]' \
         | grep dev \
