@@ -49,14 +49,20 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-CONTAINER_NAME="$(docker ps --format '{{.Names}}' | grep proxy | head -n 1 || true)"
-if [[ -z "$CONTAINER_NAME" ]]; then
+CONTAINER_ID="$(docker compose ps -q proxy 2>/dev/null || true)"
+if [[ -z "$CONTAINER_ID" ]]; then
   echo "[ERROR] Proxy container not found"
   exit 1
 fi
 
-CURRENT_VERSION="$(docker exec "$CONTAINER_NAME" node -e "console.log(process.env.APP_VERSION || 'unknown')" 2>/dev/null || echo "unknown")"
-CURRENT_IMAGE="$(docker inspect "$CONTAINER_NAME" --format '{{.Config.Image}}' 2>/dev/null || echo "unknown")"
+if [[ "$(docker inspect "$CONTAINER_ID" --format '{{.State.Running}}' 2>/dev/null || echo "false")" != "true" ]]; then
+  echo "[ERROR] Proxy container is not running"
+  exit 1
+fi
+
+CONTAINER_NAME="$(docker inspect "$CONTAINER_ID" --format '{{.Name}}' 2>/dev/null | sed 's#^/##' || echo "$CONTAINER_ID")"
+CURRENT_VERSION="$(docker exec "$CONTAINER_ID" node -e "console.log(process.env.APP_VERSION || 'unknown')" 2>/dev/null || echo "unknown")"
+CURRENT_IMAGE="$(docker inspect "$CONTAINER_ID" --format '{{.Config.Image}}' 2>/dev/null || echo "unknown")"
 
 echo "[INFO] Proxy container: $CONTAINER_NAME"
 echo "[INFO] Current version: $CURRENT_VERSION"
