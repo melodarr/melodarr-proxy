@@ -35,6 +35,14 @@ function stripInternalKeys (response) {
   return cleaned
 }
 
+function finalizeArtistLookupResponse (response, isDebug) {
+  const normalized = withArtistLookupDefaults(response)
+  if (!isDebug && normalized.debug) {
+    delete normalized.debug
+  }
+  return isDebug ? normalized : stripInternalKeys(normalized)
+}
+
 const withTimeout = (promise, ms) => {
   let timer
   const timeoutPromise = new Promise((_resolve, reject) => {
@@ -463,14 +471,11 @@ async function handleArtistLookup (req, res) {
     res.set('X-Cache-Generated-At', cachedData.generatedAt)
 
     const response = withArtistLookupDefaults({ ...cachedObj, providers })
-    if (!isDebug && response.debug) {
-      delete response.debug
-    }
     response._generatedAt = cachedData.generatedAt
 
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
 
-    const finalResponse = isDebug ? response : stripInternalKeys(response)
+    const finalResponse = finalizeArtistLookupResponse(response, isDebug)
     return res.json([finalResponse].filter(isValidArtist))
   }
 
@@ -520,14 +525,11 @@ async function handleArtistLookup (req, res) {
       res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
 
       const response = withArtistLookupDefaults({ ...cachedObj, providers })
-      if (!isDebug && response.debug) {
-        delete response.debug
-      }
       response._generatedAt = cachedDataAfterWait.generatedAt
 
       await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
 
-      const finalResponse = isDebug ? response : stripInternalKeys(response)
+      const finalResponse = finalizeArtistLookupResponse(response, isDebug)
       return res.json([finalResponse].filter(isValidArtist))
     }
   }
@@ -562,13 +564,10 @@ async function handleArtistLookup (req, res) {
     res.set('X-Cache-Generated-At', new Date().toISOString())
 
     const finalResponse = { ...response, _generatedAt: new Date().toISOString() }
-    if (!isDebug && finalResponse.debug) {
-      delete finalResponse.debug
-    }
 
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: resolvedProviders.map(p => p.name) })
 
-    const sanitizedResponse = isDebug ? finalResponse : stripInternalKeys(finalResponse)
+    const sanitizedResponse = finalizeArtistLookupResponse(finalResponse, isDebug)
     return res.json([sanitizedResponse].filter(isValidArtist))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')

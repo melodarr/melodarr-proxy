@@ -68,6 +68,16 @@ async function aggregateArtist (term) {
   const providerNamesStr = getConfigValue('metadataProviders') || 'musicbrainz'
   const providerNames = providerNamesStr.split(',').map(s => s.trim().toLowerCase())
 
+  const providerPriorityStr = getConfigValue('providerPriority') || ''
+  const providerPriority = providerPriorityStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+
+  function getPriorityWeight (providerName) {
+    if (providerPriority.length === 0) return 0
+    const index = providerPriority.indexOf(providerName)
+    if (index === -1) return 0
+    return (providerPriority.length - index) * 1000000
+  }
+
   const allProviders = getAllProviders()
 
   const activeProviders = providerNames
@@ -156,9 +166,10 @@ async function aggregateArtist (term) {
       successfulProviders++
       const data = outcome.value.result
       const provider = outcome.value.provider
-      const score = getProviderScore(provider, data)
+      const adaptiveScore = getProviderScore(provider, data)
+      const priorityWeight = getPriorityWeight(provider)
 
-      validOutcomes.push({ provider, data, score })
+      validOutcomes.push({ provider, data, adaptiveScore, priorityWeight })
     } else {
       partial = true
       const err = outcome.reason
@@ -168,19 +179,25 @@ async function aggregateArtist (term) {
     }
   }
 
-  // Sort by score descending to prefer higher quality data
-  validOutcomes.sort((a, b) => b.score - a.score)
+  // Sort by configured priority first, then by the priority-free adaptive score.
+  validOutcomes.sort((a, b) => {
+    if (a.priorityWeight !== b.priorityWeight) {
+      return b.priorityWeight - a.priorityWeight
+    }
+    return b.adaptiveScore - a.adaptiveScore
+  })
 
   let overallConfidence = 0
   if (validOutcomes.length > 0) {
-    overallConfidence = validOutcomes[0].score
+    overallConfidence = validOutcomes[0].adaptiveScore
   }
 
   for (const outcome of validOutcomes) {
-    const { data, score, provider } = outcome
+    const { data, adaptiveScore, priorityWeight, provider } = outcome
 
     // Use the first returned artist name we get if we don't have a good one yet
-    // Since validOutcomes are sorted by score, the best provider gets to name the artist
+    // Since validOutcomes are sorted by priority and then adaptive score, the best
+    // provider gets to name the artist.
     if (data.artistName && mergedArtistName === term) {
       mergedArtistName = data.artistName
     }
@@ -222,16 +239,15 @@ async function aggregateArtist (term) {
         if (!existing.year && album.year) {
           existing.year = album.year
           existing.releaseDate = album.releaseDate || existing.releaseDate
-          existing.score = score
+          existing.adaptiveScore = adaptiveScore
+          existing.priorityWeight = priorityWeight
           existing.provider = provider
-        } else if (existing.year && album.year && score > existing.score) {
-          // If both have years, let the higher scored provider win
-          existing.year = album.year
-          existing.releaseDate = album.releaseDate || existing.releaseDate
-          existing.score = score
-          existing.provider = provider
-        } else if (album.releaseDate && (!existing.releaseDate || album.releaseDate.length > existing.releaseDate.length)) {
-          // Same year, but the incoming provider has a more precise date
+        } else if (existing.year && album.year && existing.year !== album.year) {
+          logger.debug(`[Merge] Album year conflict for '${album.name}': keeping ${existing.year} (${existing.provider}) over ${album.year} (${provider})`)
+        }
+
+        if (album.releaseDate && (!existing.releaseDate || album.releaseDate.length > existing.releaseDate.length)) {
+          // The incoming provider has a more precise date
           // (e.g. iTunes "1997-05-21T07:00:00Z" beats MB "1997"). Take it
           // even when the score doesn't win — date precision is independent
           // of overall provider quality and Lidarr cares about full ISO.
@@ -249,7 +265,8 @@ async function aggregateArtist (term) {
             value: normalizeProviderRating(album).value
           },
           ids: mergeIds(null, album.ids),
-          score,
+          adaptiveScore,
+          priorityWeight,
           provider
         })
       }
@@ -261,7 +278,7 @@ async function aggregateArtist (term) {
   const normalizedArtist = String(mergedArtistName || term).trim().toLowerCase()
 
   for (const outcome of validOutcomes) {
-    const { data, provider } = outcome
+    const { data, provider, priorityWeight } = outcome
 
     // 1. Artist profile images
     if (data.images && data.images.length > 0) {
@@ -272,6 +289,7 @@ async function aggregateArtist (term) {
           height: img.height,
           width: img.width,
           imageSource: provider,
+          priorityWeight,
           type: 'artist',
           isSelfTitled: false
         })
@@ -294,6 +312,7 @@ async function aggregateArtist (term) {
           url: album.imageUrl,
           coverType: 'poster',
           imageSource,
+          priorityWeight,
           type: 'album',
           isSelfTitled
         })
@@ -337,6 +356,14 @@ async function aggregateArtist (term) {
     // HTTPS bonus
     if (candidate.url && candidate.url.startsWith('https://')) score += 5
 
+    // Priority bonus
+    const pw = getPriorityWeight(candidate.imageSource)
+    if (pw > 0) {
+      // Keep provider priority as a secondary signal so resolution, source, and HTTPS still matter.
+      const priorityBonus = Math.min(25, Math.floor(pw / 1000000) * 5)
+      score += priorityBonus
+    }
+
     // Adaptive health multiplier
     const metricsData = providerMetrics.get(candidate.imageSource)
     const healthScore = providerMetrics.computeScore(metricsData) || 0.5
@@ -354,7 +381,12 @@ async function aggregateArtist (term) {
       uniqueScored.push(img)
     }
   }
-  uniqueScored.sort((a, b) => b.score - a.score)
+  uniqueScored.sort((a, b) => {
+    if (a.priorityWeight !== b.priorityWeight) {
+      return b.priorityWeight - a.priorityWeight
+    }
+    return b.score - a.score
+  })
 
   images = []
   if (uniqueScored.length > 0) {
@@ -413,7 +445,7 @@ async function aggregateArtist (term) {
     providerCount: successfulProviders,
     providers: validOutcomes.map(outcome => ({
       name: outcome.provider,
-      score: outcome.score,
+      score: outcome.adaptiveScore,
       albumCount: outcome.data.albums?.length || 0
     })),
     providerErrors,

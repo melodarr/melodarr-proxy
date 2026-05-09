@@ -293,7 +293,8 @@ class MetricsManager extends EventEmitter {
         errors: pStats.errors,
         timeouts: pStats.timeouts || 0,
         avgLatencyMs: pStats.calls > 0 ? Math.round(pStats.totalLatency / pStats.calls) : 0,
-        errorRate: pStats.calls > 0 ? Number((pStats.errors / pStats.calls).toFixed(4)) : 0
+        errorRate: pStats.calls > 0 ? Number((pStats.errors / pStats.calls).toFixed(4)) : 0,
+        successRate: pStats.calls > 0 ? Number(((pStats.calls - pStats.errors) / pStats.calls).toFixed(4)) : 0
       }
     }
 

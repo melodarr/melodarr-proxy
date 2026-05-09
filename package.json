@@ -21,8 +21,8 @@
     "test:compose": "bash scripts/docker-compose-smoke.sh",
     "test:lidarr-smoke": "bash scripts/lidarr-add-artist-smoke.sh",
     "test:melodash-routes": "bash scripts/melodash-route-smoke.sh",
-    "docker:lint": "docker compose --profile test run --rm test yarn lint",
-    "docker:test": "docker compose --profile test run --rm test sh -c 'yarn test && yarn test:e2e'",
+    "docker:lint": "bash scripts/docker-compose-run.sh --profile test run --rm test yarn lint",
+    "docker:test": "bash scripts/docker-compose-run.sh --profile test run --rm test sh -c 'yarn test && yarn test:e2e'",
     "prepare": "husky"
   },
   "dependencies": {
