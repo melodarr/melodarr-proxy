@@ -64,7 +64,7 @@ if [[ -z "$COMPOSE_PROXY_IMAGE" ]]; then
   exit 1
 fi
 
-if [[ "$COMPOSE_PROXY_IMAGE" =~ @sha(224|256|384|512): ]]; then
+if [[ "$COMPOSE_PROXY_IMAGE" == *"@sha224:"* || "$COMPOSE_PROXY_IMAGE" == *"@sha256:"* || "$COMPOSE_PROXY_IMAGE" == *"@sha384:"* || "$COMPOSE_PROXY_IMAGE" == *"@sha512:"* ]]; then
   echo "[ERROR] docker compose service 'proxy' image cannot be digest-pinned (tag-based images required): $COMPOSE_PROXY_IMAGE"
   exit 1
 fi
