@@ -62,14 +62,14 @@ jobs:
         env:
           HOST_PORT: 3055
           REQUIRE_API_KEY: "false"
-          MUSICBRAINZ_IP_FAMILY: 4
+          MUSICBRAINZ_IP_FAMILY: 6
         run: docker compose up -d proxy
 
       - name: Wait for service
         run: |
           set -euo pipefail
           for i in {1..10}; do
-            if curl -sf http://localhost:3055/api/health; then
+            if curl -fsS http://127.0.0.1:3055/api/health; then
               exit 0
             fi
             sleep 2
