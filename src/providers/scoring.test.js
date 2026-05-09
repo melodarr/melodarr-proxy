@@ -80,7 +80,7 @@ test('getProviderScore applies penalty for incomplete data', (t) => {
   metrics.providerStats.delete('test-provider')
 })
 
-test('getProviderScore remains adaptive-only when providerPriority is configured elsewhere', (t) => {
+test('getProviderScore ignores provider priority configuration', (t) => {
   metrics.providerStats.set('musicbrainz', {
     calls: 10,
     errors: 0,
