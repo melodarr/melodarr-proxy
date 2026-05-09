@@ -37,22 +37,25 @@ export function CustomProviderModal({
  const [tokenVisible, setTokenVisible] = useState(false);
 
  function updateField<K extends keyof CustomProviderConfig>(key: K, value: CustomProviderConfig[K]) {
- setForm((current) => ({ ...current, [key]: value }));
+  setForm((current) => ({ ...current, [key]: value }));
  }
 
  function updateCustomMapping(field: MappingField, path: string) {
- const nextMapping = {
- ...form.mapping,
- [field]: field === "artistName" || field === "albums" ? path : getRelativeAlbumPath(form.mapping.albums, path),
- };
- setForm(f => ({ ...f, mapping: nextMapping }));
- if (customResult?.raw !== undefined) {
- void runCustomProviderTest(nextMapping);
- }
+  const nextMapping = {
+   ...form.mapping,
+   [field]:
+    field === "artistName" || field === "albums"
+     ? path
+     : getRelativeAlbumPath(form.mapping.albums, path),
+  };
+  setForm((f) => ({ ...f, mapping: nextMapping }));
+  if (customResult?.raw !== undefined) {
+   void runCustomProviderTest(nextMapping);
+  }
  }
 
  function handleJsonPathSelect(path: string) {
- updateCustomMapping(selectedMappingField, path);
+  updateCustomMapping(selectedMappingField, path);
  }
 
  async function runCustomProviderTest(mapping: CustomMapping) {
