@@ -119,25 +119,37 @@ if [[ -z "$TARGET_TAG" ]]; then
 
   if [[ -n "$GH_TOKEN" ]]; then
     # Query GitHub API with auth (limited to 100 most recent versions; sufficient for dev tag discovery)
-    LATEST_TAG="$(
-      curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-        "https://api.github.com/orgs/melodarr/packages/container/melodarr-proxy/versions?per_page=100" \
-        | jq -r '.[].metadata.container.tags[]' \
-        | grep dev \
-        | sort -V \
-        | tail -n 1 \
-        || true
-    )"
+    # Token passed via config file to avoid process listing exposure
+    CURL_CONFIG=$(mktemp)
+    trap "rm -f '$CURL_CONFIG'" EXIT
+    echo "header = \"Authorization: Bearer $GH_TOKEN\"" > "$CURL_CONFIG"
+    chmod 600 "$CURL_CONFIG"
+    
+    API_RESPONSE="$(curl -sS -K "$CURL_CONFIG" \
+      "https://api.github.com/orgs/melodarr/packages/container/melodarr-proxy/versions?per_page=100" 2>&1)"
+    CURL_EXIT=$?
+    
+    rm -f "$CURL_CONFIG"
+    trap - EXIT
+    
+    if [[ $CURL_EXIT -ne 0 ]]; then
+      echo "[ERROR] GitHub API request failed (exit $CURL_EXIT). Check network/auth and retry, or use --tag."
+      exit 1
+    fi
+    
+    LATEST_TAG="$(echo "$API_RESPONSE" | jq -r '.[].metadata.container.tags[]' 2>/dev/null | grep dev | sort -V | tail -n 1 || true)"
   else
     echo "[WARN] No GitHub token found (GH_TOKEN/GITHUB_TOKEN variables or gh CLI); attempting unauthenticated registry query"
-    LATEST_TAG="$(
-      curl -sS "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" \
-        | jq -r '.tags[]' \
-        | grep dev \
-        | sort -V \
-        | tail -n 1 \
-        || true
-    )"
+    
+    REGISTRY_RESPONSE="$(curl -sS "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" 2>&1)"
+    CURL_EXIT=$?
+    
+    if [[ $CURL_EXIT -ne 0 ]]; then
+      echo "[ERROR] GHCR registry query failed (exit $CURL_EXIT). Set GH_TOKEN or use --tag to specify explicitly."
+      exit 1
+    fi
+    
+    LATEST_TAG="$(echo "$REGISTRY_RESPONSE" | jq -r '.tags[]' 2>/dev/null | grep dev | sort -V | tail -n 1 || true)"
   fi
 
   if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
