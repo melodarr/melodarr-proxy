@@ -134,7 +134,7 @@ if [[ -z "$TARGET_TAG" ]]; then
         || true
     )"
   else
-    echo "[WARN] No GitHub token found (GH_TOKEN/GITHUB_TOKEN env or gh CLI); attempting unauthenticated registry query"
+    echo "[WARN] No GitHub token found (GH_TOKEN/GITHUB_TOKEN variables or gh CLI); attempting unauthenticated registry query"
     LATEST_TAG="$(
       curl -sS "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" \
         | jq -r '.tags[]' \
