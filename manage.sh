@@ -21,7 +21,7 @@ compose_cmd() {
     compose_files+=(-f docker-compose.ipv6.yml)
   fi
 
-  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" DOCKER_IPV6_SUBNET="$DOCKER_IPV6_SUBNET" docker compose "${compose_files[@]}" "$@"
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" DOCKER_IPV6_SUBNET="$DOCKER_IPV6_SUBNET" bash scripts/docker-compose-run.sh "${compose_files[@]}" "$@"
 }
 
 run_proxy_lint() {
