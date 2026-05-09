@@ -53,6 +53,8 @@ cd "$ROOT_DIR"
 
 IMAGE_REPO="${IMAGE_REPO:-ghcr.io/melodarr/melodarr-proxy}"
 HEALTH_URL="${HEALTH_URL:-http://localhost:3055/api/health}"
+GITHUB_ORG="melodarr"
+GITHUB_PACKAGE="melodarr-proxy"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -126,12 +128,12 @@ if [[ -z "$TARGET_TAG" ]]; then
     # Query GitHub API with auth (limited to 100 most recent versions; sufficient for dev tag discovery)
     # Token passed via config file to avoid process listing exposure
     CURL_CONFIG=$(mktemp)
-    trap "rm -f '$CURL_CONFIG'" EXIT
+    trap "rm -f \"$CURL_CONFIG\"" EXIT
     printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" > "$CURL_CONFIG"
     chmod 600 "$CURL_CONFIG"
     
     API_RESPONSE="$(curl -sS -w "\n%{http_code}" -K "$CURL_CONFIG" \
-      "https://api.github.com/orgs/melodarr/packages/container/melodarr-proxy/versions?per_page=100" 2>&1)"
+      "https://api.github.com/orgs/$GITHUB_ORG/packages/container/$GITHUB_PACKAGE/versions?per_page=100" 2>&1)"
     CURL_EXIT=$?
     
     rm -f "$CURL_CONFIG"
@@ -150,11 +152,18 @@ if [[ -z "$TARGET_TAG" ]]; then
       exit 1
     fi
     
-    LATEST_TAG="$(echo "$API_BODY" | jq -r '.[].metadata.container.tags[]' 2>/dev/null | extract_latest_dev_tag)"
+    JQ_OUTPUT="$(echo "$API_BODY" | jq -r '.[].metadata.container.tags[]' 2>&1)"
+    JQ_EXIT=$?
+    if [[ $JQ_EXIT -ne 0 ]]; then
+      echo "[ERROR] Failed to parse GitHub API response (jq exit $JQ_EXIT). Response may be malformed."
+      exit 1
+    fi
+    
+    LATEST_TAG="$(echo "$JQ_OUTPUT" | extract_latest_dev_tag)"
   else
     echo "[WARN] No GitHub token found (GH_TOKEN/GITHUB_TOKEN variables or gh CLI); attempting unauthenticated registry query"
     
-    REGISTRY_RESPONSE="$(curl -sS -w "\n%{http_code}" "https://ghcr.io/v2/melodarr/melodarr-proxy/tags/list" 2>&1)"
+    REGISTRY_RESPONSE="$(curl -sS -w "\n%{http_code}" "https://ghcr.io/v2/$GITHUB_ORG/$GITHUB_PACKAGE/tags/list" 2>&1)"
     CURL_EXIT=$?
     
     if [[ $CURL_EXIT -ne 0 ]]; then
@@ -170,7 +179,14 @@ if [[ -z "$TARGET_TAG" ]]; then
       exit 1
     fi
     
-    LATEST_TAG="$(echo "$REGISTRY_BODY" | jq -r '.tags[]' 2>/dev/null | extract_latest_dev_tag)"
+    JQ_OUTPUT="$(echo "$REGISTRY_BODY" | jq -r '.tags[]' 2>&1)"
+    JQ_EXIT=$?
+    if [[ $JQ_EXIT -ne 0 ]]; then
+      echo "[ERROR] Failed to parse GHCR registry response (jq exit $JQ_EXIT). Response may be malformed."
+      exit 1
+    fi
+    
+    LATEST_TAG="$(echo "$JQ_OUTPUT" | extract_latest_dev_tag)"
   fi
 
   if [[ -z "$LATEST_TAG" || "$LATEST_TAG" == "null" ]]; then
