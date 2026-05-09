@@ -2,22 +2,10 @@ const { after, test } = require('node:test')
 const assert = require('node:assert')
 const { getProviderScore } = require('./scoring')
 const metrics = require('../metrics')
-const store = require('../settings/store')
 
 after(() => {
   metrics.shutdown()
 })
-
-function withProviderPriority (value, callback) {
-  const originalGetConfigValue = store.getConfigValue
-  store.getConfigValue = (key) => key === 'providerPriority' ? value : undefined
-
-  try {
-    callback()
-  } finally {
-    store.getConfigValue = originalGetConfigValue
-  }
-}
 
 test('getProviderScore calculates correct score for perfect provider', (t) => {
   // Mock metrics
@@ -31,11 +19,9 @@ test('getProviderScore calculates correct score for perfect provider', (t) => {
     albums: [{ year: '2023' }, { year: '2022' }] // 100% data completeness
   }
 
-  withProviderPriority('', () => {
-    const score = getProviderScore('musicbrainz', resultData)
-    // successRate(1)*0.4 + dataCompleteness(1)*0.4 + latency(0.975)*0.2 => 0.4 + 0.4 + 0.195 = 0.995 => 100
-    assert.strictEqual(score, 100)
-  })
+  const score = getProviderScore('musicbrainz', resultData)
+  // successRate(1)*0.4 + dataCompleteness(1)*0.4 + latency(0.975)*0.2 => 0.4 + 0.4 + 0.195 = 0.995 => 100
+  assert.strictEqual(score, 100)
 
   metrics.providerStats.delete('musicbrainz')
 })
@@ -51,11 +37,9 @@ test('getProviderScore applies penalty for high latency', (t) => {
     albums: [{ year: '2023' }, { year: '2022' }] // 100% data completeness
   }
 
-  withProviderPriority('', () => {
-    const score = getProviderScore('lastfm', resultData)
-    // successRate(1)*0.4 + dataCompleteness(1)*0.4 + latency(0)*0.2 => 0.4 + 0.4 + 0 = 0.80 => 80
-    assert.strictEqual(score, 80)
-  })
+  const score = getProviderScore('lastfm', resultData)
+  // successRate(1)*0.4 + dataCompleteness(1)*0.4 + latency(0)*0.2 => 0.4 + 0.4 + 0 = 0.80 => 80
+  assert.strictEqual(score, 80)
 
   metrics.providerStats.delete('lastfm')
 })
@@ -71,11 +55,9 @@ test('getProviderScore applies penalty for errors', (t) => {
     albums: [{ year: '2023' }, { year: '2022' }] // 100% data completeness
   }
 
-  withProviderPriority('', () => {
-    const score = getProviderScore('discogs', resultData)
-    // successRate(0.5)*0.4 + dataCompleteness(1)*0.4 + latency(0.95)*0.2 => 0.2 + 0.4 + 0.19 = 0.79 => 79
-    assert.strictEqual(score, 79)
-  })
+  const score = getProviderScore('discogs', resultData)
+  // successRate(0.5)*0.4 + dataCompleteness(1)*0.4 + latency(0.95)*0.2 => 0.2 + 0.4 + 0.19 = 0.79 => 79
+  assert.strictEqual(score, 79)
 
   metrics.providerStats.delete('discogs')
 })
@@ -91,16 +73,14 @@ test('getProviderScore applies penalty for incomplete data', (t) => {
     albums: [{ year: '2023' }, { year: null }, { title: 'No Year' }, { title: 'Missing Year' }] // 25% data completeness
   }
 
-  withProviderPriority('', () => {
-    const score = getProviderScore('test-provider', resultData)
-    // successRate(1)*0.4 + dataCompleteness(0.25)*0.4 + latency(0.975)*0.2 => 0.4 + 0.10 + 0.195 = 0.695 => 70
-    assert.strictEqual(score, 70)
-  })
+  const score = getProviderScore('test-provider', resultData)
+  // successRate(1)*0.4 + dataCompleteness(0.25)*0.4 + latency(0.975)*0.2 => 0.4 + 0.10 + 0.195 = 0.695 => 70
+  assert.strictEqual(score, 70)
 
   metrics.providerStats.delete('test-provider')
 })
 
-test('getProviderScore applies priority boost', (t) => {
+test('getProviderScore remains adaptive-only when providerPriority is configured elsewhere', (t) => {
   metrics.providerStats.set('musicbrainz', {
     calls: 10,
     errors: 0,
@@ -111,14 +91,8 @@ test('getProviderScore applies priority boost', (t) => {
     albums: [{ year: '2023' }, { year: '2022' }]
   }
 
-  withProviderPriority('musicbrainz,lastfm', () => {
-    const score = getProviderScore('musicbrainz', resultData)
-    // base score is ~100.
-    // priorities: length=2, index=0
-    // boost = 1 + ((2 - 0) * 0.1) = 1.2
-    // 100 * 1.2 = 120 -> capped at 100
-    assert.strictEqual(score, 100)
-  })
+  const score = getProviderScore('musicbrainz', resultData)
+  assert.strictEqual(score, 100)
 
   metrics.providerStats.delete('musicbrainz')
 })
@@ -128,11 +102,9 @@ test('getProviderScore handles missing metrics gracefully', (t) => {
     albums: [{ year: '2023' }, { year: '2022' }]
   }
 
-  withProviderPriority('', () => {
-    // No metrics set for 'unknown'
-    const score = getProviderScore('unknown', resultData)
-    // Default values: successRate(1), latencyMs(0) -> max score
-    // successRate(1)*0.4 + dataCompleteness(1)*0.4 + latency(1)*0.2 = 1.0 -> 100
-    assert.strictEqual(score, 100)
-  })
+  // No metrics set for 'unknown'
+  const score = getProviderScore('unknown', resultData)
+  // Default values: successRate(1), latencyMs(0) -> max score
+  // successRate(1)*0.4 + dataCompleteness(1)*0.4 + latency(1)*0.2 = 1.0 -> 100
+  assert.strictEqual(score, 100)
 })
