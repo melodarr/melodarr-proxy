@@ -1,8 +1,8 @@
-import { ReactNode } from "react";
-
 export function JsonTree({
   value,
   path = "$",
+  depth = 0,
+  onSelect,
   depth = 0,
   onSelect,
 }: {
