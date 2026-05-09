@@ -802,7 +802,8 @@ export default function SettingsPage() {
  type="button"
  onClick={cycleTestArtist}
  className="absolute right-2 p-1 text-muted transition-colors hover:text-primary rounded"
- title="Random artist"
+ title="Next artist"
+ aria-label="Next artist"
  >
  <Dices className="h-4 w-4" />
  </button>
