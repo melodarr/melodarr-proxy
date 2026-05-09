@@ -1,4 +1,4 @@
-const { checkRateLimit } = require('../auth/apikeys')
+const { checkRateLimit, hasKeys } = require('../auth/apikeys')
 const metrics = require('../metrics')
 const logger = require('../utils/logger')
 
@@ -7,6 +7,21 @@ function apiKeyMiddleware (req, res, next) {
     req.apiClient = 'Local Client (Unauthenticated)'
     req.apiKeyId = 'unauth'
     req.apiKeyMasked = 'unauth'
+    req.requestStartTime = Date.now()
+
+    res.on('finish', () => {
+      const latency = Date.now() - req.requestStartTime
+      const isError = res.statusCode >= 400
+      metrics.recordApiRequest(req.apiKeyMasked, !isError, latency)
+    })
+
+    return next()
+  }
+
+  if (!hasKeys()) {
+    req.apiClient = 'Local Client (No API Key Configured)'
+    req.apiKeyId = 'no-key-configured'
+    req.apiKeyMasked = 'no-key-configured'
     req.requestStartTime = Date.now()
 
     res.on('finish', () => {

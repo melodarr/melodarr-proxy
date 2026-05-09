@@ -26,7 +26,7 @@ function makeResponse () {
   }
 }
 
-function loadMiddleware ({ checkRateLimit }) {
+function loadMiddleware ({ checkRateLimit, hasKeys = () => true }) {
   const middlewarePath = require.resolve('./apiKey.middleware')
   const apiKeysPath = require.resolve('../auth/apikeys')
   const metricsPath = require.resolve('../metrics')
@@ -44,7 +44,7 @@ function loadMiddleware ({ checkRateLimit }) {
     id: apiKeysPath,
     filename: apiKeysPath,
     loaded: true,
-    exports: { checkRateLimit }
+    exports: { checkRateLimit, hasKeys }
   }
 
   require.cache[metricsPath] = {
@@ -66,6 +66,32 @@ function loadMiddleware ({ checkRateLimit }) {
     middleware: require('./apiKey.middleware')
   }
 }
+
+test('api key middleware allows unauthenticated requests when no API keys are configured', () => {
+  const { middleware, calls } = loadMiddleware({
+    hasKeys: () => false,
+    checkRateLimit: () => {
+      throw new Error('checkRateLimit should not be called')
+    }
+  })
+  const req = { headers: {}, query: {} }
+  const res = makeResponse()
+  let nextCalled = false
+
+  middleware(req, res, () => {
+    nextCalled = true
+  })
+  res.finish()
+
+  assert.equal(nextCalled, true)
+  assert.equal(req.apiClient, 'Local Client (No API Key Configured)')
+  assert.equal(req.apiKeyId, 'no-key-configured')
+  assert.equal(req.apiKeyMasked, 'no-key-configured')
+  assert.equal(calls.apiRequests.length, 1)
+  assert.equal(calls.apiRequests[0][0], 'no-key-configured')
+  assert.equal(calls.apiRequests[0][1], true)
+  assert.equal(typeof calls.apiRequests[0][2], 'number')
+})
 
 test('api key middleware rejects missing keys', () => {
   const { middleware, calls } = loadMiddleware({
