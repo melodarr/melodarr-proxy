@@ -60,12 +60,12 @@ if ! COMPOSE_PROXY_IMAGE="$(jq -r '.services.proxy.image // empty' <<<"$COMPOSE_
 fi
 
 if [[ -z "$COMPOSE_PROXY_IMAGE" ]]; then
-  echo "[ERROR] docker compose service 'proxy' must use image: (build-only compose is unsupported by this updater)"
+  echo "[ERROR] docker compose service 'proxy' must use image: configuration; build-only compose is unsupported by this updater"
   exit 1
 fi
 
 if [[ "$COMPOSE_PROXY_IMAGE" == *"@"* ]]; then
-  echo "[ERROR] docker compose service 'proxy' image cannot be digest-pinned for this updater: $COMPOSE_PROXY_IMAGE"
+  echo "[ERROR] docker compose service 'proxy' image cannot be digest-pinned (tag-based images required): $COMPOSE_PROXY_IMAGE"
   exit 1
 fi
 
