@@ -59,10 +59,24 @@ function getTrustProxySetting () {
   const configuredValue = process.env.TRUST_PROXY
 
   if (!configuredValue) {
-    return 1
+    return false
   }
 
   const normalizedValue = configuredValue.trim()
+
+  if (!normalizedValue) {
+    return false
+  }
+
+  const lowerCasedValue = normalizedValue.toLowerCase()
+
+  if (lowerCasedValue === 'true') {
+    return true
+  }
+
+  if (lowerCasedValue === 'false') {
+    return false
+  }
 
   if (/^\d+$/.test(normalizedValue)) {
     return Number(normalizedValue)
