@@ -77,7 +77,10 @@ export function HeaderNav() {
             onClick={() => setIsOpen(false)}
             aria-hidden="true"
           />
-          <div className="fixed bottom-0 left-0 right-0 bg-page/95 backdrop-blur-xl border-t border-border p-4 pt-2 flex flex-col gap-2 shadow-[0_-10px_40px_rgba(0,0,0,0.2)] z-50 lg:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl pb-safe pb-8 animate-in slide-in-from-bottom-full duration-300">
+          <div
+            className="fixed bottom-0 left-0 right-0 bg-page/95 backdrop-blur-xl border-t border-border p-4 pt-2 pb-8 flex flex-col gap-2 shadow-[0_-10px_40px_rgba(0,0,0,0.2)] z-50 lg:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2rem)" }}
+          >
             <div className="w-12 h-1.5 bg-border/50 rounded-full mx-auto mb-2 shrink-0" />
             {links.map((link) => {
               const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
