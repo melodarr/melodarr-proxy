@@ -35,14 +35,19 @@ function buildLivenessPayload () {
 function getNetworkStatus () {
   const networkSummary = buildNetworkHealthSummary()
   const mbz = networkSummary && networkSummary.musicbrainz
+  const mbzState = typeof mbz?.state === 'string' ? mbz.state.toLowerCase() : null
 
   if (!mbz) return 'ok'
 
-  if (mbz.ok === false) {
+  if (mbzState === 'unknown') {
+    return 'ok'
+  }
+
+  if (typeof mbz.state === 'string' && DEGRADED_UPSTREAM.has(mbzState)) {
     return 'degraded'
   }
 
-  if (typeof mbz.state === 'string' && DEGRADED_UPSTREAM.has(mbz.state)) {
+  if (mbz.ok === false) {
     return 'degraded'
   }
 
