@@ -166,10 +166,10 @@ async function aggregateArtist (term) {
       successfulProviders++
       const data = outcome.value.result
       const provider = outcome.value.provider
-      const score = getProviderScore(provider, data)
+      const adaptiveScore = getProviderScore(provider, data)
       const priorityWeight = getPriorityWeight(provider)
 
-      validOutcomes.push({ provider, data, score, priorityWeight })
+      validOutcomes.push({ provider, data, adaptiveScore, priorityWeight })
     } else {
       partial = true
       const err = outcome.reason
@@ -179,24 +179,25 @@ async function aggregateArtist (term) {
     }
   }
 
-  // Sort by priority first, then by adaptive score descending
+  // Sort by configured priority first, then by the priority-free adaptive score.
   validOutcomes.sort((a, b) => {
     if (a.priorityWeight !== b.priorityWeight) {
       return b.priorityWeight - a.priorityWeight
     }
-    return b.score - a.score
+    return b.adaptiveScore - a.adaptiveScore
   })
 
   let overallConfidence = 0
   if (validOutcomes.length > 0) {
-    overallConfidence = validOutcomes[0].score
+    overallConfidence = validOutcomes[0].adaptiveScore
   }
 
   for (const outcome of validOutcomes) {
-    const { data, score, priorityWeight, provider } = outcome
+    const { data, adaptiveScore, priorityWeight, provider } = outcome
 
     // Use the first returned artist name we get if we don't have a good one yet
-    // Since validOutcomes are sorted by score, the best provider gets to name the artist
+    // Since validOutcomes are sorted by priority and then adaptive score, the best
+    // provider gets to name the artist.
     if (data.artistName && mergedArtistName === term) {
       mergedArtistName = data.artistName
     }
@@ -238,7 +239,7 @@ async function aggregateArtist (term) {
         if (!existing.year && album.year) {
           existing.year = album.year
           existing.releaseDate = album.releaseDate || existing.releaseDate
-          existing.score = score
+          existing.adaptiveScore = adaptiveScore
           existing.priorityWeight = priorityWeight
           existing.provider = provider
         } else if (existing.year && album.year && existing.year !== album.year) {
@@ -264,7 +265,7 @@ async function aggregateArtist (term) {
             value: normalizeProviderRating(album).value
           },
           ids: mergeIds(null, album.ids),
-          score,
+          adaptiveScore,
           priorityWeight,
           provider
         })
@@ -444,7 +445,7 @@ async function aggregateArtist (term) {
     providerCount: successfulProviders,
     providers: validOutcomes.map(outcome => ({
       name: outcome.provider,
-      score: outcome.score,
+      score: outcome.adaptiveScore,
       albumCount: outcome.data.albums?.length || 0
     })),
     providerErrors,

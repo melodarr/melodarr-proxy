@@ -309,6 +309,10 @@ test('Providers Index', async (t) => {
     assert.strictEqual(result.albums[0].year, 1997, 'High priority provider should win album year')
     assert.strictEqual(result.albums[0].releaseDate, '1997-05-21', 'High priority provider should win album release date')
     assert.strictEqual(result.images[0].url, 'https://itunes.test/image.jpg', 'High priority provider image should win')
+    assert.deepStrictEqual(result.providers, [
+      { name: 'itunes', score: 0.5, albumCount: 1 },
+      { name: 'musicbrainz', score: 0.95, albumCount: 1 }
+    ], 'Provider ordering should reflect configured priority while reported scores stay adaptive')
   })
 
   await t.test('aggregateArtist - throws if all providers fail', async () => {
