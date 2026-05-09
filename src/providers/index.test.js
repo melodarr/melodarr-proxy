@@ -94,7 +94,7 @@ test('Providers Index', async (t) => {
       exports: { getConfigValue: () => 'musicbrainz,theaudiodb' }
     }
     require.cache[require.resolve('../utils/logger')] = {
-      exports: { error () {}, warn () {}, info () {} }
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
     }
     require.cache[require.resolve('../metrics')] = { exports: {} }
     require.cache[require.resolve('./scoring')] = {
@@ -152,7 +152,7 @@ test('Providers Index', async (t) => {
       exports: { getConfigValue: () => 'musicbrainz,itunes' }
     }
     require.cache[require.resolve('../utils/logger')] = {
-      exports: { error () {}, warn () {}, info () {} }
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
     }
     require.cache[require.resolve('../metrics')] = { exports: {} }
     require.cache[require.resolve('./scoring')] = {
@@ -225,7 +225,7 @@ test('Providers Index', async (t) => {
       exports: { getConfigValue: () => 'musicbrainz,itunes' }
     }
     require.cache[require.resolve('../utils/logger')] = {
-      exports: { error () {}, warn () {}, info () {} }
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
     }
     require.cache[require.resolve('../metrics')] = { exports: {} }
     require.cache[require.resolve('./scoring')] = {
@@ -257,6 +257,58 @@ test('Providers Index', async (t) => {
     assert.strictEqual(result.albums[0].year, 1997)
     // The more precise releaseDate wins even though iTunes scored lower.
     assert.strictEqual(result.albums[0].releaseDate, '1997-05-21T07:00:00Z')
+  })
+
+  await t.test('aggregateArtist - enforces provider priority over adaptive score', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: {
+        getConfigValue: (key) => {
+          if (key === 'metadataProviders') return 'musicbrainz,itunes'
+          if (key === 'providerPriority') return 'itunes,musicbrainz'
+          return ''
+        }
+      }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Radiohead - MB',
+          overview: 'Overview from MB',
+          images: [{ url: 'https://mb.test/image.jpg', coverType: 'poster' }],
+          albums: [{ name: 'OK Computer', year: 1998, releaseDate: '1998-01-01', ids: { mb: '1' } }]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Radiohead - iTunes',
+          overview: 'Overview from iTunes',
+          images: [{ url: 'https://itunes.test/image.jpg', coverType: 'poster' }],
+          albums: [{ name: 'OK Computer', year: 1997, releaseDate: '1997-05-21', ids: { it: '2' } }]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Radiohead')
+
+    assert.strictEqual(result.artistName, 'Radiohead - iTunes', 'High priority provider should win artist name')
+    assert.strictEqual(result.overview, 'Overview from iTunes', 'High priority provider should win overview')
+    assert.strictEqual(result.albums.length, 1)
+    assert.strictEqual(result.albums[0].year, 1997, 'High priority provider should win album year')
+    assert.strictEqual(result.albums[0].releaseDate, '1997-05-21', 'High priority provider should win album release date')
+    assert.strictEqual(result.images[0].url, 'https://itunes.test/image.jpg', 'High priority provider image should win')
   })
 
   await t.test('aggregateArtist - throws if all providers fail', async () => {
