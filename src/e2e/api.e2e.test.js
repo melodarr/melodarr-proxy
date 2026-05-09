@@ -275,6 +275,10 @@ describe('API E2E Tests', () => {
 
       assert.strictEqual(res.status, 200)
       assert.ok(Array.isArray(res.data))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'foreignArtistId'))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'status'))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'links'))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'aliases'))
       assert.strictEqual(res.data[0].artistName, 'Backstreet Boys')
       assert.deepStrictEqual(res.data[0].oldIds, [])
       assert.deepStrictEqual(res.data[0].aliases, ['BSB', 'Back Street Boys'])
