@@ -118,9 +118,9 @@ async function enqueueRequest (fn) {
           let pauseMs = 5000 // default penalty if no header
           if (retryAfterHeader) {
             const parsed = parseRetryAfter(retryAfterHeader)
-            if (parsed !== null && parsed > 0) pauseMs = parsed
+            if (parsed !== null) pauseMs = parsed
           }
-          applyCoolingOff(pauseMs)
+          if (pauseMs > 0) applyCoolingOff(pauseMs)
         }
         reject(err)
       }
