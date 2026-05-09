@@ -11,6 +11,7 @@ const links = [
   { href: "/requests", label: "Requests" },
   { href: "/explorer", label: "Explorer" },
   { href: "/diagnostics", label: "Diagnostics" },
+  { href: "/network", label: "Network" },
   { href: "/lidarr-mirror", label: "Lidarr Mirror" },
   { href: "/settings", label: "Settings" },
   { href: "/updates", label: "Updates" },

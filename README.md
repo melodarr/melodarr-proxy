@@ -127,6 +127,12 @@ cp .env.example .env
 docker compose up -d --build proxy redis melodash
 ```
 
+The source Compose file binds the proxy to `HOST_PORT` (default `3055`) and
+Melodash to `MELODASH_HOST_PORT` (default `55026`). It also creates an
+IPv6-enabled Docker bridge for provider traffic. Override
+`MELODARR_DOCKER_IPV6_SUBNET` if the default ULA subnet conflicts with another
+Docker network on the host.
+
 For deployments that need the external IPv6 Docker network used by older
 Melodarr installs:
 

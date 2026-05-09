@@ -3,6 +3,7 @@ import "./globals.css";
 import { HeaderNav } from "@/components/HeaderNav";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NetworkBanner } from "@/components/NetworkBanner";
 
 export const metadata: Metadata = {
  title: "Melodarr Proxy | Control Plane",
@@ -22,6 +23,7 @@ export default function RootLayout({
  <html lang="en" suppressHydrationWarning>
  <body className="min-h-screen bg-page font-sans transition-colors duration-300">
  <ThemeProvider defaultTheme="dark" storageKey="melodash-theme">
+ <NetworkBanner />
  <header className="sticky top-0 z-50 relative border-b border-border bg-page/95 backdrop-blur supports-[backdrop-filter]:bg-page/60">
  <div className="container flex min-h-14 max-w-screen-2xl flex-wrap items-center justify-between gap-y-2 gap-x-4 px-4 sm:px-8 py-3">
  <div className="flex items-center justify-between w-full lg:w-auto">

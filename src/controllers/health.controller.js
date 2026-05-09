@@ -32,10 +32,26 @@ function buildLivenessPayload () {
   }
 }
 
+function getNetworkStatus () {
+  const stats = metrics.getStats()
+  const mbz = stats.providers?.musicbrainz
+  if (!mbz) return 'ok'
+
+  const ipv6Ok = mbz.successRate > 0
+  const timeouts = mbz.timeouts || 0
+
+  if (!ipv6Ok && timeouts > 0) {
+    return 'degraded'
+  }
+
+  return 'ok'
+}
+
 function buildHealthPayload () {
   const upstream = upstreamMonitor.getStatus()
   const cacheStatus = cache.getHealth()
   const proxyStatus = metrics.state.isRunning ? 'running' : 'stopped'
+  const networkStatus = getNetworkStatus()
 
   const memoryUsage = process.memoryUsage()
   const memoryMb = Math.round(memoryUsage.rss / 1024 / 1024)
@@ -48,7 +64,7 @@ function buildHealthPayload () {
   const upstreamCountsAgainstReadiness = !upstreamNotApplicable
 
   let status = 'ok'
-  if ((upstreamCountsAgainstReadiness && (upstreamDegraded || upstreamUnreachable || upstreamUnknown)) || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning') {
+  if ((upstreamCountsAgainstReadiness && (upstreamDegraded || upstreamUnreachable || upstreamUnknown)) || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning' || networkStatus === 'degraded') {
     status = 'degraded'
   }
   if ((upstreamUnreachable && upstreamCountsAgainstReadiness && proxyStatus === 'stopped') || memoryStatus === 'critical') {

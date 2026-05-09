@@ -11,6 +11,7 @@ import {
  Eye,
  EyeOff,
  GripVertical,
+ Dices,
  KeyRound,
  Loader2,
  LogIn,
@@ -28,82 +29,52 @@ import { fetchJson, fetcher } from "@/lib/fetcher";
 import { clearCsrfToken } from "@/lib/csrf";
 import { fetchWithFallback } from "@/lib/proxy";
 
-type RuntimeValue = string | number | boolean;
+const TEST_ARTISTS = [
+  "Radiohead", "The Beatles", "Pink Floyd", "Daft Punk", "Miles Davis",
+  "Kendrick Lamar", "David Bowie", "Kanye West", "Nirvana", "Led Zeppelin",
+  "The Velvet Underground", "The Rolling Stones", "Fleetwood Mac", "Michael Jackson", "Bob Dylan",
+  "Wu-Tang Clan", "OutKast", "The Beach Boys", "The Smiths", "Prince",
+  "Black Sabbath", "Talking Heads", "The Cure", "Joy Division", "Frank Ocean",
+  "Björk", "A Tribe Called Quest", "Stevie Wonder", "Nas", "The Clash",
+  "Neil Young", "Jimi Hendrix", "Depeche Mode", "Gorillaz", "R.E.M.",
+  "Queen", "Nine Inch Nails", "Tame Impala", "Portishead", "Massive Attack",
+  "Fiona Apple", "Aphex Twin", "Arcade Fire", "Beastie Boys", "Johnny Cash",
+  "The Strokes", "Eminem", "Smashing Pumpkins", "Tool", "D'Angelo",
+  "Red Hot Chili Peppers", "MF DOOM", "Madvillain", "Sufjan Stevens", "LCD Soundsystem",
+  "My Bloody Valentine", "Pixies", "Pavement", "Modest Mouse", "Vampire Weekend",
+  "The National", "Elliott Smith", "Ariel Pink", "Animal Collective", "The White Stripes",
+  "Tyler, The Creator", "Arctic Monkeys", "Frank Sinatra", "Kraftwerk", "Duran Duran",
+  "Tears for Fears", "New Order", "The Police", "Kate Bush", "Cocteau Twins",
+  "Sonic Youth", "Ween", "The Smashing Pumpkins", "Pearl Jam", "Soundgarden",
+  "Alice in Chains", "Stone Temple Pilots", "Green Day", "Blink-182", "The Offspring",
+  "The Killers", "Kings of Leon", "Muse", "Coldplay", "Florence + The Machine",
+  "Adele", "Beyoncé", "Rihanna", "Drake", "The Weeknd",
+  "Dua Lipa", "Billie Eilish", "Lana Del Rey", "Lorde", "FKA twigs"
+];
 
-type RuntimeEntry = {
- value: RuntimeValue;
- source: string;
-};
-
-type SettingsStatus = {
- enabled?: boolean;
- setupRequired?: boolean;
- authenticated?: boolean;
- csrfToken?: string | null;
-};
-
-type SettingsPayload = {
- csrfToken?: string | null;
- config?: Record<string, RuntimeEntry>;
- admin?: {
- passwordConfigured?: boolean;
- envPasswordConfigured?: boolean;
- bootstrapAvailable?: boolean;
- };
- server?: Record<string, RuntimeEntry>;
-};
-
-type FormValues = Record<string, string>;
-type Message = { type: "success" | "error"; text: string } | null;
-type ProviderTestResult = {
- ok?: boolean;
- provider?: string;
- query?: string;
- durationMs?: number;
- artistName?: string;
- albumCount?: number;
- sampleAlbums?: Array<{ name: string; year?: number | null }>;
- error?: string;
- details?: Record<string, unknown>;
-};
-type SettingsField = {
- key: string;
- label: string;
- type: string;
- suffix?: string;
- placeholder?: string;
- options?: Array<{ value: string; label: string }>;
-};
-type CustomMapping = {
- artistName?: string;
- albums?: string;
- albumName?: string;
- year?: string;
- imageUrl?: string;
-};
-type CustomProviderResult = {
- raw?: unknown;
- mapped?: { artistName?: string; albums?: Array<{ name?: string; year?: number | null; imageUrl?: string }> };
- errors?: Array<{ field: string; message: string }>;
- warnings?: Array<{ field: string; message: string }>;
- details?: Record<string, unknown>;
-};
-type MappingField = keyof CustomMapping;
-
-type CustomProviderConfig = {
- id: string;
- name: string;
- baseUrl: string;
- searchPath: string;
- queryParam: string;
- authType: "none" | "bearer" | "header" | "query";
- headerName?: string;
- queryAuthName?: string;
- token?: string;
- mapping: CustomMapping;
- minRequestIntervalMs?: number;
- ipFamily?: "auto" | "4" | "6";
-};
+import {
+  RuntimeValue,
+  SettingsStatus,
+  SettingsPayload,
+  FormValues,
+  Message,
+  ProviderTestResult,
+  SettingsField,
+  CustomMapping,
+  CustomProviderResult,
+  MappingField,
+  CustomProviderConfig,
+} from "./types";
+import {
+  inputClass,
+  normalizeValue,
+  normalizeJsonPath,
+  generateId,
+  getRelativeAlbumPath,
+  formatJson,
+} from "./utils";
+import { JsonTree } from "./components/JsonTree";
+import { CustomProviderModal } from "./components/CustomProviderModal";
 
 const providerOptions = [
  { id: "musicbrainz", label: "MusicBrainz", note: "Primary release and artist metadata." },
@@ -135,7 +106,6 @@ const ipFamilyOptions = [
 
 const providerSettings: Record<string, SettingsField[]> = {
  musicbrainz: [
- { key: "musicbrainzApiKey", label: "API key", type: "password" },
  { key: "musicbrainzIpFamily", label: "IP family", type: "select", options: [
  { value: "6", label: "IPv6 only" },
  ] },
@@ -146,17 +116,14 @@ const providerSettings: Record<string, SettingsField[]> = {
  { key: "itunesIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
  theaudiodb: [
- { key: "theAudioDbApiKey", label: "API key", type: "password" },
  { key: "theAudioDbMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
  { key: "theAudioDbIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
  lastfm: [
- { key: "lastfmApiKey", label: "API key", type: "password" },
  { key: "lastfmMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
  { key: "lastfmIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
  discogs: [
- { key: "discogsToken", label: "Token", type: "password" },
  { key: "discogsMinRequestIntervalMs", label: "Request interval", type: "number", suffix: "ms" },
  { key: "discogsIpFamily", label: "IP family", type: "select", options: ipFamilyOptions },
  ],
@@ -198,114 +165,7 @@ function EmptyState({ title, body, icon }: { title: string; body: string; icon: 
  );
 }
 
-function JsonTree({
- value,
- path = "$",
- depth = 0,
- onSelect,
-}: {
- value: unknown;
- path?: string;
- depth?: number;
- onSelect: (path: string) => void;
-}) {
- if (Array.isArray(value)) {
- const sample = value[0];
 
- return (
- <div>
- <button
- type="button"
- onClick={() => onSelect(`${path}[*]`)}
- className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-blue-300 hover:bg-blue-500/10"
- style={{ paddingLeft: `${depth * 14 + 8}px` }}
- >
- <span>{path.split(".").pop()}</span>
- <span className="text-muted">array[{value.length}]</span>
- </button>
- {sample !== undefined && <JsonTree value={sample} path={`${path}[*]`} depth={depth + 1} onSelect={onSelect} />}
- </div>
- );
- }
-
- if (value && typeof value === "object") {
- return (
- <div>
- {Object.entries(value as Record<string, unknown>).map(([key, child]) => {
- const childPath = path === "$" ? `$.${key}` : `${path}.${key}`;
- return (
- <div key={childPath}>
- <button
- type="button"
- onClick={() => onSelect(childPath)}
- className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-secondary hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5"
- style={{ paddingLeft: `${depth * 14 + 8}px` }}
- >
- <span>{key}</span>
- <span className="truncate text-secondary">{Array.isArray(child) ? `array[${child.length}]` : typeof child}</span>
- </button>
- {Boolean(Array.isArray(child) || (child && typeof child === "object")) && (
- <JsonTree value={child} path={childPath} depth={depth + 1} onSelect={onSelect} />
- )}
- </div>
- );
- })}
- </div>
- );
- }
-
- return (
- <button
- type="button"
- onClick={() => onSelect(path)}
- className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-secondary hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5"
- style={{ paddingLeft: `${depth * 14 + 8}px` }}
- >
- <span>{path.split(".").pop()}</span>
- <span className="truncate text-secondary">{String(value)}</span>
- </button>
- );
-}
-
-function inputClass() {
- return "w-full rounded-md border border-border bg-page px-3 py-2 text-sm text-primary outline-none transition-colors placeholder:text-secondary focus:border-blue-500";
-}
-
-function normalizeValue(value: RuntimeValue | undefined) {
- return value === undefined || value === null ? "" : String(value);
-}
-
-function parseMapping(value: string | undefined): CustomMapping {
- if (!value) return {};
- try {
- const parsed = JSON.parse(value);
- return parsed && typeof parsed === "object" ? parsed : {};
- } catch (_error) {
- return {};
- }
-}
-
-function normalizeJsonPath(path: string) {
- return path.replace(/\[\*\]$/, "");
-}
-
-function generateId() {
- return "cp_" + Math.random().toString(36).substring(2, 9);
-}
-
-function getRelativeAlbumPath(arrayPath: string | undefined, selectedPath: string) {
- if (!arrayPath || !selectedPath.startsWith(normalizeJsonPath(arrayPath))) {
- return selectedPath;
- }
- return selectedPath
- .slice(normalizeJsonPath(arrayPath).length)
- .replace(/^\[\*\]\.?/, "")
- .replace(/^\./, "");
-}
-
-function formatJson(value: unknown) {
- return JSON.stringify(value, null, 2);
-}
 
 function readConfig(config: SettingsPayload["config"], key: string) {
  return normalizeValue(config?.[key]?.value);
@@ -360,6 +220,7 @@ export default function SettingsPage() {
 
  const [customProviders, setCustomProviders] = useState<CustomProviderConfig[]>([]);
  const [editingProvider, setEditingProvider] = useState<CustomProviderConfig | null>(null);
+ const [activeTab, setActiveTab] = useState<"general" | "providers" | "api-keys" | "system">("general");
 
  const config = settings?.config ?? {};
 
@@ -600,6 +461,12 @@ export default function SettingsPage() {
  await navigator.clipboard.writeText(JSON.stringify(details, null, 2));
  setCopiedProvider(providerId);
  window.setTimeout(() => setCopiedProvider(null), 1500);
+ }
+
+ function cycleTestArtist() {
+  const currentIndex = TEST_ARTISTS.indexOf(providerTestQuery);
+  const nextIndex = currentIndex === -1 || currentIndex === TEST_ARTISTS.length - 1 ? 0 : currentIndex + 1;
+  setProviderTestQuery(TEST_ARTISTS[nextIndex]);
  }
 
  function renderField(field: SettingsField) {
@@ -856,8 +723,32 @@ export default function SettingsPage() {
  {settingsLoading ? (
  <div className="rounded-lg border border-border bg-card p-8 text-sm text-secondary">Loading settings...</div>
  ) : (
- <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
  <div className="space-y-6">
+  <div className="flex space-x-1 border-b border-border overflow-x-auto">
+    {(
+      [
+        { id: "general", label: "General" },
+        { id: "providers", label: "Providers" },
+        { id: "api-keys", label: "API Keys" },
+        { id: "system", label: "System" }
+      ] as const
+    ).map((tab) => (
+      <button
+        key={tab.id}
+        onClick={() => setActiveTab(tab.id)}
+        className={`whitespace-nowrap px-4 py-2 border-b-2 font-medium text-sm transition-colors -mb-px ${
+          activeTab === tab.id
+            ? "border-blue-500 text-blue-500"
+            : "border-transparent text-secondary hover:text-primary hover:border-border"
+        }`}
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+
+  {activeTab === "general" && (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
  <Section title="Identity" icon={<Sparkles className="h-5 w-5" />}>
  <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
  {identityFields.map(renderField)}
@@ -873,7 +764,12 @@ export default function SettingsPage() {
  </button>
  </Section>
 
- <Section title="Providers" icon={<Database className="h-5 w-5" />}>
+ </div>
+  )}
+
+  {activeTab === "providers" && (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <Section title="Providers" icon={<Database className="h-5 w-5" />}>
  {(config.metadataProviders?.source === "saved" || config.providerPriority?.source === "saved") && (
  <div className="mb-4 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm md:flex-row md:items-center md:justify-between">
  <div className="text-amber-200">
@@ -891,15 +787,26 @@ export default function SettingsPage() {
  </div>
  )}
  <div className="mb-5 flex flex-col gap-3 rounded-lg border border-border bg-page p-4 md:flex-row md:items-end md:justify-between">
- <label className="block md:min-w-80">
+ <label className="block flex-1">
  <span className="mb-2 block text-sm font-medium text-secondary ">Provider test artist</span>
+ <div className="relative flex items-center">
  <input
  className={inputClass()}
  type="text"
  value={providerTestQuery}
  onChange={(event) => setProviderTestQuery(event.target.value)}
  placeholder="Radiohead"
+ style={{ paddingRight: "2.5rem" }}
  />
+ <button
+ type="button"
+ onClick={cycleTestArtist}
+ className="absolute right-2 p-1 text-muted transition-colors hover:text-primary rounded"
+ title="Random artist"
+ >
+ <Dices className="h-4 w-4" />
+ </button>
+ </div>
  </label>
  <button
  type="button"
@@ -1069,15 +976,35 @@ export default function SettingsPage() {
  </div>
  </Section>
 
- <Section title="Cache and timing" icon={<SlidersHorizontal className="h-5 w-5" />}>
+ </div>
+  )}
+
+  {activeTab === "general" && (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <Section title="Cache and timing" icon={<SlidersHorizontal className="h-5 w-5" />}>
  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
  {cacheFields.map(renderField)}
  </div>
  </Section>
  </div>
+  )}
 
- <aside className="space-y-6">
- <Section title="Server" icon={<Server className="h-5 w-5" />}>
+  {activeTab === "api-keys" && (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <Section title="Provider API Keys" icon={<KeyRound className="h-5 w-5" />}>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          {renderField({ key: "musicbrainzApiKey", label: "MusicBrainz API Key", type: "password" })}
+          {renderField({ key: "theAudioDbApiKey", label: "TheAudioDB API Key", type: "password" })}
+          {renderField({ key: "lastfmApiKey", label: "Last.fm API Key", type: "password" })}
+          {renderField({ key: "discogsToken", label: "Discogs Token", type: "password" })}
+        </div>
+      </Section>
+    </div>
+  )}
+
+  {activeTab === "system" && (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <Section title="Server" icon={<Server className="h-5 w-5" />}>
  <div className="space-y-3">
  {Object.entries(settings?.server ?? {}).map(([key, info]) => (
  <div key={key} className="rounded-md border border-border bg-page p-4">
@@ -1088,27 +1015,32 @@ export default function SettingsPage() {
  ))}
  </div>
  </Section>
+ </div>
+ )}
 
- <section className="rounded-lg border border-border bg-card p-6">
- <h2 className="text-lg font-semibold">Save changes</h2>
- <p className="mt-2 text-sm leading-6 text-muted">
- Saved runtime values override defaults immediately. Environment defaults remain visible when a value has not been saved.
- </p>
- <button
- type="button"
- onClick={handleSave}
- disabled={saving}
- className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
- >
- {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
- Save settings
- </button>
- </section>
- </aside>
- </section>
- )}
- </>
- )}
+  <section className="rounded-lg border border-border bg-card p-6 mt-8">
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h2 className="text-lg font-semibold">Save changes</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">
+          Saved runtime values override defaults immediately. Environment defaults remain visible when a value has not been saved.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saving}
+        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save settings
+      </button>
+    </div>
+  </section>
+  </div>
+  )}
+  </>
+  )}
 
  {editingProvider && (
  <CustomProviderModal
@@ -1131,292 +1063,5 @@ export default function SettingsPage() {
  />
  )}
  </main>
- );
-}
-
-function CustomProviderModal({
- provider,
- testQuery,
- onClose,
- onSave,
-}: {
- provider: CustomProviderConfig;
- testQuery: string;
- onClose: () => void;
- onSave: (provider: CustomProviderConfig) => void;
-}) {
- const [form, setForm] = useState<CustomProviderConfig>(provider);
- const [selectedMappingField, setSelectedMappingField] = useState<MappingField>("artistName");
- const [customResult, setCustomResult] = useState<CustomProviderResult | null>(null);
- const [testingCustomProvider, setTestingCustomProvider] = useState(false);
- const [copiedCustomLogs, setCopiedCustomLogs] = useState(false);
- const [tokenVisible, setTokenVisible] = useState(false);
-
- function updateField<K extends keyof CustomProviderConfig>(key: K, value: CustomProviderConfig[K]) {
- setForm((current) => ({ ...current, [key]: value }));
- }
-
- function updateCustomMapping(field: MappingField, path: string) {
- const nextMapping = {
- ...form.mapping,
- [field]: field === "artistName" || field === "albums" ? path : getRelativeAlbumPath(form.mapping.albums, path),
- };
- setForm(f => ({ ...f, mapping: nextMapping }));
- if (customResult?.raw !== undefined) {
- void runCustomProviderTest(nextMapping);
- }
- }
-
- function handleJsonPathSelect(path: string) {
- updateCustomMapping(selectedMappingField, path);
- }
-
- async function runCustomProviderTest(mapping: CustomMapping) {
- setTestingCustomProvider(true);
- try {
- const response = await fetchWithFallback("/debug/test-provider", {
- method: "POST",
- credentials: "include",
- headers: { "content-type": "application/json" },
- body: JSON.stringify({
- baseUrl: form.baseUrl,
- searchPath: form.searchPath,
- queryParam: form.queryParam,
- authType: form.authType || "none",
- token: form.token,
- headerName: form.headerName,
- queryAuthName: form.queryAuthName,
- query: testQuery || "Radiohead",
- mapping,
- minRequestIntervalMs: form.minRequestIntervalMs,
- ipFamily: form.ipFamily,
- }),
- });
- const result = await response.json() as CustomProviderResult;
- setCustomResult(result);
- } catch (error) {
- setCustomResult({
- raw: null,
- mapped: { artistName: "", albums: [] },
- errors: [{ field: "request", message: error instanceof Error ? error.message : "Custom provider test failed" }],
- warnings: [],
- });
- } finally {
- setTestingCustomProvider(false);
- }
- }
-
- async function testCustomProvider() {
- await runCustomProviderTest(form.mapping);
- }
-
- async function copyCustomLogs() {
- await navigator.clipboard.writeText(formatJson(customResult?.details ?? customResult?.errors ?? []));
- setCopiedCustomLogs(true);
- window.setTimeout(() => setCopiedCustomLogs(false), 1500);
- }
-
- return (
- <div className="fixed inset-0 z-50 flex items-center justify-center bg-page dark:bg-card border border-border p-4 backdrop-blur-sm overflow-y-auto">
- <div className="relative w-full max-w-6xl rounded-xl border border-border bg-card shadow-2xl my-auto">
- <div className="flex items-center justify-between border-b border-border px-6 py-4">
- <h2 className="text-xl font-semibold text-primary">{form.name || "Edit Custom Provider"}</h2>
- <button onClick={onClose} className="rounded-md p-2 text-secondary hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5 hover:text-black dark:hover:text-white">
- <X className="h-5 w-5" />
- </button>
- </div>
- <div className="p-6">
- <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Name</span>
- <input className={inputClass()} value={form.name} onChange={(e) => updateField("name", e.target.value)} placeholder="Custom API" />
- </label>
- <label className="block xl:col-span-2">
- <span className="mb-2 block text-sm font-medium text-secondary ">Base URL</span>
- <input className={inputClass()} value={form.baseUrl} onChange={(e) => updateField("baseUrl", e.target.value)} placeholder="https://api.example.com" />
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Search path</span>
- <input className={inputClass()} value={form.searchPath} onChange={(e) => updateField("searchPath", e.target.value)} placeholder="/search" />
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Query parameter</span>
- <input className={inputClass()} value={form.queryParam} onChange={(e) => updateField("queryParam", e.target.value)} placeholder="q" />
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Auth type</span>
- <select className={inputClass()} value={form.authType} onChange={(e) => updateField("authType", e.target.value as any)}>
- <option value="none">None</option>
- <option value="bearer">Bearer token</option>
- <option value="header">Header</option>
- <option value="query">Query parameter</option>
- </select>
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Auth name</span>
- <input
- className={inputClass()}
- value={form.authType === "query" ? (form.queryAuthName ?? "") : (form.headerName ?? "")}
- onChange={(e) => updateField(form.authType === "query" ? "queryAuthName" : "headerName", e.target.value)}
- placeholder={form.authType === "query" ? "api_key" : "X-API-Key"}
- disabled={!["header", "query"].includes(form.authType)}
- />
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Token</span>
- <div className="relative">
- <input className={inputClass()} type={tokenVisible ? "text" : "password"} value={form.token ?? ""} onChange={(e) => updateField("token", e.target.value)} style={{ paddingRight: "2.5rem" }} />
- <button
-  type="button"
-  tabIndex={-1}
-  onClick={() => setTokenVisible((v) => !v)}
-  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted transition-colors hover:text-primary"
-  aria-label={tokenVisible ? "Hide token" : "Show token"}
- >
-  {tokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
- </button>
- </div>
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">IP family</span>
- <select className={inputClass()} value={form.ipFamily || "auto"} onChange={(e) => updateField("ipFamily", e.target.value as any)}>
- <option value="auto">Auto</option>
- <option value="4">IPv4</option>
- <option value="6">IPv6</option>
- </select>
- </label>
- <label className="block">
- <span className="mb-2 block text-sm font-medium text-secondary ">Request interval</span>
- <div className="relative">
- <input
- className={inputClass()}
- type="number"
- min={1}
- value={form.minRequestIntervalMs ?? ""}
- onChange={(e) => {
- const val = parseInt(e.target.value, 10);
- updateField("minRequestIntervalMs", isNaN(val) ? undefined : val);
- }}
- placeholder="e.g. 1000"
- style={{ paddingRight: "2.5rem" }}
- />
- <span className="pointer-events-none absolute right-3 top-2 text-sm text-muted">ms</span>
- </div>
- </label>
- </div>
-
- <div className="mt-5 flex flex-wrap items-center gap-3">
- <button
- type="button"
- onClick={testCustomProvider}
- disabled={testingCustomProvider || !form.baseUrl}
- className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
- >
- {testingCustomProvider ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube2 className="h-4 w-4" />}
- Test API
- </button>
- {customResult?.errors?.length ? (
- <span className="inline-flex items-center gap-2 text-sm text-red-700 dark:text-red-300">
- <AlertTriangle className="h-4 w-4" />
- {customResult.errors.length} mapping issue{customResult.errors.length === 1 ? "" : "s"}
- </span>
- ) : customResult?.mapped ? (
- <span className="text-sm text-emerald-300">Mapping preview is valid.</span>
- ) : null}
- {customResult?.warnings?.length ? (
- <span className="text-sm text-amber-300">{customResult.warnings[0]?.message}</span>
- ) : null}
- </div>
-
- <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
- <div className="rounded-lg border border-border bg-page p-4">
- <h3 className="text-sm font-semibold text-primary">Raw JSON</h3>
- <p className="mt-1 text-xs text-muted">Select a mapping field, then click a JSON field.</p>
- <div className="mt-4 max-h-[500px] overflow-auto rounded-md border border-border bg-page dark:bg-card border border-border p-2">
- {customResult?.raw ? (
- <JsonTree value={customResult.raw} onSelect={handleJsonPathSelect} />
- ) : (
- <div className="p-4 text-sm text-muted">Run Test API to load a response.</div>
- )}
- </div>
- </div>
-
- <div className="rounded-lg border border-border bg-page p-4">
- <h3 className="text-sm font-semibold text-primary">Mapping</h3>
- <div className="mt-4 space-y-3">
- {([
- ["artistName", "Artist name"],
- ["albums", "Albums array"],
- ["albumName", "Album name"],
- ["year", "Year"],
- ["imageUrl", "Image URL"],
- ] as Array<[MappingField, string]>).map(([field, label]) => (
- <button
- key={field}
- type="button"
- onClick={() => setSelectedMappingField(field)}
- className={`w-full rounded-md border p-3 text-left transition-colors ${
- selectedMappingField === field ? "border-blue-500/60 bg-blue-500/10" : "border-border bg-card hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5"
- }`}
- >
- <div className="flex items-center justify-between gap-3">
- <span className="text-sm font-medium text-primary">{label}</span>
- {customResult?.errors?.some((error) => error.field === field) && <span className="text-xs text-red-700 dark:text-red-300">Invalid</span>}
- </div>
- <div className="mt-1 truncate font-mono text-xs text-muted">{form.mapping[field] || "Click a field in the JSON tree"}</div>
- </button>
- ))}
- </div>
- </div>
-
- <div className="rounded-lg border border-border bg-page p-4">
- <div className="flex items-center justify-between gap-3">
- <h3 className="text-sm font-semibold text-primary">Preview</h3>
- {customResult?.details && (
- <button type="button" onClick={copyCustomLogs} className="inline-flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-xs text-secondary hover:bg-black/5 dark:hover:bg-black/5 dark:bg-black/5 dark:bg-card/5">
- <Copy className="h-3 w-3" />
- {copiedCustomLogs ? "Copied" : "Copy logs"}
- </button>
- )}
- </div>
- <div className="mt-4 max-h-[500px] overflow-auto rounded-md border border-border bg-page dark:bg-card border border-border p-3">
- {customResult ? (
- <>
- {customResult.errors?.length ? (
- <div className="mb-3 space-y-2">
- {customResult.errors.map((error) => (
- <div key={`${error.field}-${error.message}`} className="rounded border border-red-500/20 bg-red-500/10 p-2 text-xs text-red-200">
- {error.field}: {error.message}
- </div>
- ))}
- </div>
- ) : null}
- <pre className="whitespace-pre-wrap text-xs leading-5 text-secondary ">{formatJson(customResult.mapped ?? {})}</pre>
- {customResult.details && (
- <details className="mt-4 text-xs text-secondary">
- <summary className="cursor-pointer">Logs</summary>
- <pre className="mt-2 whitespace-pre-wrap rounded bg-black/30 p-3">{formatJson(customResult.details)}</pre>
- </details>
- )}
- </>
- ) : (
- <div className="text-sm text-muted">Mapped output appears here after a test.</div>
- )}
- </div>
- </div>
- </div>
- </div>
- <div className="flex items-center justify-end gap-3 border-t border-border p-4 bg-page rounded-b-xl">
- <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-secondary hover:text-black dark:hover:text-white transition-colors">Cancel</button>
- <button
- onClick={() => onSave(form)}
- disabled={!!customResult?.errors?.length && form.baseUrl !== ""}
- className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
- >
- Save Provider
- </button>
- </div>
- </div>
- </div>
  );
 }
