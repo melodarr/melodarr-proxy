@@ -200,18 +200,29 @@ export default function NetworkDiagnosticsPage() {
       </div>
 
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-       <div className="mb-4 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-         <Shield className="h-5 w-5 text-emerald-500" />
-         Proxy Network
-        </h2>
-        <StatusIcon ok={network?.status === "ok"} state={network?.status || "UNKNOWN"} />
-       </div>
-       <div className="space-y-2 rounded-md border border-border/50 bg-page p-3">
-        <DetailRow label="Status" value={network?.status || "unknown"} tone={network?.status === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-500"} />
-        <DetailRow label="Checked" value={network?.checkedAt ? new Date(network.checkedAt).toLocaleString() : "-"} />
-        <DetailRow label="Providers" value={Object.keys(network?.providers || {}).length} />
-       </div>
+       {(() => {
+        const networkStatus = network?.status || "unknown";
+        const normalizedNetworkStatus = networkStatus.toUpperCase();
+        const isNetworkOk = networkStatus.toLowerCase() === "ok";
+
+        return (
+         <>
+          <div className="mb-4 flex items-center justify-between">
+           <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Shield className="h-5 w-5 text-emerald-500" />
+            Proxy Network
+           </h2>
+           <StatusIcon ok={isNetworkOk} state={normalizedNetworkStatus} />
+          </div>
+          <div className="space-y-2 rounded-md border border-border/50 bg-page p-3">
+           <DetailRow label="Status" value={networkStatus} tone={isNetworkOk ? "text-emerald-600 dark:text-emerald-400" : "text-amber-500"} />
+           <DetailRow label="Checked" value={network?.checkedAt ? new Date(network.checkedAt).toLocaleString() : "-"} />
+           <DetailRow label="Providers" value={Object.keys(network?.providers || {}).length} />
+          </div>
+         </>
+        );
+       })()}
+      </div>
       </div>
      </div>
 
