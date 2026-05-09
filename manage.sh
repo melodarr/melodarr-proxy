@@ -42,6 +42,60 @@ run_melodash_lint() {
   compose_cmd --profile test run --rm --no-deps melodash-test yarn lint
 }
 
+run_skyhook_contract_check() {
+  echo "Running source-derived SkyHook contract tests inside a container..."
+  compose_cmd --profile test build test
+  compose_cmd --profile test run --rm --no-deps test yarn test:contracts
+
+  echo "Running live /api/v1/artist/lookup SkyHook contract smoke test..."
+  ensure_network
+  REQUIRE_API_KEY=false compose_cmd up -d --remove-orphans proxy redis
+
+  local proxy_port
+  local proxy_url
+  proxy_port="$(compose_cmd port proxy 3000 2>/dev/null | head -n 1 | awk -F: '{print $NF}')"
+  proxy_url="http://127.0.0.1:${proxy_port:-$HOST_PORT}"
+
+  for _ in {1..20}; do
+    if node -e "fetch(process.argv[1]).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" "$proxy_url/api/health"; then
+      break
+    fi
+    sleep 2
+  done
+
+  node -e '
+const url = process.argv[1]
+const required = ["foreignArtistId", "status", "links", "aliases"]
+
+fetch(url)
+  .then(async response => {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    return response.json()
+  })
+  .then(body => {
+    if (!Array.isArray(body)) {
+      throw new Error("expected lookup response to be an array")
+    }
+    if (body.length === 0) {
+      console.log("SkyHook lookup contract passed: empty lookup response accepted")
+      return
+    }
+    const artist = body[0] || {}
+    const missing = required.filter(key => !Object.prototype.hasOwnProperty.call(artist, key))
+    if (missing.length > 0) {
+      throw new Error(`missing required lookup fields: ${missing.join(", ")}`)
+    }
+    console.log(`SkyHook lookup contract passed: ${required.join(", ")}`)
+  })
+  .catch(error => {
+    console.error(`SkyHook lookup contract failed: ${error.message}`)
+    process.exit(1)
+  })
+' "$proxy_url/api/v1/artist/lookup?term=Radiohead"
+}
+
 run_all_checks() {
   run_proxy_lint && run_proxy_tests && run_melodash_lint
 }
@@ -115,10 +169,11 @@ Active Endpoints:
 11) Run all checks in containers
 12) Run proxy diagnostics
 13) Run Docker Compose smoke test
+14) Run SkyHook contract validation
 0) Exit
 =====================================================
 MENU
-  printf "Select an option [0-13]: "
+  printf "Select an option [0-14]: "
 }
 
 while true; do
@@ -211,6 +266,11 @@ while true; do
       ;;
     13)
       run_compose_smoke
+      pause
+      ;;
+    14)
+      ensure_network
+      run_skyhook_contract_check
       pause
       ;;
     0|"")
