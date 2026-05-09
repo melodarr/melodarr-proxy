@@ -32,10 +32,12 @@ const waitingQueue = []
 let activeRequests = 0
 let isProcessingQueue = false
 let coolingOffUntil = 0
+const MAX_TIMEOUT_MS = 2147483647
 
 function applyCoolingOff (delayMs) {
-  if (!delayMs || delayMs <= 0) return
-  const target = Date.now() + delayMs
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return
+  const safeDelayMs = Math.min(delayMs, MAX_TIMEOUT_MS)
+  const target = Date.now() + safeDelayMs
   if (target > coolingOffUntil) {
     coolingOffUntil = target
   }
