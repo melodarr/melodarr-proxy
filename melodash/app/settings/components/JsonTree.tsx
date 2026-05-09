@@ -3,8 +3,6 @@ export function JsonTree({
   path = "$",
   depth = 0,
   onSelect,
-  depth = 0,
-  onSelect,
 }: {
   value: unknown;
   path?: string;
