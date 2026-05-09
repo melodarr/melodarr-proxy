@@ -221,12 +221,11 @@ export default function NetworkDiagnosticsPage() {
           </div>
          </>
         );
-       })()}
-      </div>
-      </div>
-     </div>
+	       })()}
+	      </div>
+	     </div>
 
-     <section className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+	     <section className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
       {genericProviders.map(([name, provider]) => (
        <ProviderCard key={name} provider={provider} />
       ))}
