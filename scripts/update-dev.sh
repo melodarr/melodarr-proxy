@@ -55,7 +55,7 @@ if ! COMPOSE_CONFIG_JSON="$(docker compose config --format json 2>/dev/null)"; t
 fi
 
 if ! COMPOSE_PROXY_IMAGE="$(jq -r '.services.proxy.image // empty' <<<"$COMPOSE_CONFIG_JSON" 2>/dev/null)"; then
-  echo "[ERROR] Unable to parse docker compose config for proxy image"
+  echo "[ERROR] Unable to extract proxy image from docker compose config (jq missing or config invalid)"
   exit 1
 fi
 
@@ -64,7 +64,7 @@ if [[ -z "$COMPOSE_PROXY_IMAGE" ]]; then
   exit 1
 fi
 
-if [[ "$COMPOSE_PROXY_IMAGE" == *"@"* ]]; then
+if [[ "$COMPOSE_PROXY_IMAGE" =~ @sha[0-9]+: ]]; then
   echo "[ERROR] docker compose service 'proxy' image cannot be digest-pinned (tag-based images required): $COMPOSE_PROXY_IMAGE"
   exit 1
 fi
