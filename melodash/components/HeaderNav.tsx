@@ -80,15 +80,25 @@ export function HeaderNav() {
           <div
             className="fixed bottom-0 left-0 right-0 bg-page/95 backdrop-blur-xl border-t border-border p-4 pt-2 pb-8 flex flex-col gap-2 shadow-[0_-10px_40px_rgba(0,0,0,0.2)] z-50 lg:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2rem)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setIsOpen(false);
+              }
+            }}
           >
             <div className="w-12 h-1.5 bg-border/50 rounded-full mx-auto mb-2 shrink-0" />
-            {links.map((link) => {
+            {links.map((link, index) => {
               const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsOpen(false)}
+                  autoFocus={index === 0}
                   aria-current={active ? "page" : undefined}
                   className={`rounded-xl px-4 py-3 min-h-[48px] flex items-center transition-colors font-medium ${
                     active
