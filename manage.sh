@@ -63,37 +63,7 @@ run_skyhook_contract_check() {
     sleep 2
   done
 
-  node -e '
-const url = process.argv[1]
-const required = ["foreignArtistId", "status", "links", "aliases"]
-
-fetch(url)
-  .then(async response => {
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-    return response.json()
-  })
-  .then(body => {
-    if (!Array.isArray(body)) {
-      throw new Error("expected lookup response to be an array")
-    }
-    if (body.length === 0) {
-      console.log("SkyHook lookup contract passed: empty lookup response accepted")
-      return
-    }
-    const artist = body[0] || {}
-    const missing = required.filter(key => !Object.prototype.hasOwnProperty.call(artist, key))
-    if (missing.length > 0) {
-      throw new Error(`missing required lookup fields: ${missing.join(", ")}`)
-    }
-    console.log(`SkyHook lookup contract passed: ${required.join(", ")}`)
-  })
-  .catch(error => {
-    console.error(`SkyHook lookup contract failed: ${error.message}`)
-    process.exit(1)
-  })
-' "$proxy_url/api/v1/artist/lookup?term=Radiohead"
+  node scripts/validate-skyhook-live.js "$proxy_url"
 }
 
 run_all_checks() {
