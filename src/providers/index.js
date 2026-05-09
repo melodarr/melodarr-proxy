@@ -277,7 +277,7 @@ async function aggregateArtist (term) {
   const normalizedArtist = String(mergedArtistName || term).trim().toLowerCase()
 
   for (const outcome of validOutcomes) {
-    const { data, provider } = outcome
+    const { data, provider, priorityWeight } = outcome
 
     // 1. Artist profile images
     if (data.images && data.images.length > 0) {
@@ -288,6 +288,7 @@ async function aggregateArtist (term) {
           height: img.height,
           width: img.width,
           imageSource: provider,
+          priorityWeight,
           type: 'artist',
           isSelfTitled: false
         })
@@ -310,6 +311,7 @@ async function aggregateArtist (term) {
           url: album.imageUrl,
           coverType: 'poster',
           imageSource,
+          priorityWeight,
           type: 'album',
           isSelfTitled
         })
@@ -378,7 +380,12 @@ async function aggregateArtist (term) {
       uniqueScored.push(img)
     }
   }
-  uniqueScored.sort((a, b) => b.score - a.score)
+  uniqueScored.sort((a, b) => {
+    if (a.priorityWeight !== b.priorityWeight) {
+      return b.priorityWeight - a.priorityWeight
+    }
+    return b.score - a.score
+  })
 
   images = []
   if (uniqueScored.length > 0) {
