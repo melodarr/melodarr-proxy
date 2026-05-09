@@ -55,11 +55,31 @@ const globalRateLimiter = rateLimit({
 })
 const concurrencyLimit = require('./middleware/concurrency.middleware')
 
+function getTrustProxySetting () {
+  const configuredValue = process.env.TRUST_PROXY
+
+  if (!configuredValue) {
+    return 1
+  }
+
+  const normalizedValue = configuredValue.trim()
+
+  if (/^\d+$/.test(normalizedValue)) {
+    return Number(normalizedValue)
+  }
+
+  if (normalizedValue.includes(',')) {
+    return normalizedValue.split(',').map((value) => value.trim()).filter(Boolean)
+  }
+
+  return normalizedValue
+}
+
 function createApp () {
   const app = express()
 
-  // Trust reverse proxy for correct IP resolution (e.g. rate limiting)
-  app.set('trust proxy', true)
+  // Trust only the configured reverse proxy hop(s) for correct IP resolution
+  app.set('trust proxy', getTrustProxySetting())
 
   // Timeout Hard Caps - Ensure no request hangs indefinitely
   app.use((req, res, next) => {
