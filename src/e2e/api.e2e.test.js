@@ -435,27 +435,28 @@ describe('API E2E Tests', () => {
   })
 
   describe('Auth Behavior', () => {
+    let e2eApiKey
+
     before(() => {
       process.env.REQUIRE_API_KEY = 'true'
+      const { createKey } = require('../auth/apikeys')
+      e2eApiKey = createKey('e2e-test-client').key
     })
 
     after(() => {
       process.env.REQUIRE_API_KEY = 'false'
     })
 
-    it('no token → returns 401', async () => {
+    it('no token with configured API keys → returns 401', async () => {
       const res = await client.get('/api/search?q=test')
       assert.strictEqual(res.status, 401)
       assert.ok(res.data.error)
     })
 
     it('valid token → returns 200', async () => {
-      const { createKey } = require('../auth/apikeys')
-      const newKey = createKey('e2e-test-client')
-
       const res = await client.get('/api/search?q=test', {
         headers: {
-          'x-api-key': newKey.key
+          'x-api-key': e2eApiKey
         }
       })
 
