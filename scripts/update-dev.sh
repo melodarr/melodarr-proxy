@@ -231,15 +231,15 @@ echo "[INFO] Retagging image for compose proxy service: $COMPOSE_PROXY_IMAGE"
 docker tag "$TARGET_IMAGE" "$COMPOSE_PROXY_IMAGE"
 
 # Build docker compose command with project metadata from container labels
-COMPOSE_CMD="docker compose"
+COMPOSE_CMD=(docker compose)
 if [[ -n "$COMPOSE_PROJECT" ]]; then
-  COMPOSE_CMD="$COMPOSE_CMD -p $COMPOSE_PROJECT"
+  COMPOSE_CMD+=(-p "$COMPOSE_PROJECT")
 fi
 if [[ -n "$COMPOSE_CONFIG_FILES" ]]; then
   # Split comma-separated config files and add -f flag for each
   IFS=',' read -ra CONFIG_FILES <<< "$COMPOSE_CONFIG_FILES"
   for config_file in "${CONFIG_FILES[@]}"; do
-    COMPOSE_CMD="$COMPOSE_CMD -f $config_file"
+    COMPOSE_CMD+=(-f "$config_file")
   done
 fi
 
@@ -249,8 +249,8 @@ if [[ -n "$COMPOSE_WORKING_DIR" && -d "$COMPOSE_WORKING_DIR" ]]; then
   cd "$COMPOSE_WORKING_DIR"
 fi
 
-eval "$COMPOSE_CMD down"
-eval "$COMPOSE_CMD up -d"
+"${COMPOSE_CMD[@]}" down
+"${COMPOSE_CMD[@]}" up -d
 
 echo "[INFO] Waiting for health..."
 for _ in {1..10}; do
