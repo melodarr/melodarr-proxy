@@ -112,7 +112,7 @@ function buildRunbooks(providers: NetworkProviderState[]) {
    title: "MusicBrainz identity",
    body: "MusicBrainz requests need a real operator contact. Placeholder contacts are treated as invalid.",
    commands: [
-    "APP_CONTACT=you@your-real-domain.com docker compose up -d --force-recreate proxy",
+    "APP_CONTACT=https://github.com/melodarr/melodarr-proxy docker compose up -d --force-recreate proxy",
     "curl -s http://127.0.0.1:3055/debug/network?refresh=1 | jq '.providers.musicbrainz.userAgent'"
    ]
   });

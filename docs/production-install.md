@@ -36,7 +36,7 @@ At minimum, set a real contact address for MusicBrainz User-Agent policy:
 ```env
 APP_NAME=melodarr-proxy
 APP_VERSION=0.3.42
-APP_CONTACT=you@your-real-domain.com
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 ```
 
 `APP_CONTACT` must be a real contact email address. Do not use placeholder
@@ -86,7 +86,7 @@ Edit `.env`:
 ```env
 HOST_PORT=3055
 MELODASH_HOST_PORT=55026
-APP_CONTACT=you@your-real-domain.com
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 REQUIRE_API_KEY=true
 ADMIN_PASSWORD=change-this-long-password
 SETTINGS_SESSION_SECRET=change-this-random-secret
@@ -222,7 +222,7 @@ volumes:
 Create `.env`:
 
 ```env
-APP_CONTACT=you@your-real-domain.com
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 ADMIN_PASSWORD=change-this-long-password
 SETTINGS_SESSION_SECRET=change-this-random-secret
 THEAUDIODB_API_KEY=
@@ -318,7 +318,7 @@ Run the installer from the Proxmox host as `root`:
 CTID=163 \
 HOSTNAME=melodarr-proxy \
 PASSWORD='change-this-lxc-password' \
-APP_CONTACT=you@your-real-domain.com \
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy \
 APP_VERSION=0.3.42 \
 HOST_PORT=3055 \
 MELODASH_HOST_PORT=55026 \

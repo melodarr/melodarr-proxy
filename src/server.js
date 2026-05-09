@@ -58,6 +58,9 @@ const concurrencyLimit = require('./middleware/concurrency.middleware')
 function createApp () {
   const app = express()
 
+  // Trust reverse proxy for correct IP resolution (e.g. rate limiting)
+  app.set('trust proxy', true)
+
   // Timeout Hard Caps - Ensure no request hangs indefinitely
   app.use((req, res, next) => {
     const configuredServerTimeoutMs = Number(storeSettings.getConfigValue('serverTimeoutMs'))

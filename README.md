@@ -470,7 +470,7 @@ pveam download local debian-12-standard_12.12-1_amd64.tar.zst
 Common override:
 
 ```bash
-CTID=3055 HOST_PORT=3055 MELODASH_HOST_PORT=55026 APP_CONTACT=you@your-real-domain.com bash scripts/install-proxmox-lxc.sh
+CTID=3055 HOST_PORT=3055 MELODASH_HOST_PORT=55026 APP_CONTACT=https://github.com/melodarr/melodarr-proxy bash scripts/install-proxmox-lxc.sh
 ```
 
 Upgrade an existing LXC:

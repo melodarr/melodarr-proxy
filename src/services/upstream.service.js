@@ -31,6 +31,15 @@ let lastRequestTime = 0
 const waitingQueue = []
 let activeRequests = 0
 let isProcessingQueue = false
+let coolingOffUntil = 0
+
+function applyCoolingOff (delayMs) {
+  if (!delayMs || delayMs <= 0) return
+  const target = Date.now() + delayMs
+  if (target > coolingOffUntil) {
+    coolingOffUntil = target
+  }
+}
 
 function getConfiguredMinRequestIntervalMs () {
   const configuredValue = getConfigValue('minRequestIntervalMs') ??
@@ -51,7 +60,13 @@ async function processQueue () {
 
     while (waitingQueue.length > 0 && activeRequests < maxConcurrency) {
       const now = Date.now()
+      const timeToCoolOff = coolingOffUntil - now
       const timeSinceLast = now - lastRequestTime
+
+      if (timeToCoolOff > 0) {
+        await new Promise(resolve => setTimeout(resolve, timeToCoolOff))
+        continue // re-evaluate queue state after waiting
+      }
 
       if (timeSinceLast < minInterval) {
         await new Promise(resolve => setTimeout(resolve, minInterval - timeSinceLast))
@@ -95,6 +110,16 @@ async function enqueueRequest (fn) {
         const result = await fn()
         resolve(result)
       } catch (err) {
+        const status = err.response?.status
+        if (status === 429 || status === 503) {
+          const retryAfterHeader = err.response?.headers?.['retry-after']
+          let pauseMs = 5000 // default penalty if no header
+          if (retryAfterHeader) {
+            const parsed = parseRetryAfter(retryAfterHeader)
+            if (parsed !== null && parsed > 0) pauseMs = parsed
+          }
+          applyCoolingOff(pauseMs)
+        }
         reject(err)
       }
     }
@@ -155,12 +180,26 @@ class UpstreamService {
         return { status: 'healthy', error: null }
       }
       if (res.status === 429) {
+        const retryAfterHeader = res.headers?.['retry-after']
+        let pauseMs = 5000
+        if (retryAfterHeader) {
+          const retryAfterMs = parseRetryAfter(retryAfterHeader)
+          if (retryAfterMs) pauseMs = retryAfterMs
+        }
+        applyCoolingOff(pauseMs)
         return {
           status: 'rate_limited',
           error: { message: 'Upstream rate limit hit', code: 'HTTP_429', status: 429 }
         }
       }
       if (res.status >= 500) {
+        const retryAfterHeader = res.headers?.['retry-after']
+        let pauseMs = 5000
+        if (retryAfterHeader) {
+          const retryAfterMs = parseRetryAfter(retryAfterHeader)
+          if (retryAfterMs) pauseMs = retryAfterMs
+        }
+        applyCoolingOff(pauseMs)
         return {
           status: 'degraded',
           error: { message: `Upstream returned ${res.status}`, code: `HTTP_${res.status}`, status: res.status }
@@ -269,10 +308,22 @@ class UpstreamService {
           status,
           retryAfterHeader
         })
+        if (decision.retryAfterMs) {
+          applyCoolingOff(decision.retryAfterMs)
+        } else if (status === 429 || status === 503) {
+          // If 429/503 but no Retry-After, apply the exponential backoff as global cooling off
+          applyCoolingOff(5000)
+        }
       } else if ((status === 429 || status === 503) && retryAfterHeader) {
         // Capture Retry-After even when we won't retry (e.g. final attempt),
         // so operators see what the server told us.
         decision.retryAfterMs = parseRetryAfter(retryAfterHeader)
+        if (decision.retryAfterMs) {
+          applyCoolingOff(decision.retryAfterMs)
+        }
+      } else if (status === 429 || status === 503) {
+        // Final attempt with no Retry-After, use the default backoff max or retryBaseMs
+        applyCoolingOff(5000)
       }
 
       upstreamBuffer.record({

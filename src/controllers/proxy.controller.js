@@ -134,7 +134,8 @@ async function handleSearch (req, res) {
     const data = await withTimeout(artistDiscovery.discoverArtists({ query: q, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startAgg, 'success')
 
-    const ttl = 86400 * 30 // 30 days for SWR
+    // Use a shorter negative cache TTL (5 minutes) for empty results
+    const ttl = (!data || data.length === 0) ? 300 : 86400 * 30 // 5m negative cache, 30d SWR
 
     const startCacheSet = Date.now()
     await cache.set(cacheKey, data, ttl)
@@ -392,7 +393,8 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
     delete enrichedTopResult._enrichmentDebug
   }
 
-  const SWR_TTL_SECONDS = 86400 * 30 // 30 days
+  // Use a shorter negative cache TTL (5 minutes) for empty results
+  const SWR_TTL_SECONDS = (!response.results || response.results.length === 0) ? 300 : 86400 * 30 // 5m negative cache, 30d SWR
   const startCacheSet = Date.now()
   await cache.set(cacheKey, response, SWR_TTL_SECONDS)
   tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
