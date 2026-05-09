@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bypass ~/.docker permission errors by creating a temp config dir
-if [ -z "${DOCKER_CONFIG:-}" ] || [ "${DOCKER_CONFIG:-}" = "/tmp" ]; then
-  # Use a stable path per process to avoid infinite directories
-  export DOCKER_CONFIG="/tmp/melodarr-docker-config"
+# If the caller explicitly sets DOCKER_CONFIG, ensure compose plugins remain discoverable there.
+# Otherwise, let Docker use its normal default config location (for example ~/.docker).
+if [ -n "${DOCKER_CONFIG:-}" ]; then
   if [ ! -d "$DOCKER_CONFIG/cli-plugins" ]; then
     mkdir -p "$DOCKER_CONFIG/cli-plugins"
 
