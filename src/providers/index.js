@@ -218,7 +218,8 @@ async function aggregateArtist (term) {
     if (providerAliases.length > 0 && aliases.length === 0) {
       aliases = providerAliases
     }
-    for (const album of (Array.isArray(data.albums) ? data.albums : [])) {
+    const albums = Array.isArray(data.albums) ? data.albums : []
+    for (const album of albums) {
       // Skip albums with missing or empty names
       if (!album.name || typeof album.name !== 'string' || !album.name.trim()) {
         continue
