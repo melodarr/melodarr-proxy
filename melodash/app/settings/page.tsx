@@ -68,10 +68,7 @@ import {
 import {
   inputClass,
   normalizeValue,
-  normalizeJsonPath,
   generateId,
-  getRelativeAlbumPath,
-  formatJson,
 } from "./utils";
 import { JsonTree } from "./components/JsonTree";
 import { CustomProviderModal } from "./components/CustomProviderModal";
