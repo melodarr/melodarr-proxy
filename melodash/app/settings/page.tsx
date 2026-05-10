@@ -70,7 +70,6 @@ import {
   normalizeValue,
   generateId,
 } from "./utils";
-import { JsonTree } from "./components/JsonTree";
 import { CustomProviderModal } from "./components/CustomProviderModal";
 
 const providerOptions = [
