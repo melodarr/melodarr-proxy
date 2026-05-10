@@ -10,8 +10,8 @@ import {
  QUEUE_DETAILS_CONTRACT,
 } from "@/lib/contracts";
 import {
- MOCK_QUEUE_DETAILS_ACTIVE,
- MOCK_RELEASE_SEARCH_MIXED,
+ mockQueueDetails,
+ mockReleaseResults,
 } from "@/lib/lidarr-mock-fixtures";
 
 import {
@@ -170,7 +170,7 @@ type MockResult = {
 type ContractField = {
  key: string;
  present: boolean;
- required: boolean;
+ kind: "source field" | "omitted when default";
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -191,15 +191,15 @@ const QUEUE_FIELDS = QUEUE_DETAILS_CONTRACT;
 
 function ContractSummaryBanner({ fields }: { fields: ContractField[] }) {
  if (fields.length === 0) return null;
- const missingRequired = fields.filter((f) => f.required && !f.present);
+ const missingSourceFields = fields.filter((f) => f.kind === "source field" && !f.present);
  const allPresent = fields.every((f) => f.present);
 
- if (missingRequired.length > 0) {
+ if (missingSourceFields.length > 0) {
  return (
  <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm">
  <X className="h-4 w-4 text-red-700 dark:text-red-400" />
  <span className="text-red-700 dark:text-red-300">
- Missing required: {missingRequired.map((f) => f.key).join(", ")}
+ Missing source fields: {missingSourceFields.map((f) => f.key).join(", ")}
  </span>
  </div>
  );
@@ -209,7 +209,7 @@ function ContractSummaryBanner({ fields }: { fields: ContractField[] }) {
  return (
  <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm">
  <Check className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
- <span className="text-emerald-300">Contract OK — all fields present</span>
+ <span className="text-emerald-300">Contract OK — all source fields present</span>
  </div>
  );
  }
@@ -217,7 +217,7 @@ function ContractSummaryBanner({ fields }: { fields: ContractField[] }) {
  return (
  <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
  <AlertTriangle className="h-4 w-4 text-amber-400" />
- <span className="text-amber-300">Contract OK — some optional fields missing</span>
+ <span className="text-amber-300">Contract OK — some fields omitted when default</span>
  </div>
  );
 }
@@ -228,7 +228,7 @@ function ContractSummaryBanner({ fields }: { fields: ContractField[] }) {
 
 function evaluateContract(
  data: unknown,
- fieldDefs: Array<{ key: string; required: boolean }>
+ fieldDefs: Array<{ key: string; kind: "source field" | "omitted when default" }>
 ): ContractField[] {
  if (Array.isArray(data) && data.length === 0) {
  return [];
@@ -244,7 +244,7 @@ function evaluateContract(
 
  return fieldDefs.map((f) => ({
  key: f.key,
- required: f.required,
+ kind: f.kind,
  present: obj[f.key] !== undefined && obj[f.key] !== null,
  }));
 }
@@ -281,7 +281,7 @@ function ContractIndicators({ fields }: { fields: ContractField[] }) {
  if (field.present) {
  icon = <Check className="h-3 w-3" />;
  colorClass = "text-emerald-700 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
- } else if (field.required) {
+ } else if (field.kind === "source field") {
  icon = <X className="h-3 w-3" />;
  colorClass = "text-red-700 dark:text-red-400 border-red-500/30 bg-red-500/10";
  } else {
@@ -496,9 +496,9 @@ function EndpointSection({
  name: string;
  label: string;
  placeholder: string;
- required?: boolean;
+ sourceField?: boolean;
  }>;
- contractFields: Array<{ key: string; required: boolean }>;
+ contractFields: Array<{ key: string; kind: "source field" | "omitted when default" }>;
  buildUrl: (values: Record<string, string>) => string | null;
  onResultData?: (data: unknown) => void;
  externalValues?: Record<string, string>;
@@ -757,7 +757,7 @@ function EndpointSection({
  className="mb-1 flex items-center gap-1.5 text-xs font-medium text-secondary"
  >
  {input.label}
- {input.required && (
+ {input.sourceField && (
  <span className="ml-1 text-red-700 dark:text-red-400">*</span>
  )}
  {isAutoFilled && (
@@ -906,8 +906,9 @@ function EndpointSection({
 
  {/* Source-derived mock fixtures */}
  {mockResults && mockResults.length > 0 && (
- <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-page px-3 py-2">
- <span className="text-xs text-muted">Mock source fixture:</span>
+ <div className="space-y-2 rounded-md border border-border bg-page px-3 py-2">
+ <div className="flex flex-wrap items-center gap-2">
+ <span className="text-xs font-medium text-amber-600 dark:text-amber-400">MOCK FIXTURE (not live data)</span>
  {mockResults.map((mock) => (
  <button
  key={mock.label}
@@ -918,6 +919,14 @@ function EndpointSection({
  {mock.label}
  </button>
  ))}
+ </div>
+ <details className="text-xs text-muted">
+ <summary className="cursor-pointer text-secondary">Fixture Source</summary>
+ <p className="mt-1 leading-5">
+ Derived from Lidarr ReleaseResource.cs / ReleaseController.cs / QueueResource.cs / QueueDetailsController.cs.
+ Commit: <code>498de3fc51ff3297632b45560bab0e3c50e2c092</code>.
+ </p>
+ </details>
  </div>
  )}
 
@@ -998,6 +1007,12 @@ function EndpointSection({
  </div>
  </div>
  </div>
+
+ {result.headers["x-melodash-mock"] === "true" && (
+ <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+ MOCK FIXTURE (not live data)
+ </div>
+ )}
 
  {/* Response headers */}
  {showHeaders && Object.keys(result.headers).length > 0 && (
@@ -1383,7 +1398,7 @@ export default function LidarrMirrorPage() {
  name: "term",
  label: "Artist Name",
  placeholder: "e.g. Radiohead",
- required: true,
+ sourceField: true,
  },
  ]}
  contractFields={ARTIST_LOOKUP_FIELDS}
@@ -1412,7 +1427,7 @@ export default function LidarrMirrorPage() {
  name: "id",
  label: "foreignArtistId",
  placeholder: "e.g. a74b1b7f-71a5-4011-9441-d0b5e4122711",
- required: true,
+ sourceField: true,
  },
  ]}
  contractFields={ARTIST_BY_ID_FIELDS}
@@ -1446,7 +1461,7 @@ export default function LidarrMirrorPage() {
  name: "id",
  label: "Album ID (foreignAlbumId)",
  placeholder: "e.g. 2d256b55-1265-337a-a7f1-050827a1a8ad",
- required: true,
+ sourceField: true,
  },
  ]}
  contractFields={ALBUM_BY_ID_FIELDS}
@@ -1491,7 +1506,7 @@ export default function LidarrMirrorPage() {
  "This endpoint is for indexer candidates, not MusicBrainz metadata. Empty [] is valid when no indexer backend is configured."
  }
  mockResults={[
- { label: "Mixed release candidates", data: MOCK_RELEASE_SEARCH_MIXED },
+ { label: "Mixed release candidates", data: mockReleaseResults },
  ]}
  />
 
@@ -1506,7 +1521,7 @@ export default function LidarrMirrorPage() {
  inputs={[
  {
  name: "artistId",
- label: "artistId (optional Lidarr numeric ID)",
+ label: "artistId (Lidarr numeric ID; can be omitted)",
  placeholder: "e.g. 700",
  },
  ]}
@@ -1518,7 +1533,7 @@ export default function LidarrMirrorPage() {
  }}
  inputHint="Queue entries reflect active or pending downloads only. Empty [] is valid when nothing is downloading."
  mockResults={[
- { label: "Active download", data: MOCK_QUEUE_DETAILS_ACTIVE },
+ { label: "Active download", data: mockQueueDetails },
  ]}
  />
  </main>

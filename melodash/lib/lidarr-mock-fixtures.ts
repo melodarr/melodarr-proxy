@@ -1,4 +1,21 @@
-export const MOCK_RELEASE_SEARCH_MIXED = [
+/**
+ * Source: Lidarr
+ * Files:
+ *   - src/Lidarr.Api.V1/Indexers/ReleaseResource.cs
+ *   - src/Lidarr.Api.V1/Indexers/ReleaseController.cs
+ *   - src/Lidarr.Api.V1/Queue/QueueResource.cs
+ *   - src/Lidarr.Api.V1/Queue/QueueDetailsController.cs
+ *
+ * Commit:
+ *   498de3fc51ff3297632b45560bab0e3c50e2c092
+ *
+ * Notes:
+ *   Derived from serialized API DTOs, not database models.
+ *   Fixture values mirror src/fixtures/lidarr/*.golden.json and are validated
+ *   by melodash/tests/lidarr-fixture-contract.test.ts.
+ */
+
+export const mockReleaseResults = [
   {
     id: 0,
     guid: "indexer-1-guid-approved",
@@ -108,7 +125,7 @@ export const MOCK_RELEASE_SEARCH_MIXED = [
   },
 ];
 
-export const MOCK_QUEUE_DETAILS_ACTIVE = [
+export const mockQueueDetails = [
   {
     id: 101,
     artistId: 700,
