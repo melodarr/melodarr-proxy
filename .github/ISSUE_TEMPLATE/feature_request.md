@@ -14,6 +14,24 @@ What problem should this solve?
 
 What would you like to happen?
 
+## Acceptance Criteria
+
+What must be true before this is considered complete?
+
+- [ ]
+
+## Affected Files
+
+List likely files, directories, routes, or docs if known.
+
+- 
+
+## Verification Plan
+
+How should maintainers or agents verify this?
+
+- [ ]
+
 ## Area
 
 Check the area this feature affects:
