@@ -34,6 +34,12 @@ function stripInternalKeys (response) {
   const cleaned = {}
   for (const key of Object.keys(response)) {
     if (allowed.has(key)) {
+      if (key === 'partial' && response[key] !== true) {
+        continue
+      }
+      if (key === 'warning' && !response[key]) {
+        continue
+      }
       cleaned[key] = response[key]
     }
   }
