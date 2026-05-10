@@ -265,8 +265,7 @@ function normalizeAlbum (album = {}) {
   const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
   const images = normalizeArray(album.images)
 
-  return {
-    ...album,
+  const out = {
     id: asString(album.id || album.foreignAlbumId),
     oldIds: normalizeStringArray(album.oldIds || album.OldIds),
     title: asString(album.title || album.name || album.albumName),
@@ -276,6 +275,7 @@ function normalizeAlbum (album = {}) {
     releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
     rating: normalizeRating(album.rating || album.ratings),
     ratings: normalizeRatings(album.ratings || album.rating),
+    firstReleaseDate: asString(album.firstReleaseDate || album.releaseDate) || null,
     releaseDate: releaseDate || null,
     releases: normalizeArray(album.releases),
     genres: normalizeStringArray(album.genres),
@@ -284,6 +284,14 @@ function normalizeAlbum (album = {}) {
     links: normalizeArray(album.links),
     remoteCover: asString(album.remoteCover || images[0]?.remoteUrl || images[0]?.url)
   }
+
+  if ('artistId' in album) out.artistId = asString(album.artistId)
+  if ('artists' in album) out.artists = normalizeArray(album.artists)
+  if ('disambiguation' in album) out.disambiguation = asString(album.disambiguation)
+  if ('overview' in album) out.overview = asString(album.overview)
+  if ('providers' in album) out.providers = album.providers
+
+  return out
 }
 
 function toSkyhookArtistResource (artist = {}) {
