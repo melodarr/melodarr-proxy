@@ -444,8 +444,9 @@ async function aggregateArtist (term) {
       score += Math.floor(Math.sqrt(resolution) / 10)
     }
 
-    // Source weight
-    if (candidate.imageSource === 'audiodb') score += 30
+    // Source weight (AudioDB > Discogs > iTunes)
+    if (candidate.imageSource === 'audiodb') score += 40
+    else if (candidate.imageSource === 'discogs') score += 30
     else if (candidate.imageSource === 'coverartarchive') score += 20
     else if (candidate.imageSource === 'itunes') score += 10
 
@@ -486,14 +487,27 @@ async function aggregateArtist (term) {
 
   images = []
   if (uniqueScored.length > 0) {
-    images = uniqueScored.slice(0, 6).map(image => ({
-      coverType: image.coverType || 'poster',
-      url: image.url,
-      remoteUrl: image.url,
-      imageSource: image.imageSource,
-      height: Number(image.height ?? 0) || 0,
-      width: Number(image.width ?? 0) || 0
-    }))
+    const limits = { poster: 1, fanart: 1, logo: 1 }
+    const counts = { poster: 0, fanart: 0, logo: 0 }
+
+    for (const image of uniqueScored) {
+      const coverType = image.coverType || 'poster'
+      
+      counts[coverType] = counts[coverType] || 0
+      const limit = limits[coverType] !== undefined ? limits[coverType] : 1
+
+      if (counts[coverType] < limit) {
+        images.push({
+          coverType,
+          url: image.url,
+          remoteUrl: image.url,
+          imageSource: image.imageSource,
+          height: Number(image.height ?? 0) || 0,
+          width: Number(image.width ?? 0) || 0
+        })
+        counts[coverType]++
+      }
+    }
   }
 
   const imageDebug = uniqueScored.slice(0, 5).map(img => ({ url: img.url, score: img.score, source: img.imageSource, type: img.type }))
