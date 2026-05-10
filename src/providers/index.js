@@ -273,8 +273,18 @@ async function aggregateArtist (term) {
               return score
             }
 
-            const existingSource = existing.imageUrl.includes('coverartarchive.org') ? 'coverartarchive' : (existing.imageProvider || existing.provenance.imageUrl || existing.provider)
-            const newSource = album.imageUrl.includes('coverartarchive.org') ? 'coverartarchive' : provider
+            const isHostWithinDomain = (value, domain) => {
+              try {
+                const host = new URL(value).hostname.toLowerCase()
+                const normalizedDomain = domain.toLowerCase()
+                return host === normalizedDomain || host.endsWith(`.${normalizedDomain}`)
+              } catch (_) {
+                return false
+              }
+            }
+
+            const existingSource = isHostWithinDomain(existing.imageUrl, 'coverartarchive.org') ? 'coverartarchive' : (existing.imageProvider || existing.provenance.imageUrl || existing.provider)
+            const newSource = isHostWithinDomain(album.imageUrl, 'coverartarchive.org') ? 'coverartarchive' : provider
 
             const existingScore = getScore(existing.imageUrl, existingSource, existing.imagePriorityWeight || 0)
             const newScore = getScore(album.imageUrl, newSource, priorityWeight)
