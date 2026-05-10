@@ -39,7 +39,7 @@ APP_VERSION=0.3.42
 APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 ```
 
-`APP_CONTACT` must be a real contact email address. Do not use placeholder
+`APP_CONTACT` must be a real contact email address or a valid http(s) URL. Do not use placeholder
 addresses from `example.com`, `example.org`, or `example.net`; MusicBrainz uses
 the User-Agent identity for throttling/contact policy and Melodarr diagnostics
 will flag placeholder contacts.

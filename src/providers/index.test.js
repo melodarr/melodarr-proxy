@@ -476,4 +476,52 @@ test('Providers Index', async (t) => {
     assert.ok(original, 'Original MBID album should be present')
     assert.ok(remaster, 'Remaster MBID album should be present')
   })
+
+  await t.test('aggregateArtist - merges by normalized title when at least one album lacks MBID', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: () => 0.95 }
+    }
+
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Test Artist',
+          albums: [
+            { name: 'Greatest Hits', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-123', mb: '1' } }
+          ]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Test Artist',
+          albums: [
+            // iTunes provider returns same album but without MBID
+            { name: 'Greatest Hits', year: 2000, ids: { itunes: '456' }, imageUrl: 'http://img.com/cover.jpg' }
+          ]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Test Artist')
+
+    assert.strictEqual(result.albums.length, 1, 'Albums should merge by normalized title when one lacks MBID')
+    const album = result.albums[0]
+    assert.strictEqual(album.ids.musicbrainzReleaseGroupId, 'mbid-123', 'Merged album should preserve MBID from provider that has it')
+    assert.strictEqual(album.ids.mb, '1', 'Should have MB provider ID')
+    assert.strictEqual(album.ids.itunes, '456', 'Should have iTunes provider ID')
+    assert.strictEqual(album.imageUrl, 'http://img.com/cover.jpg', 'Should enrich with iTunes image')
+  })
 })
