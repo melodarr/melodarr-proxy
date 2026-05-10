@@ -240,3 +240,85 @@ test('diagnoseGenericProvider — uses runtime provider IP family policy', async
   assert.strictEqual(result.target.configuredIpFamily, '4')
   assert.strictEqual(result.dns.configuredFamily, '4')
 })
+
+test('redactUrl — strips secret-bearing query params', () => {
+  const svc = loadServiceWithMocks()
+  const redacted = svc.redactUrl('https://example.com/x?api_key=SECRET&q=hello&token=abc&other=keep')
+  const u = new URL(redacted)
+  assert.strictEqual(u.searchParams.get('api_key'), 'REDACTED')
+  assert.strictEqual(u.searchParams.get('token'), 'REDACTED')
+  assert.strictEqual(u.searchParams.get('q'), 'hello')
+  assert.strictEqual(u.searchParams.get('other'), 'keep')
+})
+
+test('redactUrl — passes through URLs without secrets unchanged', () => {
+  const svc = loadServiceWithMocks()
+  const input = 'https://example.com/x?q=hello'
+  assert.strictEqual(svc.redactUrl(input), 'https://example.com/x?q=hello')
+})
+
+test('diagnoseGenericProvider — lastfm without api key returns NOT_CONFIGURED and skips upstream', async () => {
+  let dnsCalls = 0
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { dnsCalls += 1; return [] },
+    resolve6: async () => { dnsCalls += 1; return [] },
+    settings: { lastfmApiKey: '' }
+  })
+
+  const result = await svc.diagnoseGenericProvider('lastfm')
+
+  assert.strictEqual(result.provider, 'lastfm')
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'not_configured')
+  assert.strictEqual(result.error.code, 'NOT_CONFIGURED')
+  assert.match(result.error.message, /API key not configured/i)
+  assert.deepStrictEqual(result.probes, [])
+  assert.strictEqual(dnsCalls, 0, 'no DNS resolution should be attempted')
+  // The static-fallback URL surfaced in target.url must not contain a key
+  assert.ok(!result.target.url.includes('api_key='))
+})
+
+test('diagnoseGenericProvider — lastfm with key configured: probe URL embeds key, target.url redacts it', async () => {
+  let probedUrl = null
+  const svc = loadServiceWithMocks({
+    // Force a DNS failure so we exit before performRequest, but AFTER the URL is
+    // built and target is populated — that's where redaction must apply.
+    resolve4: async () => { const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    settings: { lastfmApiKey: 'SUPER-SECRET-KEY' }
+  })
+
+  // Sanity: ensure the registry's buildUrl produces a URL containing the key
+  // (this is the URL that would be sent if DNS resolved).
+  const { getProviderTransport } = require('../infrastructure/network/provider-registry')
+  const transport = getProviderTransport('lastfm')
+  probedUrl = transport.buildUrl((k) => (k === 'lastfmApiKey' ? 'SUPER-SECRET-KEY' : ''))
+  assert.strictEqual(probedUrl.searchParams.get('api_key'), 'SUPER-SECRET-KEY',
+    'outgoing probe URL must include the configured api_key')
+
+  const result = await svc.diagnoseGenericProvider('lastfm')
+
+  assert.strictEqual(result.provider, 'lastfm')
+  assert.strictEqual(result.failedStep, 'dns')
+  // target.url is what gets returned to clients — must NOT leak the key
+  assert.ok(!result.target.url.includes('SUPER-SECRET-KEY'),
+    `target.url must not leak the configured api_key, got: ${result.target.url}`)
+  assert.match(result.target.url, /api_key=REDACTED/)
+})
+
+test('diagnoseGenericProvider — discogs probes anonymously when token missing (requiresAuth=false)', async () => {
+  let dnsCalls = 0
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { dnsCalls += 1; const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { dnsCalls += 1; const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    settings: { discogsToken: '' }
+  })
+
+  const result = await svc.diagnoseGenericProvider('discogs')
+
+  // Discogs is requiresAuth: false, so we DO probe (and fail at DNS due to mocks)
+  assert.strictEqual(result.provider, 'discogs')
+  assert.strictEqual(result.failedStep, 'dns')
+  assert.notStrictEqual(result.error.code, 'NOT_CONFIGURED')
+  assert.ok(dnsCalls > 0, 'DNS resolution should be attempted for anonymous-capable providers')
+})
