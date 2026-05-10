@@ -10,6 +10,6 @@ services:
       net.ipv6.conf.default.disable_ipv6: 0
 
 networks:
-  default:
+  melodarr-ipv6:
     name: ${DOCKER_NETWORK:-melodarr-ipv6}
     external: true

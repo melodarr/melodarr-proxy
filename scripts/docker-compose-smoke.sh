@@ -28,12 +28,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if use_ipv6_network && ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
-  if ! docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null; then
-    echo "FAIL Docker IPv6 network: unable to create ${DOCKER_NETWORK} (${DOCKER_IPV6_SUBNET})"
-    echo "Run scripts/ensure-docker-ipv6.sh as root on the Docker host/LXC, then retry."
-    exit 1
-  fi
+if use_ipv6_network; then
+  DOCKER_NETWORK="$DOCKER_NETWORK" DOCKER_IPV6_SUBNET="$DOCKER_IPV6_SUBNET" bash scripts/ensure-docker-compose-network.sh
 fi
 
 echo "Building and starting proxy, Redis, and Melodash..."
