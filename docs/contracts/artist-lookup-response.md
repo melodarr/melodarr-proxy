@@ -13,7 +13,7 @@ Successful, empty, and degraded lookups return HTTP 200 with a top-level JSON ar
 The response `Content-Type` is:
 
 ```http
-Content-Type: application/json
+Content-Type: application/json; charset=utf-8
 ```
 
 The response body is always a top-level JSON array:
