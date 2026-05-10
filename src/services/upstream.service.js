@@ -8,18 +8,19 @@ const { getConfigValue } = require('../settings/store')
 const upstreamBuffer = require('../diagnostics/upstream-buffer')
 const { nextRetryDelay, parseRetryAfter } = require('./retry-policy')
 const requestContext = require('../utils/request-context')
+const { buildMusicBrainzUserAgent } = require('../utils/musicbrainz-user-agent')
 
+const MUSICBRAINZ_REQUIRED_FAMILY = 6
 const musicBrainzAgents = new Map()
 
 function getMusicBrainzHttpsAgent () {
-  const configuredFamily = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-  const family = configuredFamily === '6' ? 6 : configuredFamily === '4' ? 4 : undefined
-  const key = family || 'auto'
+  const family = MUSICBRAINZ_REQUIRED_FAMILY
+  const key = String(family)
 
   if (!musicBrainzAgents.has(key)) {
     musicBrainzAgents.set(key, new https.Agent({
       keepAlive: true,
-      ...(family ? { family } : {})
+      family
     }))
   }
 
@@ -30,6 +31,17 @@ let lastRequestTime = 0
 const waitingQueue = []
 let activeRequests = 0
 let isProcessingQueue = false
+let coolingOffUntil = 0
+const MAX_TIMEOUT_MS = 2147483647
+
+function applyCoolingOff (delayMs) {
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return
+  const safeDelayMs = Math.min(delayMs, MAX_TIMEOUT_MS)
+  const target = Date.now() + safeDelayMs
+  if (target > coolingOffUntil) {
+    coolingOffUntil = target
+  }
+}
 
 function getConfiguredMinRequestIntervalMs () {
   const configuredValue = getConfigValue('minRequestIntervalMs') ??
@@ -46,12 +58,17 @@ async function processQueue () {
 
   try {
     const minInterval = getConfiguredMinRequestIntervalMs()
-    // Arbitrary concurrency limit of 3 for upstream
-    const maxConcurrency = 3
+    const maxConcurrency = 1
 
     while (waitingQueue.length > 0 && activeRequests < maxConcurrency) {
       const now = Date.now()
+      const timeToCoolOff = coolingOffUntil - now
       const timeSinceLast = now - lastRequestTime
+
+      if (timeToCoolOff > 0) {
+        await new Promise(resolve => setTimeout(resolve, timeToCoolOff))
+        continue // re-evaluate queue state after waiting
+      }
 
       if (timeSinceLast < minInterval) {
         await new Promise(resolve => setTimeout(resolve, minInterval - timeSinceLast))
@@ -95,6 +112,16 @@ async function enqueueRequest (fn) {
         const result = await fn()
         resolve(result)
       } catch (err) {
+        const status = err.response?.status
+        if (status === 429 || status === 503) {
+          const retryAfterHeader = err.response?.headers?.['retry-after']
+          let pauseMs = 5000 // default penalty if no header
+          if (retryAfterHeader) {
+            const parsed = parseRetryAfter(retryAfterHeader)
+            if (parsed !== null) pauseMs = parsed
+          }
+          if (pauseMs > 0) applyCoolingOff(pauseMs)
+        }
         reject(err)
       }
     }
@@ -122,7 +149,7 @@ class UpstreamService {
     const appName = getConfigValue('appName')
     const appVersion = getConfigValue('appVersion')
     const appContact = getConfigValue('appContact')
-    return `${appName}/${appVersion} (${appContact})`
+    return buildMusicBrainzUserAgent({ appName, appVersion, appContact })
   }
 
   getMusicBrainzHeaders () {
@@ -142,23 +169,39 @@ class UpstreamService {
     const timeout = Math.min(configured, 5000)
 
     try {
-      const res = await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
-        headers: this.getMusicBrainzHeaders(),
-        httpsAgent: getMusicBrainzHttpsAgent(),
-        timeout,
-        validateStatus: () => true
+      const res = await enqueueRequest(async () => {
+        return await axios.get(`${baseUrl}/artist/?query=test&fmt=json&limit=1`, {
+          headers: this.getMusicBrainzHeaders(),
+          httpsAgent: getMusicBrainzHttpsAgent(),
+          timeout,
+          validateStatus: () => true
+        })
       })
 
       if (res.status === 200) {
         return { status: 'healthy', error: null }
       }
       if (res.status === 429) {
+        const retryAfterHeader = res.headers?.['retry-after']
+        let pauseMs = 5000
+        if (retryAfterHeader) {
+          const retryAfterMs = parseRetryAfter(retryAfterHeader)
+          if (retryAfterMs !== null) pauseMs = retryAfterMs
+        }
+        applyCoolingOff(pauseMs)
         return {
           status: 'rate_limited',
           error: { message: 'Upstream rate limit hit', code: 'HTTP_429', status: 429 }
         }
       }
       if (res.status >= 500) {
+        const retryAfterHeader = res.headers?.['retry-after']
+        let pauseMs = 5000
+        if (retryAfterHeader) {
+          const retryAfterMs = parseRetryAfter(retryAfterHeader)
+          if (retryAfterMs !== null) pauseMs = retryAfterMs
+        }
+        applyCoolingOff(pauseMs)
         return {
           status: 'degraded',
           error: { message: `Upstream returned ${res.status}`, code: `HTTP_${res.status}`, status: res.status }
@@ -206,8 +249,7 @@ class UpstreamService {
   async musicBrainzGet (path, params) {
     const baseUrl = getConfigValue('musicbrainzBaseUrl')
     const timeout = getConfigValue('upstreamTimeoutMs')
-    const ipFamilyConfig = String(getConfigValue('musicbrainzIpFamily') || 'auto').trim()
-    const family = ipFamilyConfig === '4' ? 4 : ipFamilyConfig === '6' ? 6 : undefined
+    const family = MUSICBRAINZ_REQUIRED_FAMILY
     const maxAttempts = Math.max(1, Number(getConfigValue('upstreamMaxAttempts')) || 3)
     const retryBaseMs = Math.max(1, Number(getConfigValue('upstreamRetryBaseMs')) || 500)
     const retryMaxMs = Math.max(retryBaseMs, Number(getConfigValue('upstreamRetryMaxMs')) || 30000)
@@ -268,10 +310,22 @@ class UpstreamService {
           status,
           retryAfterHeader
         })
+        if (decision.retryAfterMs !== null) {
+          applyCoolingOff(decision.retryAfterMs)
+        } else if (status === 429 || status === 503) {
+          // If 429/503 but no Retry-After, apply the computed retry backoff as global cooling off.
+          applyCoolingOff(decision.delayMs)
+        }
       } else if ((status === 429 || status === 503) && retryAfterHeader) {
         // Capture Retry-After even when we won't retry (e.g. final attempt),
         // so operators see what the server told us.
         decision.retryAfterMs = parseRetryAfter(retryAfterHeader)
+        if (decision.retryAfterMs !== null) {
+          applyCoolingOff(decision.retryAfterMs)
+        }
+      } else if (status === 429 || status === 503) {
+        // Final attempt with no Retry-After, use the configured base backoff as cooling off.
+        applyCoolingOff(retryBaseMs)
       }
 
       upstreamBuffer.record({

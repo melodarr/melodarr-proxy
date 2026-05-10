@@ -1,6 +1,6 @@
 const upstreamService = require('../services/upstream.service')
 const axios = require('axios')
-const { httpsAgent } = require('./http')
+const { getProviderHttpsAgent } = require('./http')
 const { getConfigValue } = require('../settings/store')
 const logger = require('../utils/logger')
 const theaudiodbProvider = require('./theaudiodb.provider')
@@ -8,6 +8,7 @@ const discogsProvider = require('./discogs.provider')
 const { safeProviderCall } = require('./safeProviderCall')
 const metrics = require('../metrics')
 const { normalizeStringArray } = require('../utils/lidarrArtist')
+const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 const FALLBACK_ORDER = ['musicbrainz', 'itunes', 'theaudiodb', 'discogs']
 
@@ -102,6 +103,10 @@ function getEnabledProviders () {
   return new Set(
     String(raw).split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
   )
+}
+
+function getITunesHttpsAgent () {
+  return getProviderHttpsAgent(getConfigValue('itunesIpFamily') || getConfigValue('providerIpFamily'))
 }
 
 // Try providers in FALLBACK_ORDER. First non-empty success wins. On failure
@@ -267,7 +272,7 @@ async function discoverByITunes (query, type) {
   const entityByType = { artist: 'musicArtist', album: 'album', song: 'song' }
   const entity = entityByType[type] || 'musicArtist'
 
-  const response = await axios.get('https://itunes.apple.com/search', {
+  const response = await enqueueProviderRequest('itunes', () => axios.get('https://itunes.apple.com/search', {
     params: {
       term: query,
       media: 'music',
@@ -275,9 +280,9 @@ async function discoverByITunes (query, type) {
       limit: 25,
       country: getConfigValue('itunesCountry') || 'US'
     },
-    httpsAgent,
+    httpsAgent: getITunesHttpsAgent(),
     timeout: Number(getConfigValue('itunesTimeoutMs')) || 5000
-  })
+  }))
 
   const results = response.data?.results || []
   return uniqueCandidates(results.map((item) => {
@@ -334,7 +339,7 @@ async function discoverArtistByDiscogs (query) {
 }
 
 async function findSongAlbumsByITunes (artist, song) {
-  const response = await axios.get('https://itunes.apple.com/search', {
+  const response = await enqueueProviderRequest('itunes', () => axios.get('https://itunes.apple.com/search', {
     params: {
       term: `${artist} ${song}`,
       media: 'music',
@@ -342,8 +347,8 @@ async function findSongAlbumsByITunes (artist, song) {
       limit: 50,
       country: getConfigValue('itunesCountry') || 'US'
     },
-    httpsAgent
-  })
+    httpsAgent: getITunesHttpsAgent()
+  }))
 
   const normalizedArtist = normalizeText(artist).toLowerCase()
   const normalizedSong = normalizeText(song).toLowerCase()

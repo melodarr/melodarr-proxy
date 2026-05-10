@@ -22,6 +22,10 @@ This document defines project maintainers, ownership areas, and routine maintena
 
 CODEOWNERS is the source GitHub uses for review routing. See [.github/CODEOWNERS](.github/CODEOWNERS).
 
+Maintainers remain the final human approver for project changes. AI role
+routing can help organize research, implementation, testing, and release work,
+but AI role routing does not replace CODEOWNERS review.
+
 ## Maintainer Responsibilities
 
 Maintainers are expected to:

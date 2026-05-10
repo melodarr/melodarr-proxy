@@ -7,7 +7,7 @@ cd "$ROOT_DIR" || exit 1
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
-USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-0}"
+USE_IPV6_NETWORK="${USE_IPV6_NETWORK:-1}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-melodarr-ipv6}"
 DOCKER_IPV6_SUBNET="${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
@@ -21,7 +21,7 @@ compose_cmd() {
     compose_files+=(-f docker-compose.ipv6.yml)
   fi
 
-  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" docker compose "${compose_files[@]}" "$@"
+  HOST_PORT="$HOST_PORT" MELODASH_HOST_PORT="$MELODASH_HOST_PORT" DOCKER_NETWORK="$DOCKER_NETWORK" DOCKER_IPV6_SUBNET="$DOCKER_IPV6_SUBNET" bash scripts/docker-compose-run.sh "${compose_files[@]}" "$@"
 }
 
 run_proxy_lint() {
@@ -40,6 +40,30 @@ run_melodash_lint() {
   echo "Running Melodash typecheck inside a container..."
   compose_cmd --profile test build melodash-test
   compose_cmd --profile test run --rm --no-deps melodash-test yarn lint
+}
+
+run_skyhook_contract_check() {
+  echo "Running source-derived SkyHook contract tests inside a container..."
+  compose_cmd --profile test build test
+  compose_cmd --profile test run --rm --no-deps test yarn test:contracts
+
+  echo "Running live /api/v1/artist/lookup SkyHook contract smoke test..."
+  ensure_network
+  REQUIRE_API_KEY=false compose_cmd up -d --remove-orphans proxy redis
+
+  local proxy_port
+  local proxy_url
+  proxy_port="$(compose_cmd port proxy 3000 2>/dev/null | head -n 1 | awk -F: '{print $NF}')"
+  proxy_url="http://127.0.0.1:${proxy_port:-$HOST_PORT}"
+
+  for _ in {1..20}; do
+    if node -e "fetch(process.argv[1]).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" "$proxy_url/api/health"; then
+      break
+    fi
+    sleep 2
+  done
+
+  node scripts/validate-skyhook-live.js "$proxy_url"
 }
 
 run_all_checks() {
@@ -61,7 +85,11 @@ ensure_network() {
   fi
 
   echo "Creating Docker IPv6 network ${DOCKER_NETWORK} (${DOCKER_IPV6_SUBNET})..."
-  docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null
+  if ! docker network create --ipv6 --subnet "$DOCKER_IPV6_SUBNET" "$DOCKER_NETWORK" >/dev/null; then
+    echo "ERROR: unable to create IPv6 Docker network ${DOCKER_NETWORK}."
+    echo "Run scripts/ensure-docker-ipv6.sh as root on the Docker host/LXC, then retry."
+    exit 1
+  fi
 }
 
 pause() {
@@ -111,10 +139,11 @@ Active Endpoints:
 11) Run all checks in containers
 12) Run proxy diagnostics
 13) Run Docker Compose smoke test
+14) Run SkyHook contract validation
 0) Exit
 =====================================================
 MENU
-  printf "Select an option [0-13]: "
+  printf "Select an option [0-14]: "
 }
 
 while true; do
@@ -207,6 +236,11 @@ while true; do
       ;;
     13)
       run_compose_smoke
+      pause
+      ;;
+    14)
+      ensure_network
+      run_skyhook_contract_check
       pause
       ;;
     0|"")

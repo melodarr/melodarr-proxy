@@ -40,7 +40,9 @@
             Settings
           </a>
         </nav>
+      </section>
 
+      <section class="result settings-panel" style="padding: var(--space-lg);">
         <form id="lookup-form" class="search-row">
           <input id="term" name="term" type="search" value="Radiohead" autocomplete="off" required placeholder="Search an artist...">
           <button type="submit">
@@ -49,7 +51,7 @@
           </button>
         </form>
 
-        <div id="status" class="status">
+        <div id="status" class="status" style="margin-top: var(--space-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline; margin-right:6px; vertical-align:text-bottom;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
           Ready
         </div>
@@ -90,20 +92,7 @@
           </button>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Artwork</th>
-                <th>Title</th>
-                <th>First release</th>
-                <th>ID</th>
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody id="albums"></tbody>
-          </table>
-        </div>
+        <div id="albums" class="settings-grid"></div>
 
         <pre id="json" hidden></pre>
       </section>

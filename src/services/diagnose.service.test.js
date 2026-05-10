@@ -129,13 +129,13 @@ test('diagnose.service helpers', async (t) => {
     const out = svc.summarizeFailure({
       failedStep: 'tls',
       error: { code: 'ECONNRESET' },
-      selectedFamily: 4,
-      configuredFamily: 'auto'
+      selectedFamily: 6,
+      configuredFamily: '6'
     })
 
     assert.match(out.summary, /TLS/)
     assert.match(out.likelyCause, /handshake/)
-    assert.ok(out.recommendations.some((item) => item.includes('IPv4 and IPv6')))
+    assert.ok(out.recommendations.some((item) => item.includes('curl -6')))
   })
 })
 
@@ -158,28 +158,167 @@ test('diagnoseMusicBrainz — DNS failure path returns failedStep dns and no htt
   assert.strictEqual(typeof result.timingsMs.total, 'number')
 })
 
-test('diagnoseMusicBrainz — surfaces partial DNS (v4 ok, v6 fails)', async () => {
-  // With a non-routable RFC5737 test address, the eventual TCP connect will
-  // fail/time out — we just need the DNS block to reflect both records.
+test('diagnoseMusicBrainz — treats missing AAAA as DNS failure and never probes IPv4', async () => {
   const svc = loadServiceWithMocks({
     resolve4: async () => ['192.0.2.1'],
     resolve6: async () => { const e = new Error('no AAAA'); e.code = 'ENODATA'; throw e },
     settings: {
-      musicbrainzBaseUrl: 'https://192.0.2.1', // forces literal-IP path so we don't depend on real DNS in CI
+      musicbrainzBaseUrl: 'https://musicbrainz.example/ws/2',
       upstreamTimeoutMs: 100
     }
   })
 
   const result = await svc.diagnoseMusicBrainz()
-  // Hostname is a literal IP, so v4 resolution returned the IP and v6 errored.
-  assert.strictEqual(Array.isArray(result.dns.addresses), true)
-  assert.strictEqual(Array.isArray(result.probes), true)
-  assert.ok(result.probes.some((probe) => probe.label === '4'))
-  assert.ok(result.probes.some((probe) => probe.label === '6'))
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'dns')
+  assert.strictEqual(result.target.policy, 'ipv6_only')
+  assert.strictEqual(result.target.fallbackAllowed, false)
   assert.ok(result.dns.addresses.some((a) => a.address === '192.0.2.1' && a.family === 4))
   assert.strictEqual(result.dns.errors.v6, 'ENODATA')
-  // We expect the request itself to fail (timeout / unreachable) — failedStep
-  // should be tcp or tls, not dns, since we *did* resolve an address.
+  assert.deepStrictEqual(result.probes, [])
+  assert.match(result.error.message, /No AAAA/)
+})
+
+test('diagnoseMusicBrainz — reports invalid MusicBrainz contact without leaking contact value', async () => {
+  const svc = loadServiceWithMocks({
+    resolve4: async () => ['192.0.2.1'],
+    resolve6: async () => { const e = new Error('no AAAA'); e.code = 'ENODATA'; throw e },
+    settings: {
+      musicbrainzBaseUrl: 'https://musicbrainz.example/ws/2',
+      upstreamTimeoutMs: 100,
+      appContact: 'admin@example.com'
+    }
+  })
+
+  const result = await svc.diagnoseMusicBrainz()
+  assert.strictEqual(result.userAgent.valid, false)
+  assert.strictEqual(result.userAgent.code, 'PLACEHOLDER_CONTACT')
+  assert.match(result.userAgent.recommendation, /APP_CONTACT/)
+  assert.ok(result.diagnosis.recommendations.some((item) => item.includes('APP_CONTACT')))
+  assert.ok(!JSON.stringify(result.userAgent).includes('admin@example.com'))
+})
+
+test('diagnoseGenericProvider — unsupported providers return contract-safe error', async () => {
+  const svc = loadServiceWithMocks()
+
+  const result = await svc.diagnoseGenericProvider('unknown')
+  assert.strictEqual(result.provider, 'unknown')
   assert.strictEqual(result.ok, false)
-  assert.notStrictEqual(result.failedStep, 'dns')
+  assert.strictEqual(result.failedStep, 'unsupported')
+  assert.strictEqual(result.error.code, 'UNSUPPORTED_PROVIDER')
+})
+
+test('diagnoseGenericProvider — DNS failure path includes generic provider policy', async () => {
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e }
+  })
+
+  const result = await svc.diagnoseGenericProvider('itunes')
+  assert.strictEqual(result.provider, 'itunes')
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'dns')
+  assert.strictEqual(result.target.policy, 'auto')
+  assert.strictEqual(result.target.fallbackAllowed, true)
+  assert.strictEqual(result.target.configuredIpFamily, 'auto')
+  assert.strictEqual(result.error.code, 'ENOTFOUND')
+  assert.match(result.diagnosis.summary, /DNS/)
+})
+
+test('diagnoseGenericProvider — uses runtime provider IP family policy', async () => {
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { const e = new Error('not found'); e.code = 'ENOTFOUND'; throw e },
+    settings: {
+      itunesIpFamily: '4',
+      providerIpFamily: '6'
+    }
+  })
+
+  const result = await svc.diagnoseGenericProvider('itunes')
+  assert.strictEqual(result.provider, 'itunes')
+  assert.strictEqual(result.target.configuredIpFamily, '4')
+  assert.strictEqual(result.dns.configuredFamily, '4')
+})
+
+test('redactUrl — strips secret-bearing query params', () => {
+  const svc = loadServiceWithMocks()
+  const redacted = svc.redactUrl('https://example.com/x?api_key=SECRET&q=hello&token=abc&other=keep')
+  const u = new URL(redacted)
+  assert.strictEqual(u.searchParams.get('api_key'), 'REDACTED')
+  assert.strictEqual(u.searchParams.get('token'), 'REDACTED')
+  assert.strictEqual(u.searchParams.get('q'), 'hello')
+  assert.strictEqual(u.searchParams.get('other'), 'keep')
+})
+
+test('redactUrl — passes through URLs without secrets unchanged', () => {
+  const svc = loadServiceWithMocks()
+  const input = 'https://example.com/x?q=hello'
+  assert.strictEqual(svc.redactUrl(input), 'https://example.com/x?q=hello')
+})
+
+test('diagnoseGenericProvider — lastfm without api key returns NOT_CONFIGURED and skips upstream', async () => {
+  let dnsCalls = 0
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { dnsCalls += 1; return [] },
+    resolve6: async () => { dnsCalls += 1; return [] },
+    settings: { lastfmApiKey: '' }
+  })
+
+  const result = await svc.diagnoseGenericProvider('lastfm')
+
+  assert.strictEqual(result.provider, 'lastfm')
+  assert.strictEqual(result.ok, false)
+  assert.strictEqual(result.failedStep, 'not_configured')
+  assert.strictEqual(result.error.code, 'NOT_CONFIGURED')
+  assert.match(result.error.message, /API key not configured/i)
+  assert.deepStrictEqual(result.probes, [])
+  assert.strictEqual(dnsCalls, 0, 'no DNS resolution should be attempted')
+  // The static-fallback URL surfaced in target.url must not contain a key
+  assert.ok(!result.target.url.includes('api_key='))
+})
+
+test('diagnoseGenericProvider — lastfm with key configured: probe URL embeds key, target.url redacts it', async () => {
+  let probedUrl = null
+  const svc = loadServiceWithMocks({
+    // Force a DNS failure so we exit before performRequest, but AFTER the URL is
+    // built and target is populated — that's where redaction must apply.
+    resolve4: async () => { const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    settings: { lastfmApiKey: 'SUPER-SECRET-KEY' }
+  })
+
+  // Sanity: ensure the registry's buildUrl produces a URL containing the key
+  // (this is the URL that would be sent if DNS resolved).
+  const { getProviderTransport } = require('../infrastructure/network/provider-registry')
+  const transport = getProviderTransport('lastfm')
+  probedUrl = transport.buildUrl((k) => (k === 'lastfmApiKey' ? 'SUPER-SECRET-KEY' : ''))
+  assert.strictEqual(probedUrl.searchParams.get('api_key'), 'SUPER-SECRET-KEY',
+    'outgoing probe URL must include the configured api_key')
+
+  const result = await svc.diagnoseGenericProvider('lastfm')
+
+  assert.strictEqual(result.provider, 'lastfm')
+  assert.strictEqual(result.failedStep, 'dns')
+  // target.url is what gets returned to clients — must NOT leak the key
+  assert.ok(!result.target.url.includes('SUPER-SECRET-KEY'),
+    `target.url must not leak the configured api_key, got: ${result.target.url}`)
+  assert.match(result.target.url, /api_key=REDACTED/)
+})
+
+test('diagnoseGenericProvider — discogs probes anonymously when token missing (requiresAuth=false)', async () => {
+  let dnsCalls = 0
+  const svc = loadServiceWithMocks({
+    resolve4: async () => { dnsCalls += 1; const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    resolve6: async () => { dnsCalls += 1; const e = new Error('blocked'); e.code = 'ENOTFOUND'; throw e },
+    settings: { discogsToken: '' }
+  })
+
+  const result = await svc.diagnoseGenericProvider('discogs')
+
+  // Discogs is requiresAuth: false, so we DO probe (and fail at DNS due to mocks)
+  assert.strictEqual(result.provider, 'discogs')
+  assert.strictEqual(result.failedStep, 'dns')
+  assert.notStrictEqual(result.error.code, 'NOT_CONFIGURED')
+  assert.ok(dnsCalls > 0, 'DNS resolution should be attempted for anonymous-capable providers')
 })

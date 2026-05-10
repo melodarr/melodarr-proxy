@@ -17,6 +17,9 @@ This keeps cold artist lookup within the intended request budget while still giv
 | `theaudiodb` | `THEAUDIODB_API_KEY` | Album metadata and artwork | Optional enrichment provider. |
 | `lastfm` | `LASTFM_API_KEY` | Popular albums, tags, images | Optional enrichment provider. |
 | `discogs` | `DISCOGS_TOKEN` | Release years and discography data | Higher call cost; best used selectively. |
+| Custom Providers | Auth Headers / Query Params | Flexible | Add custom external API mapping endpoints via `CUSTOM_PROVIDERS`. |
+
+> **Note:** `CUSTOM_PROVIDERS` (JSON array format) is the current supported environment-variable format for custom providers, and the Melodash UI can also be used to manage them. The `.env.example` file still documents legacy singular `CUSTOM_PROVIDER_*` variables (e.g., `CUSTOM_PROVIDER_NAME`, `CUSTOM_PROVIDER_BASE_URL`) for backward compatibility, but these are deprecated. Migrate to the `CUSTOM_PROVIDERS` JSON array format for new configurations.
 
 ## Configuration
 

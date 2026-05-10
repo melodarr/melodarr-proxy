@@ -309,11 +309,13 @@ test('recordProviderCall tracks provider call stats', () => {
   m.recordProviderCall('musicbrainz', false, 500)
   m.recordProviderCall('musicbrainz', false, 300, true)
   const stats = m.providerStats.get('musicbrainz')
+  const providerStats = m.getStats().providers.musicbrainz
   assert.equal(stats.calls, 3)
   assert.equal(stats.errors, 2)
   assert.equal(stats.timeouts, 1)
   assert.equal(stats.totalLatency, 1000)
-  assert.equal(m.getStats().providers.musicbrainz.timeouts, 1)
+  assert.equal(providerStats.timeouts, 1)
+  assert.equal(providerStats.successRate, 0.3333)
   m.shutdown()
 })
 

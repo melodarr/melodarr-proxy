@@ -18,15 +18,27 @@ function setStatus (message, tone = 'neutral') {
 }
 
 function renderAlbums (albums) {
+  if (!albums || albums.length === 0) {
+    const section = document.createElement('section')
+    section.textContent = 'No items returned'
+    section.style.textAlign = 'center'
+    section.style.color = 'var(--text-tertiary)'
+    section.style.gridColumn = '1 / -1'
+    albumsEl.replaceChildren(section)
+    return
+  }
+
   albumsEl.replaceChildren(
     ...albums.map((album) => {
-      const row = document.createElement('tr')
-      const artwork = document.createElement('td')
-      const title = document.createElement('td')
-      const date = document.createElement('td')
-      const id = document.createElement('td')
-      const provider = document.createElement('td')
-      const code = document.createElement('code')
+      const section = document.createElement('section')
+
+      const header = document.createElement('div')
+      header.style.display = 'flex'
+      header.style.alignItems = 'center'
+      header.style.gap = 'var(--space-md)'
+      header.style.marginBottom = 'var(--space-lg)'
+      header.style.paddingBottom = 'var(--space-sm)'
+      header.style.borderBottom = '1px solid var(--border-subtle)'
 
       if (album.coverUrl) {
         const img = document.createElement('img')
@@ -34,18 +46,35 @@ function renderAlbums (albums) {
         img.alt = ''
         img.className = 'album-artwork'
         img.loading = 'lazy'
-        artwork.append(img)
-      } else {
-        artwork.textContent = '-'
+        header.append(img)
       }
 
+      const title = document.createElement('h3')
       title.textContent = album.title || '-'
-      date.textContent = album.firstReleaseDate || '-'
-      code.textContent = album.id || '-'
-      provider.textContent = album.provider || '-'
-      id.append(code)
-      row.append(artwork, title, date, id, provider)
-      return row
+      title.style.margin = '0'
+      title.style.borderBottom = 'none'
+      title.style.paddingBottom = '0'
+      title.style.flex = '1'
+
+      header.append(title)
+      section.append(header)
+
+      const dl = document.createElement('dl')
+
+      const createRow = (label, value) => {
+        const dt = document.createElement('dt')
+        dt.textContent = label
+        const dd = document.createElement('dd')
+        dd.textContent = value
+        dl.append(dt, dd)
+      }
+
+      createRow('Date', album.firstReleaseDate || '-')
+      createRow('ID', album.id || '-')
+      createRow('Provider', album.provider || '-')
+
+      section.append(dl)
+      return section
     })
   )
 }

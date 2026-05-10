@@ -2,7 +2,8 @@ name: melodarr-proxy
 
 services:
   proxy:
-    build: 
+    image: ${PROXY_IMAGE:-ghcr.io/melodarr/melodarr-proxy:latest}
+    build:
       context: .
       target: production
     restart: unless-stopped
@@ -15,7 +16,7 @@ services:
       SETTINGS_SESSION_SECRET: ${SETTINGS_SESSION_SECRET:-}
       DATA_DIR: /data
       MUSICBRAINZ_BASE_URL: ${MUSICBRAINZ_BASE_URL:-https://musicbrainz.org/ws/2}
-      MUSICBRAINZ_IP_FAMILY: ${MUSICBRAINZ_IP_FAMILY:-auto}
+      MUSICBRAINZ_IP_FAMILY: ${MUSICBRAINZ_IP_FAMILY:-6}
       MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS: 1100
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-86400}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-8000}
@@ -31,11 +32,13 @@ services:
       DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
       ITUNES_COUNTRY: ${ITUNES_COUNTRY:-US}
     ports:
-      - "${HOST_PORT:-0}:3000"
+      - "${HOST_PORT:-3055}:3000"
     volumes:
       - melodarr_proxy_data:/data
     depends_on:
       - redis
+    networks:
+      - melodarr-ipv6
 
   redis:
     image: redis:7-alpine
@@ -46,6 +49,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - melodarr-ipv6
 
   melodash:
     image: ${MELODASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-melodash:latest}
@@ -59,19 +64,32 @@ services:
       - "${MELODASH_HOST_PORT:-55026}:3000"
     depends_on:
       - proxy
+    networks:
+      - melodarr-ipv6
 
   melodash-test:
     profiles: ["test"]
     build:
       context: ./melodash
       target: test
+    networks:
+      - melodarr-ipv6
 
   test:
     profiles: ["test"]
     build:
       context: .
       target: test
-
+    networks:
+      - melodarr-ipv6
 
 volumes:
   melodarr_proxy_data:
+
+networks:
+  melodarr-ipv6:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${DOCKER_IPV6_SUBNET:-fd00:dead:beef:1::/64}

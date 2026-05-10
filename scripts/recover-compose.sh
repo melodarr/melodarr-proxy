@@ -39,7 +39,7 @@ if ! pct status "$CTID" >/dev/null 2>&1; then
   exit 2
 fi
 
-APP_CONTACT="${APP_CONTACT:-admin@example.com}"
+APP_CONTACT="${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy}"
 APP_VERSION="${APP_VERSION:-latest}"
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"

@@ -25,36 +25,48 @@
   }
 
   function updateToggle (theme) {
-    const toggle = document.querySelector('[data-theme-toggle]')
+    const toggles = document.querySelectorAll('[data-theme-toggle]')
 
-    if (!toggle) {
+    if (!toggles.length) {
       return
     }
 
     const isDark = theme === 'dark'
-    toggle.innerHTML = isDark ? '☀ Light' : '● Dark'
-    toggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode')
-    toggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode'
+    toggles.forEach(toggle => {
+      toggle.innerHTML = isDark ? '☀ Light' : '● Dark'
+      toggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode')
+      toggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode'
+    })
   }
 
-  function installToggle () {
-    const header = document.querySelector('.lookup-panel')
+  function initToggles () {
+    const existingToggles = document.querySelectorAll('[data-theme-toggle]')
 
-    if (!header || document.querySelector('[data-theme-toggle]')) {
+    if (existingToggles.length > 0) {
+      existingToggles.forEach(toggle => {
+        toggle.addEventListener('click', () => {
+          setTheme(getTheme() === 'dark' ? 'light' : 'dark')
+        })
+      })
+      updateToggle(getTheme())
       return
     }
 
+    const nav = document.querySelector('.top-nav')
+    if (!nav) return
+
     const toggle = document.createElement('button')
     toggle.type = 'button'
-    toggle.className = 'theme-toggle'
+    toggle.className = 'theme-toggle-header theme-toggle'
     toggle.dataset.themeToggle = 'true'
+    toggle.style.marginLeft = 'auto'
     toggle.addEventListener('click', () => {
       setTheme(getTheme() === 'dark' ? 'light' : 'dark')
     })
 
-    header.append(toggle)
+    nav.append(toggle)
     updateToggle(getTheme())
   }
 
-  installToggle()
+  initToggles()
 })()

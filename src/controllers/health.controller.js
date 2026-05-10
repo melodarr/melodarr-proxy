@@ -3,8 +3,20 @@ const cache = require('../cache')
 const upstreamMonitor = require('../monitors/upstream.monitor')
 const { getProviderScore } = require('../providers/scoring')
 const { getAppVersion } = require('../utils/version')
+const { buildNetworkHealthSummary } = require('../infrastructure/network/network-diagnostics.service')
+const { MUSICBRAINZ_STATES } = require('../infrastructure/network/network-state')
 
 const DEGRADED_UPSTREAM = new Set(['degraded', 'rate_limited', 'timeout'])
+
+// Network states that indicate degraded MusicBrainz connectivity
+const DEGRADED_NETWORK_STATES = new Set([
+  MUSICBRAINZ_STATES.DNS_FAILED,
+  MUSICBRAINZ_STATES.NO_ROUTE,
+  MUSICBRAINZ_STATES.TCP_FAILED,
+  MUSICBRAINZ_STATES.TLS_FAILED,
+  MUSICBRAINZ_STATES.HTTP_FAILED,
+  MUSICBRAINZ_STATES.UNAVAILABLE
+])
 
 function buildLivenessPayload () {
   const memoryUsage = process.memoryUsage()
@@ -26,14 +38,37 @@ function buildLivenessPayload () {
     memory: { status: memoryStatus, usageMb: memoryMb },
     uptime: process.uptime(),
     cache: cacheStatus,
-    providers: providerScores
+    providers: providerScores,
+    network: buildNetworkHealthSummary()
   }
+}
+
+function getNetworkStatus () {
+  const networkSummary = buildNetworkHealthSummary()
+  const mbz = networkSummary && networkSummary.musicbrainz
+
+  if (!mbz) return 'ok'
+
+  if (mbz.state === MUSICBRAINZ_STATES.UNKNOWN) {
+    return 'ok'
+  }
+
+  if (DEGRADED_NETWORK_STATES.has(mbz.state)) {
+    return 'degraded'
+  }
+
+  if (mbz.ok === false) {
+    return 'degraded'
+  }
+
+  return 'ok'
 }
 
 function buildHealthPayload () {
   const upstream = upstreamMonitor.getStatus()
   const cacheStatus = cache.getHealth()
   const proxyStatus = metrics.state.isRunning ? 'running' : 'stopped'
+  const networkStatus = getNetworkStatus()
 
   const memoryUsage = process.memoryUsage()
   const memoryMb = Math.round(memoryUsage.rss / 1024 / 1024)
@@ -46,7 +81,7 @@ function buildHealthPayload () {
   const upstreamCountsAgainstReadiness = !upstreamNotApplicable
 
   let status = 'ok'
-  if ((upstreamCountsAgainstReadiness && (upstreamDegraded || upstreamUnreachable || upstreamUnknown)) || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning') {
+  if ((upstreamCountsAgainstReadiness && (upstreamDegraded || upstreamUnreachable || upstreamUnknown)) || cacheStatus === 'degraded' || proxyStatus === 'stopped' || memoryStatus === 'warning' || networkStatus === 'degraded') {
     status = 'degraded'
   }
   if ((upstreamUnreachable && upstreamCountsAgainstReadiness && proxyStatus === 'stopped') || memoryStatus === 'critical') {
@@ -79,7 +114,8 @@ function buildHealthPayload () {
     memory: { status: memoryStatus, usageMb: memoryMb },
     uptime: process.uptime(),
     lastQueryAt: metrics.state.lastQueryAt,
-    providers: providerScores
+    providers: providerScores,
+    network: buildNetworkHealthSummary()
   }
 }
 

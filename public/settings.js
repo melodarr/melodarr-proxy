@@ -47,12 +47,25 @@ const LABELS = {
   minRequestIntervalMs: 'Min Request Interval (ms)',
   upstreamTimeoutMs: 'Upstream Timeout (ms)',
   slowRequestMs: 'Slow Request Threshold (ms)',
+  providerMinRequestIntervalMs: 'Default Provider Min Interval (ms)',
   metadataProviders: 'Metadata Providers',
   lastfmApiKey: 'Last.fm API Key',
   discogsToken: 'Discogs Token',
   theAudioDbApiKey: 'TheAudioDB API Key',
   itunesCountry: 'iTunes Country',
-  providerPriority: 'Provider Priority'
+  providerPriority: 'Provider Priority',
+  providerIpFamily: 'Global Default IP Family',
+  musicbrainzIpFamily: 'MusicBrainz IP Family',
+  itunesIpFamily: 'iTunes IP Family',
+  lastfmIpFamily: 'Last.fm IP Family',
+  discogsIpFamily: 'Discogs IP Family',
+  theAudioDbIpFamily: 'TheAudioDB IP Family',
+  customProviderIpFamily: 'Custom Provider IP Family',
+  itunesMinRequestIntervalMs: 'iTunes Min Interval (ms)',
+  lastfmMinRequestIntervalMs: 'Last.fm Min Interval (ms)',
+  discogsMinRequestIntervalMs: 'Discogs Min Interval (ms)',
+  theAudioDbMinRequestIntervalMs: 'TheAudioDB Min Interval (ms)',
+  customProviderMinRequestIntervalMs: 'Custom Provider Min Interval (ms)'
 }
 
 const PROVIDERS = [
@@ -93,13 +106,46 @@ function renderSettings (data) {
       ${isSaved ? '<span class="saved-badge" title="Customized — saved to settings.json">saved</span>' : ''}
     `
 
-    const input = document.createElement('input')
-    input.name = key
-    input.value = info.value
-    input.type = typeof info.value === 'number' ? 'number' : 'text'
+    let input
+    if (key.endsWith('IpFamily')) {
+      input = document.createElement('select')
+      input.name = key
+      const options = [
+        { value: 'auto', text: 'Auto (System Default)' },
+        { value: '4', text: 'IPv4 Only' },
+        { value: '6', text: 'IPv6 Only' }
+      ]
+      options.forEach(opt => {
+        const option = document.createElement('option')
+        option.value = opt.value
+        option.textContent = opt.text
+        if (String(info.value) === String(opt.value)) {
+          option.selected = true
+        }
+        input.appendChild(option)
+      })
+      if (key === 'musicbrainzIpFamily') {
+        input.disabled = true
+      }
+    } else {
+      input = document.createElement('input')
+      input.name = key
+      input.value = info.value
+      input.type = typeof info.value === 'number' ? 'number' : 'text'
 
-    if (typeof info.value === 'number') {
-      input.min = '1'
+      if (typeof info.value === 'number') {
+        // Keys that allow 0 as minimum value (non-negative)
+        const allowZeroKeys = [
+          'minRequestIntervalMs',
+          'providerMinRequestIntervalMs',
+          'itunesMinRequestIntervalMs',
+          'lastfmMinRequestIntervalMs',
+          'discogsMinRequestIntervalMs',
+          'theAudioDbMinRequestIntervalMs',
+          'customProviderMinRequestIntervalMs'
+        ]
+        input.min = allowZeroKeys.includes(key) ? '0' : '1'
+      }
     }
 
     if (key === 'metadataProviders') {

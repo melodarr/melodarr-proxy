@@ -1,27 +1,31 @@
 const logger = require('../utils/logger')
 
-// Simple in-memory sliding window rate limiter
-const store = new Map()
-
-// Periodic cleanup to prevent memory leaks for one-off IPs
-setInterval(() => {
-  const now = Date.now()
-  for (const [ip, record] of store.entries()) {
-    const windowStart = now - record.windowMs
-    while (record.timestamps.length > 0 && record.timestamps[0] < windowStart) {
-      record.timestamps.shift()
-    }
-    if (record.timestamps.length === 0) {
-      store.delete(ip)
-    }
-  }
-}, 60 * 1000).unref()
-
 // Default: 60 requests per minute
 const rateLimit = (options = {}) => {
+  // Simple in-memory sliding window rate limiter
+  const store = new Map()
+
   const windowMs = options.windowMs || 60 * 1000
   const message = options.message || 'Too many requests, please try again later.'
   const keyGenerator = options.keyGenerator || ((req) => req.ip || req.connection?.remoteAddress || 'unknown')
+
+  // Periodic cleanup to prevent memory leaks for one-off IPs
+  const interval = setInterval(() => {
+    const now = Date.now()
+    for (const [ip, record] of store.entries()) {
+      const windowStart = now - record.windowMs
+      while (record.timestamps.length > 0 && record.timestamps[0] < windowStart) {
+        record.timestamps.shift()
+      }
+      if (record.timestamps.length === 0) {
+        store.delete(ip)
+      }
+    }
+  }, 60 * 1000)
+
+  if (interval.unref) {
+    interval.unref()
+  }
 
   return (req, res, next) => {
     const ip = keyGenerator(req)
@@ -46,9 +50,11 @@ const rateLimit = (options = {}) => {
 
     if (timestamps.length >= max) {
       logger.warn('Rate limit exceeded', { ip, path: req.path })
+      const retryAfterSeconds = Math.ceil((timestamps[0] + windowMs - now) / 1000)
+      res.setHeader('Retry-After', retryAfterSeconds)
       return res.status(429).json({
         error: message,
-        retryAfter: Math.ceil((timestamps[0] + windowMs - now) / 1000)
+        retryAfter: retryAfterSeconds
       })
     }
 

@@ -3,6 +3,7 @@ const {
   checkApiKey,
   createApiKey,
   deleteApiKey,
+  hasApiKeys,
   listApiKeys
 } = require('../settings/store')
 
@@ -14,6 +15,10 @@ function createKey (name, quotaPerMinute = 60) {
 
 function listKeys () {
   return listApiKeys()
+}
+
+function hasKeys () {
+  return hasApiKeys()
 }
 
 function deleteKey (id) {
@@ -29,6 +34,7 @@ function checkRateLimit (key) {
 module.exports = {
   createKey,
   listKeys,
+  hasKeys,
   deleteKey,
   checkRateLimit
 }

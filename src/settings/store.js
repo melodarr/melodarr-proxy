@@ -150,11 +150,12 @@ function validateSettings (config) {
       if (!spec) {
         throw new Error(`Unknown setting key: ${key}`)
       }
-      if (spec.type === 'number') {
-        const coerced = Number(value)
-        if (Number.isNaN(coerced) || coerced <= 0) {
-          throw new Error(`Invalid number for ${key}: ${value}`)
-        }
+      if (spec.fixed) {
+        continue
+      }
+      const validation = validateEditableValue(value, spec)
+      if (!validation.ok) {
+        throw new Error(`Invalid value for ${key}: ${value}`)
       }
     }
   }
@@ -522,6 +523,10 @@ function listApiKeys () {
   }))
 }
 
+function hasApiKeys () {
+  return (settings.apiKeys || []).length > 0
+}
+
 function deleteApiKey (id) {
   reloadSettings()
 
@@ -643,12 +648,12 @@ function generateRandomName () {
 const EDITABLE_KEYS = {
   appName: { env: 'APP_NAME', fallback: generateRandomName(), type: 'string' },
   appVersion: { env: 'APP_VERSION', fallback: '0.3.0', type: 'string' },
-  appContact: { env: 'APP_CONTACT', fallback: `contact-${crypto.randomBytes(4).toString('hex')}@example.com`, type: 'string' },
+  appContact: { env: 'APP_CONTACT', fallback: 'https://github.com/melodarr/melodarr-proxy', type: 'string' },
   cacheTtlSeconds: { env: 'CACHE_TTL_SECONDS', fallback: 86400, type: 'number' },
   musicbrainzBaseUrl: { env: 'MUSICBRAINZ_BASE_URL', fallback: 'https://musicbrainz.org/ws/2', type: 'string' },
   musicbrainzApiKey: { env: 'MUSICBRAINZ_API_KEY', fallback: '', type: 'string' },
-  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: 'auto', type: 'string' },
-  minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number' },
+  musicbrainzIpFamily: { env: 'MUSICBRAINZ_IP_FAMILY', fallback: '6', type: 'string', allowedValues: ['6'], fixed: true },
+  minRequestIntervalMs: { env: 'MUSICBRAINZ_MIN_REQUEST_INTERVAL_MS', fallback: 1100, type: 'number', min: 0 },
   upstreamTimeoutMs: { env: 'UPSTREAM_TIMEOUT_MS', fallback: 8000, type: 'number' },
   upstreamMaxAttempts: { env: 'UPSTREAM_MAX_ATTEMPTS', fallback: 3, type: 'number' },
   upstreamRetryBaseMs: { env: 'UPSTREAM_RETRY_BASE_MS', fallback: 500, type: 'number' },
@@ -659,26 +664,53 @@ const EDITABLE_KEYS = {
   discogsToken: { env: 'DISCOGS_TOKEN', fallback: '', type: 'string' },
   theAudioDbApiKey: { env: 'THEAUDIODB_API_KEY', fallback: '', type: 'string' },
   itunesCountry: { env: 'ITUNES_COUNTRY', fallback: 'US', type: 'string' },
-  customProviderName: { env: 'CUSTOM_PROVIDER_NAME', fallback: 'Custom API', type: 'string' },
-  customProviderBaseUrl: { env: 'CUSTOM_PROVIDER_BASE_URL', fallback: '', type: 'string' },
-  customProviderSearchPath: { env: 'CUSTOM_PROVIDER_SEARCH_PATH', fallback: '', type: 'string' },
-  customProviderQueryParam: { env: 'CUSTOM_PROVIDER_QUERY_PARAM', fallback: 'q', type: 'string' },
-  customProviderAuthType: { env: 'CUSTOM_PROVIDER_AUTH_TYPE', fallback: 'none', type: 'string' },
-  customProviderHeaderName: { env: 'CUSTOM_PROVIDER_HEADER_NAME', fallback: '', type: 'string' },
-  customProviderQueryAuthName: { env: 'CUSTOM_PROVIDER_QUERY_AUTH_NAME', fallback: '', type: 'string' },
-  customProviderToken: { env: 'CUSTOM_PROVIDER_TOKEN', fallback: '', type: 'string' },
-  customProviderMapping: { env: 'CUSTOM_PROVIDER_MAPPING', fallback: '{}', type: 'string' },
+  customProviders: { env: 'CUSTOM_PROVIDERS', fallback: '[]', type: 'string' },
   providerPriority: { env: 'PROVIDER_PRIORITY', fallback: '', type: 'string' },
+  providerMinRequestIntervalMs: { env: 'PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number', min: 0 },
+  itunesMinRequestIntervalMs: { env: 'ITUNES_MIN_REQUEST_INTERVAL_MS', fallback: 100, type: 'number', min: 0 },
+  lastfmMinRequestIntervalMs: { env: 'LASTFM_MIN_REQUEST_INTERVAL_MS', fallback: 200, type: 'number', min: 0 },
+  discogsMinRequestIntervalMs: { env: 'DISCOGS_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number', min: 0 },
+  theAudioDbMinRequestIntervalMs: { env: 'THEAUDIODB_MIN_REQUEST_INTERVAL_MS', fallback: 1000, type: 'number', min: 0 },
+  customProviderMinRequestIntervalMs: { env: 'CUSTOM_PROVIDER_MIN_REQUEST_INTERVAL_MS', fallback: 500, type: 'number', min: 0 },
   globalRateLimitMax: { env: 'GLOBAL_RATE_LIMIT_MAX', fallback: 500, type: 'number' },
   serverTimeoutMs: { env: 'SERVER_TIMEOUT_MS', fallback: 15000, type: 'number' },
   maxConcurrentRequests: { env: 'MAX_CONCURRENT_REQUESTS', fallback: 20, type: 'number' },
-  upstreamQueueMax: { env: 'UPSTREAM_QUEUE_MAX', fallback: 50, type: 'number' }
+  upstreamQueueMax: { env: 'UPSTREAM_QUEUE_MAX', fallback: 50, type: 'number' },
+  providerIpFamily: { env: 'PROVIDER_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  itunesIpFamily: { env: 'ITUNES_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  lastfmIpFamily: { env: 'LASTFM_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  discogsIpFamily: { env: 'DISCOGS_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  theAudioDbIpFamily: { env: 'THEAUDIODB_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] },
+  customProviderIpFamily: { env: 'CUSTOM_PROVIDER_IP_FAMILY', fallback: 'auto', type: 'string', allowedValues: ['auto', '4', '6'] }
+}
+
+function validateEditableValue (value, spec) {
+  if (spec.type === 'number') {
+    const coerced = Number(value)
+    const min = Number.isFinite(spec.min) ? spec.min : 1
+    if (Number.isNaN(coerced) || coerced < min) {
+      return { ok: false, reason: min === 0 ? 'Must be a non-negative number' : 'Must be a positive number' }
+    }
+    return { ok: true, value: coerced }
+  }
+
+  const coerced = String(value)
+  if (Array.isArray(spec.allowedValues) && !spec.allowedValues.includes(coerced)) {
+    return { ok: false, reason: `Must be one of: ${spec.allowedValues.join(', ')}` }
+  }
+
+  return { ok: true, value: coerced }
 }
 
 function getRuntimeConfig () {
   const config = {}
 
   for (const [key, spec] of Object.entries(EDITABLE_KEYS)) {
+    if (key === 'musicbrainzIpFamily') {
+      config[key] = { value: '6', source: 'fixed' }
+      continue
+    }
+
     const storedValue = settings.runtime?.[key]
     const envValue = process.env[spec.env]
 
@@ -701,6 +733,10 @@ function getConfigValue (key) {
 
   if (!spec) {
     return undefined
+  }
+
+  if (key === 'musicbrainzIpFamily') {
+    return '6'
   }
 
   // Saved values always win
@@ -730,6 +766,11 @@ function updateRuntimeConfig (updates) {
       continue
     }
 
+    if (spec.fixed) {
+      skipped[key] = 'Fixed setting'
+      continue
+    }
+
     // null is the explicit clear-saved-override sentinel. The saved value is
     // removed and getConfigValue falls back to env (or built-in fallback).
     if (value === null) {
@@ -737,14 +778,14 @@ function updateRuntimeConfig (updates) {
       continue
     }
 
-    const coerced = spec.type === 'number' ? Number(value) : String(value)
+    const validation = validateEditableValue(value, spec)
 
-    if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) {
-      skipped[key] = 'Must be a positive number'
+    if (!validation.ok) {
+      skipped[key] = validation.reason
       continue
     }
 
-    applied[key] = coerced
+    applied[key] = validation.value
   }
 
   const hasApplied = Object.keys(applied).length > 0
@@ -823,12 +864,13 @@ async function validateConfigInMemory (updates, validatorFn) {
   for (const [key, value] of Object.entries(updates)) {
     const spec = EDITABLE_KEYS[key]
     if (!spec) continue
+    if (spec.fixed) continue
     if (value === null) {
       applied[key] = null
     } else {
-      const coerced = spec.type === 'number' ? Number(value) : String(value)
-      if (spec.type === 'number' && (Number.isNaN(coerced) || coerced <= 0)) continue
-      applied[key] = coerced
+      const validation = validateEditableValue(value, spec)
+      if (!validation.ok) continue
+      applied[key] = validation.value
     }
   }
 
@@ -864,6 +906,7 @@ module.exports = {
   getRuntimeConfig,
   getSessionSecret,
   hasAdminPassword,
+  hasApiKeys,
   listApiKeys,
   resetPassword,
   updateRuntimeConfig,

@@ -40,52 +40,76 @@ Common error:
 }
 ```
 
-This usually means the container can open a connection path but the TLS handshake is reset before completion. In Proxmox/LXC environments it is often tied to IPv4/IPv6 routing, Docker network configuration, or upstream filtering.
+This means the container can open a TCP connection but the TLS handshake is
+reset before completion. MusicBrainz is IPv6-only for this proxy — IPv4 is
+never a valid fallback. The failure is always in the network path, not the
+application.
 
-Run:
+**Common causes:**
+
+| Environment | Root Cause |
+| --- | --- |
+| Proxmox / LXC | Docker inside the LXC has IPv6 disabled or no AAAA route. |
+| Docker Desktop (macOS/Windows) | PMTUD black hole — TLS handshake packets exceed effective MTU through the Linux VM; ICMP6 PTB is swallowed. |
+| Linux host | Docker daemon missing `"ipv6": true` or IPv6 forwarding disabled. |
+
+**Diagnose:**
 
 ```bash
 curl -s "http://127.0.0.1:3055/debug/diagnose?provider=musicbrainz"
 curl -s http://127.0.0.1:3055/debug/upstream
 scripts/proxy-diag.sh diagnose
 scripts/proxy-diag.sh mb 6
-scripts/proxy-diag.sh mb 4
 ```
 
-Read the diagnose response this way:
+Read the response:
 
-- `failedStep: "dns"` means name resolution failed before a socket was opened.
-- `failedStep: "tcp"` means DNS worked, but TCP/443 routing or firewalling failed.
-- `failedStep: "tls"` means TCP connected, but the TLS handshake was reset or interrupted.
-- `failedStep: "http"` means TLS worked, but MusicBrainz returned an HTTP error.
-- `probes[]` contains side-by-side `auto`, IPv4, and IPv6 results so you can see whether only one family is broken.
+- `failedStep: "dns"` — name resolution failed.
+- `failedStep: "tcp"` — DNS worked, TCP/443 routing failed (`ENETUNREACH`).
+- `failedStep: "tls"` — TCP connected, TLS handshake was reset (`ECONNRESET`).
+- `failedStep: "http"` — TLS worked, MusicBrainz returned an HTTP error.
 
-Default to IPv6 first, then force IPv4 only if IPv6 is unavailable:
+**Fix:**
 
-```env
-MUSICBRAINZ_IP_FAMILY=6
-```
-
-or, only when IPv6 is unavailable:
-
-```env
-MUSICBRAINZ_IP_FAMILY=4
-```
-
-Then recreate the proxy:
+For Proxmox/LXC/Linux:
 
 ```bash
-docker compose up -d --force-recreate proxy
+sudo ./scripts/ensure-docker-ipv6.sh
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --force-recreate
 ```
 
-If MusicBrainz still fails but other providers work, you can temporarily remove MusicBrainz from active providers:
+For Docker Desktop, enable IPv6 in the daemon config (Settings → Docker
+Engine):
 
-```env
-METADATA_PROVIDERS=itunes,theaudiodb,discogs
-PROVIDER_PRIORITY=itunes,theaudiodb,discogs,lastfm
+```json
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "fd00:dead:beef::/64",
+  "ip6tables": true,
+  "experimental": true
+}
 ```
 
-This may avoid upstream-degraded readiness for MusicBrainz, but Lidarr add-artist flows may still need canonical MusicBrainz IDs.
+Then recreate containers:
+
+```bash
+docker compose down --remove-orphans
+docker compose up -d --build proxy redis melodash
+```
+
+The diagnostic probe retries up to 3 times to absorb intermittent PMTUD
+failures. Production MusicBrainz requests also retry (up to 3 attempts with
+backoff). If failures are consistent rather than intermittent, the IPv6 path
+is fundamentally broken — check ISP support, router advertisements, and
+Docker daemon configuration.
+
+MusicBrainz also requires a meaningful User-Agent identity. Set `APP_CONTACT`
+to a real email address or contact URL; `example.com`, `example.org`, and
+`example.net` placeholder addresses are diagnosed as invalid because they can
+be treated like anonymous/fake clients by upstream policy.
+
+> **Never set `MUSICBRAINZ_IP_FAMILY` to `4`.** MusicBrainz does not serve
+> API responses over IPv4. If IPv6 is broken, fix the transport layer.
 
 ## IPv6, Docker, And Proxmox Networking
 
@@ -103,16 +127,24 @@ Check the host and container paths separately.
 On the host:
 
 ```bash
-curl -4 -I https://musicbrainz.org/
-curl -6 -I https://musicbrainz.org/
+curl -6 -I -H "User-Agent: melodarr-proxy-diag/1.0 (${APP_CONTACT:-operator@melodarr.org})" https://musicbrainz.org/
 ```
 
 From the Compose network:
 
 ```bash
-docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:4,headers:{'User-Agent':'melodarr-proxy-diag/1.0 (admin@example.com)'}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
-docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:6,headers:{'User-Agent':'melodarr-proxy-diag/1.0 (admin@example.com)'}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
+docker compose run --rm --no-deps proxy node -e "require('https').get('https://musicbrainz.org/ws/2/artist/?query=test&fmt=json&limit=1',{family:6,headers:{'User-Agent':\`melodarr-proxy-diag/1.0 (\${process.env.APP_CONTACT || 'operator@melodarr.org'})\`}},r=>{console.log(r.statusCode);r.resume()}).on('error',e=>{console.error(e.code,e.message);process.exit(1)})"
 ```
+
+If IPv6 ping works but MusicBrainz still fails during TLS, treat it as a TLS-path failure, not an IPv6 routing failure. Example:
+
+```text
+ping -6 2606:4700:4700::1111 succeeds
+curl -6 https://musicbrainz.org/ connects to TCP/443
+OpenSSL SSL_connect: SSL_ERROR_SYSCALL
+```
+
+In that case, collect `/debug/diagnose?provider=musicbrainz` and container-level `curl -6` results before changing application code. The proxy cannot fix an upstream or network middlebox resetting TLS after TCP connect.
 
 Check Docker network configuration:
 
@@ -136,10 +168,16 @@ If host IPv6 works but Docker IPv6 does not, enable IPv6 in Docker inside the LX
 Useful recovery commands:
 
 ```bash
+cd /opt/melodarr-proxy/src-branch-build
+sudo ./scripts/ensure-docker-ipv6.sh
+cd /opt/melodarr-proxy
+docker compose up -d --force-recreate
 CTID=<ctid> ./scripts/upgrade-proxmox-lxc.sh
-scripts/proxy-diag.sh set-ip-family 4
-scripts/proxy-diag.sh set-ip-family 6
 ```
+
+> **Do not switch MusicBrainz to IPv4.** Melodarr Proxy treats MusicBrainz as
+> IPv6-only; IPv4 probes are intentionally not part of the MusicBrainz path.
+> This is an immutable invariant — see the README.
 
 ## Redis Disconnected
 
@@ -385,6 +423,70 @@ NEXT_PUBLIC_PROXY_FALLBACK=http://localhost:3055
 ```
 
 If Melodash is served from `https://melodash.example.com`, make sure API requests go to the proxy host, not back to the Melodash app route.
+
+## Melodash Shows `Proxy unreachable` Or Public `/api/*` Returns 502
+
+Symptoms:
+
+```text
+Proxy unreachable (https://melodash.example.com/api/health — Primary returned 502)
+Proxy unreachable (https://melodash.example.com/api/settings — Primary returned 502)
+openresty 502 Bad Gateway
+curl: (7) Failed to connect to 127.0.0.1 port 3055
+```
+
+This means Melodash loaded, but its browser-side API calls cannot reach the proxy backend. It is not a MusicBrainz failure until the proxy API itself is reachable.
+
+First verify the proxy locally from the Docker host or LXC:
+
+```bash
+cd /opt/melodarr-proxy/src-branch-build
+
+docker compose ps
+curl -i http://127.0.0.1:3055/api/health
+curl -i http://127.0.0.1:3055/api/settings/status
+```
+
+The expected port mapping is:
+
+```text
+proxy    0.0.0.0:3055->3000/tcp
+melodash 0.0.0.0:55026->3000/tcp
+```
+
+If `docker compose ps` shows a random proxy port such as `32769->3000/tcp`, or shows Melodash on `3055`, fix the source-checkout `.env`:
+
+```bash
+cd /opt/melodarr-proxy/src-branch-build
+
+cat > .env <<'EOF'
+HOST_PORT=3055
+MELODASH_HOST_PORT=55026
+EOF
+
+docker compose down
+docker compose up -d --build
+docker compose ps
+curl -i http://127.0.0.1:3055/api/health
+```
+
+For same-origin public Melodash deployments, the reverse proxy must route API paths to the proxy backend and everything else to Melodash:
+
+```nginx
+location /api/ {
+  proxy_pass http://127.0.0.1:3055;
+}
+
+location /debug/ {
+  proxy_pass http://127.0.0.1:3055;
+}
+
+location / {
+  proxy_pass http://127.0.0.1:55026;
+}
+```
+
+If `/api/health` works on `127.0.0.1:3055` but fails through the public hostname, the issue is reverse-proxy routing. If `127.0.0.1:3055` fails locally, the proxy container is down or not published on the expected port.
 
 ## What To Include In A Bug Report
 

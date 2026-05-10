@@ -94,7 +94,7 @@ test('Providers Index', async (t) => {
       exports: { getConfigValue: () => 'musicbrainz,theaudiodb' }
     }
     require.cache[require.resolve('../utils/logger')] = {
-      exports: { error () {}, warn () {}, info () {} }
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
     }
     require.cache[require.resolve('../metrics')] = { exports: {} }
     require.cache[require.resolve('./scoring')] = {
@@ -152,7 +152,7 @@ test('Providers Index', async (t) => {
       exports: { getConfigValue: () => 'musicbrainz,itunes' }
     }
     require.cache[require.resolve('../utils/logger')] = {
-      exports: { error () {}, warn () {}, info () {} }
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
     }
     require.cache[require.resolve('../metrics')] = { exports: {} }
     require.cache[require.resolve('./scoring')] = {
@@ -225,7 +225,7 @@ test('Providers Index', async (t) => {
       exports: { getConfigValue: () => 'musicbrainz,itunes' }
     }
     require.cache[require.resolve('../utils/logger')] = {
-      exports: { error () {}, warn () {}, info () {} }
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
     }
     require.cache[require.resolve('../metrics')] = { exports: {} }
     require.cache[require.resolve('./scoring')] = {
@@ -259,6 +259,103 @@ test('Providers Index', async (t) => {
     assert.strictEqual(result.albums[0].releaseDate, '1997-05-21T07:00:00Z')
   })
 
+  await t.test('aggregateArtist - enforces provider priority over adaptive score', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: {
+        getConfigValue: (key) => {
+          if (key === 'metadataProviders') return 'musicbrainz,itunes'
+          if (key === 'providerPriority') return 'itunes,musicbrainz'
+          return ''
+        }
+      }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Radiohead - MB',
+          overview: 'Overview from MB',
+          images: [{ url: 'https://mb.test/image.jpg', coverType: 'poster' }],
+          albums: [{ name: 'OK Computer', year: 1998, releaseDate: '1998-01-01', ids: { mb: '1' } }]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Radiohead - iTunes',
+          overview: 'Overview from iTunes',
+          images: [{ url: 'https://itunes.test/image.jpg', coverType: 'poster' }],
+          albums: [{ name: 'OK Computer', year: 1997, releaseDate: '1997-05-21', ids: { it: '2' } }]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Radiohead')
+
+    assert.strictEqual(result.artistName, 'Radiohead - iTunes', 'High priority provider should win artist name')
+    assert.strictEqual(result.overview, 'Overview from iTunes', 'High priority provider should win overview')
+    assert.strictEqual(result.albums.length, 1)
+    assert.strictEqual(result.albums[0].year, 1997, 'High priority provider should win album year')
+    assert.strictEqual(result.albums[0].releaseDate, '1997-05-21', 'High priority provider should win album release date')
+    assert.strictEqual(result.images[0].url, 'https://itunes.test/image.jpg', 'High priority provider image should win')
+    assert.deepStrictEqual(result.providers, [
+      { name: 'itunes', score: 0.5, albumCount: 1 },
+      { name: 'musicbrainz', score: 0.95, albumCount: 1 }
+    ], 'Provider ordering should reflect configured priority while reported scores stay adaptive')
+  })
+
+  await t.test('aggregateArtist - deduplicates albums using MusicBrainz Release-Group ID', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Dedupe Artist',
+          albums: [{ name: 'Album Name MB', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-123', mb: '1' } }]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Dedupe Artist',
+          // Note the name is different, but MBID is the same
+          albums: [{ name: 'Album Name iTunes Edition', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-123', it: '2' } }]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Dedupe Artist')
+
+    assert.strictEqual(result.albums.length, 1, 'Albums should be deduplicated into a single entry based on MBID')
+    assert.strictEqual(result.albums[0].name, 'Album Name MB', 'High priority provider should dictate the merged album name')
+    assert.strictEqual(result.albums[0].ids.mb, '1')
+    assert.strictEqual(result.albums[0].ids.it, '2', 'IDs from secondary provider should be merged')
+  })
+
   await t.test('aggregateArtist - throws if all providers fail', async () => {
     const { index } = setupMocks('discogs')
     await assert.rejects(
@@ -281,5 +378,150 @@ test('Providers Index', async (t) => {
       async () => index.testProvider('unknown', 'test'),
       /Unknown provider/
     )
+  })
+
+  await t.test('aggregateArtist - does not collapse distinct albums with the same name but different MBIDs', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: (name) => name === 'musicbrainz' ? 0.95 : 0.5 }
+    }
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Distinct Artist',
+          albums: [
+            { name: 'Greatest Hits', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-original', mb: '1' } },
+            { name: 'Greatest Hits', year: 2005, ids: { musicbrainzReleaseGroupId: 'mbid-live', mb: '2' } }
+          ]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Distinct Artist',
+          albums: [
+            { name: 'Greatest Hits', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-original', it: '1' } }
+          ]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Distinct Artist')
+
+    assert.strictEqual(result.albums.length, 2, 'Distinct MBIDs should yield separate albums even if titles match')
+    const original = result.albums.find(a => a.ids.musicbrainzReleaseGroupId === 'mbid-original')
+    const live = result.albums.find(a => a.ids.musicbrainzReleaseGroupId === 'mbid-live')
+
+    assert.ok(original, 'Original album should be present')
+    assert.ok(live, 'Live album should be present')
+
+    assert.strictEqual(original.ids.it, '1', 'iTunes ID should be merged into original album')
+    assert.strictEqual(live.ids.it, undefined, 'iTunes ID should not be merged into live album')
+  })
+
+  await t.test('aggregateArtist - separate albums for same normalized title but different MBIDs across multiple authoritative providers', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,lastfm' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: () => 0.95 }
+    }
+
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Authoritative Artist',
+          albums: [
+            { name: 'Greatest Hits', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-original' } }
+          ]
+        })
+      }
+    }
+    require.cache[require.resolve('./lastfm.provider')] = {
+      exports: {
+        name: 'lastfm',
+        searchArtist: async () => ({
+          artistName: 'Authoritative Artist',
+          albums: [
+            { name: 'Greatest Hits', year: 2005, ids: { musicbrainzReleaseGroupId: 'mbid-remaster' } }
+          ]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Authoritative Artist')
+
+    assert.strictEqual(result.albums.length, 2, 'Distinct MBIDs from different authoritative providers must remain separate albums even if titles match')
+    const original = result.albums.find(a => a.ids.musicbrainzReleaseGroupId === 'mbid-original')
+    const remaster = result.albums.find(a => a.ids.musicbrainzReleaseGroupId === 'mbid-remaster')
+
+    assert.ok(original, 'Original MBID album should be present')
+    assert.ok(remaster, 'Remaster MBID album should be present')
+  })
+
+  await t.test('aggregateArtist - merges by normalized title when at least one album lacks MBID', async () => {
+    delete require.cache[require.resolve('./index')]
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'musicbrainz,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: () => 0.95 }
+    }
+
+    require.cache[require.resolve('./musicbrainz.provider')] = {
+      exports: {
+        name: 'musicbrainz',
+        searchArtist: async () => ({
+          artistName: 'Test Artist',
+          albums: [
+            { name: 'Greatest Hits', year: 2000, ids: { musicbrainzReleaseGroupId: 'mbid-123', mb: '1' } }
+          ]
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Test Artist',
+          albums: [
+            // iTunes provider returns same album but without MBID
+            { name: 'Greatest Hits', year: 2000, ids: { itunes: '456' }, imageUrl: 'http://img.com/cover.jpg' }
+          ]
+        })
+      }
+    }
+
+    const index = require('./index')
+    const result = await index.aggregateArtist('Test Artist')
+
+    assert.strictEqual(result.albums.length, 1, 'Albums should merge by normalized title when one lacks MBID')
+    const album = result.albums[0]
+    assert.strictEqual(album.ids.musicbrainzReleaseGroupId, 'mbid-123', 'Merged album should preserve MBID from provider that has it')
+    assert.strictEqual(album.ids.mb, '1', 'Should have MB provider ID')
+    assert.strictEqual(album.ids.itunes, '456', 'Should have iTunes provider ID')
+    assert.strictEqual(album.imageUrl, 'http://img.com/cover.jpg', 'Should enrich with iTunes image')
   })
 })

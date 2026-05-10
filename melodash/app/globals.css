@@ -1,27 +1,27 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
+@import "../styles/tokens.css";
 
 @layer base {
-  :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5%;
-    --card-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --radius: 0.5rem;
-  }
+ * {
+ @apply border-border;
+ }
+ body {
+ @apply bg-page text-primary antialiased;
+ }
+
+ ::selection {
+ background: rgb(31 41 55);
+ color: rgb(255 255 255);
+ }
 }
 
-@layer base {
-  * {
-    @apply border-border;
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+      display: none;
   }
-  body {
-    @apply bg-background text-foreground antialiased;
-  }
-
-  ::selection {
-    background: rgb(31 41 55);
-    color: rgb(255 255 255);
+  .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
   }
 }

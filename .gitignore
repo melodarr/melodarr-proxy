@@ -1,5 +1,6 @@
 node_modules/
 .env
+.site-tests.env
 data/
 npm-debug.log*
 yarn-debug.log*
@@ -10,3 +11,10 @@ coverage/
 *.tsbuildinfo
 **/.yarn/install-state.gz
 .DS_Store
+
+# Local AI/orchestration tooling. Keep OpenCastle state outside this repo.
+GEMINI.md
+.gemini
+.gemini/
+.opencastle
+.opencastle/

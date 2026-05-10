@@ -36,8 +36,13 @@ At minimum, set a real contact address for MusicBrainz User-Agent policy:
 ```env
 APP_NAME=melodarr-proxy
 APP_VERSION=0.3.42
-APP_CONTACT=you@example.com
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 ```
+
+`APP_CONTACT` must be a real contact email address or a valid http(s) URL. Do not use placeholder
+addresses from `example.com`, `example.org`, or `example.net`; MusicBrainz uses
+the User-Agent identity for throttling/contact policy and Melodarr diagnostics
+will flag placeholder contacts.
 
 Common production values:
 
@@ -81,28 +86,27 @@ Edit `.env`:
 ```env
 HOST_PORT=3055
 MELODASH_HOST_PORT=55026
-APP_CONTACT=you@example.com
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 REQUIRE_API_KEY=true
 ADMIN_PASSWORD=change-this-long-password
 SETTINGS_SESSION_SECRET=change-this-random-secret
 ```
 
-Create the external Docker network expected by the bundled Compose file:
+Enable Docker IPv6 and create the external Docker network expected by the
+bundled Compose file:
 
 ```bash
-docker network create --ipv6 --subnet fd00:dead:beef:1::/64 melodarr-ipv6
+sudo ./scripts/ensure-docker-ipv6.sh
 ```
 
-If your host or LXC does not support Docker IPv6, create the network without IPv6:
-
-```bash
-docker network create melodarr-ipv6
-```
+Do not create `melodarr-ipv6` without IPv6. MusicBrainz is treated as
+IPv6-only by Melodarr Proxy, so an IPv4-only Docker network will leave
+MusicBrainz diagnostics and readiness degraded.
 
 Build and start proxy, Redis, and Melodash:
 
 ```bash
-docker compose up -d --build proxy redis melodash
+docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d --build proxy redis melodash
 ```
 
 Verify:
@@ -111,6 +115,27 @@ Verify:
 docker compose ps
 curl -s http://127.0.0.1:3055/api/health
 curl -s http://127.0.0.1:3055/api/ready
+```
+
+The source checkout should publish stable ports:
+
+```text
+proxy    0.0.0.0:3055->3000/tcp
+melodash 0.0.0.0:55026->3000/tcp
+```
+
+If `proxy` is published on a random high port or Melodash is published on `3055`, confirm `.env` uses:
+
+```env
+HOST_PORT=3055
+MELODASH_HOST_PORT=55026
+```
+
+Then recreate the services:
+
+```bash
+docker compose down
+docker compose up -d --build
 ```
 
 Open Melodash:
@@ -197,7 +222,7 @@ volumes:
 Create `.env`:
 
 ```env
-APP_CONTACT=you@example.com
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy
 ADMIN_PASSWORD=change-this-long-password
 SETTINGS_SESSION_SECRET=change-this-random-secret
 THEAUDIODB_API_KEY=
@@ -293,7 +318,7 @@ Run the installer from the Proxmox host as `root`:
 CTID=163 \
 HOSTNAME=melodarr-proxy \
 PASSWORD='change-this-lxc-password' \
-APP_CONTACT=you@example.com \
+APP_CONTACT=https://github.com/melodarr/melodarr-proxy \
 APP_VERSION=0.3.42 \
 HOST_PORT=3055 \
 MELODASH_HOST_PORT=55026 \

@@ -6,6 +6,7 @@ const {
   generateRandomName,
   getRuntimeConfig,
   getSessionSecret,
+  hasApiKeys,
   hasAdminPassword,
   updateRuntimeConfig,
   getSettingsVersions,
@@ -32,7 +33,7 @@ const SENSITIVE_SETTING_KEYS = new Set([
   'lastfmApiKey',
   'discogsToken',
   'theAudioDbApiKey',
-  'customProviderToken'
+  'customProviders'
 ])
 
 function redactSensitiveKeys (obj) {
@@ -171,6 +172,8 @@ function requireSettingsAuth (req, res, next) {
 
 function getSettingsPayload () {
   const runtimeConfig = getRuntimeConfig()
+  const apiKeysConfigured = hasApiKeys()
+  const requireApiKey = process.env.REQUIRE_API_KEY !== 'false' && apiKeysConfigured
 
   return {
     config: runtimeConfig,
@@ -178,6 +181,11 @@ function getSettingsPayload () {
       passwordConfigured: hasAdminPassword(),
       envPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD),
       bootstrapAvailable: canBootstrapAdmin()
+    },
+    apiAuth: {
+      requireApiKey,
+      hasApiKeys: apiKeysConfigured,
+      unauthenticatedAllowed: !requireApiKey
     },
     server: {
       port: { value: Number(process.env.PORT || 3000), source: 'env' },

@@ -35,6 +35,14 @@ function stripInternalKeys (response) {
   return cleaned
 }
 
+function finalizeArtistLookupResponse (response, isDebug) {
+  const normalized = withArtistLookupDefaults(response)
+  if (!isDebug && normalized.debug) {
+    delete normalized.debug
+  }
+  return isDebug ? normalized : stripInternalKeys(normalized)
+}
+
 const withTimeout = (promise, ms) => {
   let timer
   const timeoutPromise = new Promise((_resolve, reject) => {
@@ -134,7 +142,8 @@ async function handleSearch (req, res) {
     const data = await withTimeout(artistDiscovery.discoverArtists({ query: q, type }), 15000)
     tracer.addStep(trace, 'discoverArtists', Date.now() - startAgg, 'success')
 
-    const ttl = 86400 * 30 // 30 days for SWR
+    // Use a shorter negative cache TTL (5 minutes) for empty results
+    const ttl = (!data || data.length === 0) ? 300 : 86400 * 30 // 5m negative cache, 30d SWR
 
     const startCacheSet = Date.now()
     await cache.set(cacheKey, data, ttl)
@@ -392,7 +401,11 @@ async function executeArtistLookupPipeline (term, isDebug, cacheKey, normalizedT
     delete enrichedTopResult._enrichmentDebug
   }
 
-  const SWR_TTL_SECONDS = 86400 * 30 // 30 days
+  // Use a shorter negative cache TTL (5 minutes) for empty results
+  // Check if we have valid artist data (non-empty artistName and id)
+  const hasValidArtist = response.artistName && response.artistName.trim().length > 0 &&
+                         (response.foreignArtistId || response.id)
+  const SWR_TTL_SECONDS = hasValidArtist ? 86400 * 30 : 300 // 5m negative cache, 30d SWR
   const startCacheSet = Date.now()
   await cache.set(cacheKey, response, SWR_TTL_SECONDS)
   tracer.addStep(trace, 'cacheSet', Date.now() - startCacheSet, 'success')
@@ -458,14 +471,11 @@ async function handleArtistLookup (req, res) {
     res.set('X-Cache-Generated-At', cachedData.generatedAt)
 
     const response = withArtistLookupDefaults({ ...cachedObj, providers })
-    if (!isDebug && response.debug) {
-      delete response.debug
-    }
     response._generatedAt = cachedData.generatedAt
 
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
 
-    const finalResponse = isDebug ? response : stripInternalKeys(response)
+    const finalResponse = finalizeArtistLookupResponse(response, isDebug)
     return res.json([finalResponse].filter(isValidArtist))
   }
 
@@ -515,14 +525,11 @@ async function handleArtistLookup (req, res) {
       res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
 
       const response = withArtistLookupDefaults({ ...cachedObj, providers })
-      if (!isDebug && response.debug) {
-        delete response.debug
-      }
       response._generatedAt = cachedDataAfterWait.generatedAt
 
       await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
 
-      const finalResponse = isDebug ? response : stripInternalKeys(response)
+      const finalResponse = finalizeArtistLookupResponse(response, isDebug)
       return res.json([finalResponse].filter(isValidArtist))
     }
   }
@@ -557,13 +564,10 @@ async function handleArtistLookup (req, res) {
     res.set('X-Cache-Generated-At', new Date().toISOString())
 
     const finalResponse = { ...response, _generatedAt: new Date().toISOString() }
-    if (!isDebug && finalResponse.debug) {
-      delete finalResponse.debug
-    }
 
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: resolvedProviders.map(p => p.name) })
 
-    const sanitizedResponse = isDebug ? finalResponse : stripInternalKeys(finalResponse)
+    const sanitizedResponse = finalizeArtistLookupResponse(finalResponse, isDebug)
     return res.json([sanitizedResponse].filter(isValidArtist))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')

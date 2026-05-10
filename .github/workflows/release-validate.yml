@@ -62,28 +62,25 @@ jobs:
         env:
           HOST_PORT: 3055
           REQUIRE_API_KEY: "false"
-          MUSICBRAINZ_IP_FAMILY: 4
-        run: docker compose up -d proxy
+          MUSICBRAINZ_IP_FAMILY: 6
+        run: |
+          bash scripts/ensure-docker-compose-network.sh
+          docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d proxy
 
       - name: Wait for service
         run: |
           set -euo pipefail
           for i in {1..10}; do
-            if curl -sf http://localhost:3055/api/health; then
+            if curl -fsS http://127.0.0.1:3055/api/health; then
               exit 0
             fi
             sleep 2
           done
-          docker compose logs proxy
+          docker compose -f docker-compose.yml -f docker-compose.ipv6.yml logs proxy
           exit 1
 
       - name: Validate SkyHook contract
         run: |
           set -euo pipefail
-          curl -s -f "http://localhost:3055/api/v1/artist/lookup?term=Radiohead" \
-          | jq 'if length == 0 then true else .[0] |
-              (has("foreignArtistId") and
-               has("status") and
-               has("links") and
-               has("aliases")) end' \
-          | grep true
+          yarn test:contracts
+          ALLOW_SKYHOOK_UPSTREAM_FAILURE=true node scripts/validate-skyhook-live.js http://127.0.0.1:3055

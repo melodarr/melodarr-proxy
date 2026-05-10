@@ -20,6 +20,12 @@ Most changes are handled through normal pull request review:
 
 Small fixes can merge with one maintainer approval.
 
+Feature and fix work follows a `develop`-first workflow. Contributors should
+start short-lived branches from `develop` and land normal feature or fix work
+through a reviewed pull request back into `develop`. Protected branches,
+including `main`, `develop`, `release/*`, and `rc/*`, are PR-only unless a
+maintainer explicitly documents a one-time exception.
+
 Larger changes should have an issue or design note first, especially when they affect:
 
 - Lidarr/SkyHook response shape

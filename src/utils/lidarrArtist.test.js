@@ -7,6 +7,7 @@ const {
   LIDARR_SKYHOOK_ARTIST_DEFAULTS,
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   normalizeAliases,
+  normalizeAlbum,
   normalizeLidarrArtistResponse,
   normalizeStringArray,
   toSkyhookAlbumResource,
@@ -32,6 +33,18 @@ test('withArtistLookupDefaults supplies Lidarr-safe lookup fields', () => {
   assert.deepEqual(artist.links, [])
   assert.deepEqual(artist.images, [])
   assert.deepEqual(artist.albums, [])
+  assert.deepEqual(artist.ratings, { votes: 0, value: 0 })
+  assert.deepEqual(artist.rating, { count: 0, value: 0 })
+})
+
+test('withArtistLookupDefaults always emits both Lidarr ratings and SkyHook rating', () => {
+  const artist = withArtistLookupDefaults({
+    artistName: 'Lorde',
+    ratings: { votes: 12, value: 4.5 }
+  })
+
+  assert.deepEqual(artist.ratings, { votes: 12, value: 4.5 })
+  assert.deepEqual(artist.rating, { count: 12, value: 4.5 })
 })
 
 test('withArtistLookupDefaults falls back foreignArtistId from id for legacy/cached payloads', () => {
@@ -336,4 +349,63 @@ test('toSkyhookAlbumResource emits only Lidarr AlbumResource fields', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'remoteCover'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'provider'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'ids'), false)
+})
+
+test('normalizeAlbum correctly populates firstReleaseDate and releaseDate in various scenarios', () => {
+  // Scenario 1: Only releaseDate
+  const album1 = normalizeAlbum({ releaseDate: '2000-01-01' })
+  assert.equal(album1.releaseDate, '2000-01-01')
+  assert.equal(album1.firstReleaseDate, '2000-01-01')
+
+  // Scenario 2: Only firstReleaseDate
+  const album2 = normalizeAlbum({ firstReleaseDate: '1990-01-01' })
+  assert.equal(album2.releaseDate, '1990-01-01')
+  assert.equal(album2.firstReleaseDate, '1990-01-01')
+
+  // Scenario 3: Both
+  const album3 = normalizeAlbum({ releaseDate: '2005-01-01', firstReleaseDate: '1995-01-01' })
+  assert.equal(album3.releaseDate, '2005-01-01')
+  assert.equal(album3.firstReleaseDate, '1995-01-01')
+
+  // Scenario 4: Neither
+  const album4 = normalizeAlbum({})
+  assert.equal(album4.releaseDate, null)
+  assert.equal(album4.firstReleaseDate, null)
+})
+
+test('toSkyhookAlbumResource strictly maps releaseDate and omits firstReleaseDate in all scenarios', () => {
+  const scenarios = [
+    { input: { releaseDate: '2000-01-01' }, expected: '2000-01-01' },
+    { input: { firstReleaseDate: '1990-01-01' }, expected: '1990-01-01' },
+    { input: { releaseDate: '2005-01-01', firstReleaseDate: '1995-01-01' }, expected: '2005-01-01' },
+    { input: {}, expected: null }
+  ]
+
+  for (const { input, expected } of scenarios) {
+    const album = toSkyhookAlbumResource(input)
+    assert.equal(album.releaseDate, expected)
+    assert.equal(Object.prototype.hasOwnProperty.call(album, 'firstReleaseDate'), false)
+  }
+})
+
+test('withArtistLookupDefaults (SearchResource) preserves both release dates on nested albums', () => {
+  const artist = withArtistLookupDefaults({
+    albums: [
+      { releaseDate: '2005-01-01', firstReleaseDate: '1995-01-01' }
+    ]
+  })
+
+  assert.equal(artist.albums[0].releaseDate, '2005-01-01')
+  assert.equal(artist.albums[0].firstReleaseDate, '1995-01-01')
+})
+
+test('toSkyhookArtistResource (ArtistResource) strictly omits firstReleaseDate from nested albums', () => {
+  const artist = toSkyhookArtistResource({
+    albums: [
+      { releaseDate: '2005-01-01', firstReleaseDate: '1995-01-01' }
+    ]
+  })
+
+  assert.equal(artist.albums[0].releaseDate, '2005-01-01')
+  assert.equal(Object.prototype.hasOwnProperty.call(artist.albums[0], 'firstReleaseDate'), false)
 })

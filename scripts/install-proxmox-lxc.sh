@@ -23,7 +23,7 @@ COMPOSE_IPV6_SUBNET="${COMPOSE_IPV6_SUBNET:-fd00:dead:beef:1::/64}"
 
 HOST_PORT="${HOST_PORT:-3055}"
 MELODASH_HOST_PORT="${MELODASH_HOST_PORT:-55026}"
-APP_CONTACT="${APP_CONTACT:-admin@example.com}"
+APP_CONTACT="${APP_CONTACT:-https://github.com/melodarr/melodarr-proxy}"
 APP_VERSION="${APP_VERSION:-latest}"
 IMAGE="${IMAGE:-ghcr.io/melodarr/melodarr-proxy:${APP_VERSION}}"
 MELODASH_IMAGE="${MELODASH_IMAGE:-ghcr.io/melodarr/melodarr-proxy-melodash:${APP_VERSION}}"

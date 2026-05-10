@@ -275,6 +275,10 @@ describe('API E2E Tests', () => {
 
       assert.strictEqual(res.status, 200)
       assert.ok(Array.isArray(res.data))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'foreignArtistId'))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'status'))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'links'))
+      assert.ok(Object.prototype.hasOwnProperty.call(res.data[0], 'aliases'))
       assert.strictEqual(res.data[0].artistName, 'Backstreet Boys')
       assert.deepStrictEqual(res.data[0].oldIds, [])
       assert.deepStrictEqual(res.data[0].aliases, ['BSB', 'Back Street Boys'])
@@ -435,27 +439,28 @@ describe('API E2E Tests', () => {
   })
 
   describe('Auth Behavior', () => {
+    let e2eApiKey
+
     before(() => {
       process.env.REQUIRE_API_KEY = 'true'
+      const { createKey } = require('../auth/apikeys')
+      e2eApiKey = createKey('e2e-test-client').key
     })
 
     after(() => {
       process.env.REQUIRE_API_KEY = 'false'
     })
 
-    it('no token → returns 401', async () => {
+    it('no token with configured API keys → returns 401', async () => {
       const res = await client.get('/api/search?q=test')
       assert.strictEqual(res.status, 401)
       assert.ok(res.data.error)
     })
 
     it('valid token → returns 200', async () => {
-      const { createKey } = require('../auth/apikeys')
-      const newKey = createKey('e2e-test-client')
-
       const res = await client.get('/api/search?q=test', {
         headers: {
-          'x-api-key': newKey.key
+          'x-api-key': e2eApiKey
         }
       })
 
