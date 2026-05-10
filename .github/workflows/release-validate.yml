@@ -63,7 +63,9 @@ jobs:
           HOST_PORT: 3055
           REQUIRE_API_KEY: "false"
           MUSICBRAINZ_IP_FAMILY: 6
-        run: docker compose up -d proxy
+        run: |
+          bash scripts/ensure-docker-compose-network.sh
+          docker compose -f docker-compose.yml -f docker-compose.ipv6.yml up -d proxy
 
       - name: Wait for service
         run: |
@@ -74,7 +76,7 @@ jobs:
             fi
             sleep 2
           done
-          docker compose logs proxy
+          docker compose -f docker-compose.yml -f docker-compose.ipv6.yml logs proxy
           exit 1
 
       - name: Validate SkyHook contract
