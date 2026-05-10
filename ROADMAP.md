@@ -2,6 +2,8 @@
 
 This file tracks the work needed to make Melodarr Proxy easy to run, contribute to, and trust.
 
+AI-assisted delivery planning is tracked in [docs/ai/phase-1-operating-model.md](docs/ai/phase-1-operating-model.md).
+
 ## Completed
 
 - [x] Add Yarn-based local workflow.
