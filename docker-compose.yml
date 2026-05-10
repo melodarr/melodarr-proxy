@@ -2,7 +2,8 @@ name: melodarr-proxy
 
 services:
   proxy:
-    build: 
+    image: ${PROXY_IMAGE:-ghcr.io/melodarr/melodarr-proxy:latest}
+    build:
       context: .
       target: production
     restart: unless-stopped
