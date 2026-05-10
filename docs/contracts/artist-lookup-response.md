@@ -33,14 +33,8 @@ The response body is always a top-level JSON array:
     "links": [],
     "images": [],
     "albums": [],
-    "ratings": {},
-    "rating": {},
-    "providers": [],
-    "partial": false,
-    "warning": null,
-    "schemaVersion": "skyhook-v1",
-    "debug": {},
-    "_generatedAt": "2026-05-10T00:00:00.000Z"
+    "ratings": { "votes": 0, "value": 0 },
+    "rating": { "count": 0, "value": 0 }
   }
 ]
 ```
@@ -64,22 +58,27 @@ Every artist object returned in the top-level array includes these required fiel
 - `ratings`
 - `rating`
 
-The required fields are present even when an upstream provider omits equivalent data. Missing scalar values are normalized to stable empty values, and missing collections are normalized to empty arrays or empty objects as appropriate.
+The `ratings` field uses `{ "votes": number, "value": number }` (MusicBrainz-style), while `rating` uses `{ "count": number, "value": number }` (Skyhook-style). Both normalize to stable zero-valued objects when no upstream rating data is available.
 
 Unknown upstream provider fields are removed before response serialization.
 
 ## Supported Proxy Extension Fields
 
-The proxy may include these supported extension fields:
+The proxy includes two categories of extension fields.
+
+**Always-present extension fields** (included in every default lookup response when applicable):
+
+- `partial` — present only when `true` (one or more providers failed)
+- `warning` — present only when non-null (describes the degraded state)
+
+**Debug-only extension fields** (included only when `?debug=true` is set on the request):
 
 - `providers`
-- `partial`
-- `warning`
 - `schemaVersion`
 - `debug`
 - `_generatedAt`
 
-Clients that only understand Lidarr/SkyHook fields can ignore these extension fields. The extension fields are stable proxy metadata and are not sourced directly from arbitrary upstream provider payload keys.
+Clients that only understand Lidarr/SkyHook fields can ignore these extension fields. The extension fields are stable proxy metadata and are not sourced directly from arbitrary upstream provider payload keys. Debug-only fields are stripped from the default response by the proxy before serialization.
 
 ## Provider Header
 
@@ -97,7 +96,7 @@ X-Providers: unknown
 
 Clients should treat `unknown` as "no provider contributed data."
 
-For degraded responses, `X-Providers` lists providers whose usable normalized data was included in the response. Failed providers can still appear in the optional `providers` extension metadata with a zero score and zero album count when the proxy has normalized failure metadata.
+For degraded responses, `X-Providers` lists providers whose usable normalized data was included in the response. When `?debug=true` is set, failed providers can also appear in the `providers` debug extension field with a zero score and zero album count.
 
 ## Image Normalization
 
@@ -109,7 +108,7 @@ If no valid images are available for an artist or album, the corresponding `imag
 
 ## Provider Metadata
 
-The `providers` extension field is an array of normalized provider metadata objects.
+The `providers` debug extension field (available only when `?debug=true`) is an array of normalized provider metadata objects.
 
 Provider metadata uses this shape:
 
@@ -155,7 +154,7 @@ When at least one provider returns usable data and one or more providers fail, t
 }
 ```
 
-The `providers` extension field lists normalized provider metadata and may include failed provider entries with `score: 0` and `albumCount: 0` where it is useful for debugging. The top-level array remains valid for Lidarr/SkyHook clients, and required artist fields remain present.
+When `?debug=true` is set, the `providers` debug-only extension field lists normalized provider metadata and may include failed provider entries with `score: 0` and `albumCount: 0`. The top-level array remains valid for Lidarr/SkyHook clients, and required artist fields remain present.
 
 ## All-Provider Failures
 
@@ -176,7 +175,7 @@ If stale or fallback normalized artist data is available, the response may inclu
 }
 ```
 
-Clients must not depend on HTTP 5xx responses to detect provider lookup failure for this endpoint. Degraded and all-provider failure states are represented in the JSON contract and, when applicable, provider metadata.
+Clients must not depend on HTTP 5xx responses to detect provider lookup failure for this endpoint. Degraded and all-provider failure states are represented in the JSON contract. When `?debug=true` is set, provider metadata is available in the `providers` debug extension field.
 
 ## Backward Compatibility
 
