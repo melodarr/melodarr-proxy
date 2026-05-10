@@ -109,6 +109,7 @@ test('classifyGenericProviderReport maps provider transport failures', () => {
   assert.strictEqual(classifyGenericProviderReport({ ok: false, failedStep: 'tcp' }), GENERIC_PROVIDER_STATES.TCP_FAILED)
   assert.strictEqual(classifyGenericProviderReport({ ok: false, failedStep: 'tls' }), GENERIC_PROVIDER_STATES.TLS_FAILED)
   assert.strictEqual(classifyGenericProviderReport({ ok: false, failedStep: 'http' }), GENERIC_PROVIDER_STATES.HTTP_FAILED)
+  assert.strictEqual(classifyGenericProviderReport({ ok: false, failedStep: 'not_configured' }), GENERIC_PROVIDER_STATES.NOT_CONFIGURED)
 })
 
 test('buildGenericProviderNetworkState keeps adaptive providers on auto policy with fallback', () => {

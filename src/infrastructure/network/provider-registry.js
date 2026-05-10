@@ -27,6 +27,14 @@ const PROVIDER_TRANSPORTS = Object.freeze({
     provider: 'discogs',
     label: 'Discogs',
     url: 'https://api.discogs.com/database/search?q=radiohead&type=artist&per_page=1',
+    buildUrl: (cfg) => {
+      const token = String(cfg('discogsToken') || '').trim()
+      const u = new URL('https://api.discogs.com/database/search?q=radiohead&type=artist&per_page=1')
+      if (token) u.searchParams.set('token', token)
+      return u
+    },
+    requiresAuth: false,
+    authConfigKey: 'discogsToken',
     requiredFamily: 'auto',
     policy: 'auto',
     fallbackAllowed: true
@@ -35,6 +43,14 @@ const PROVIDER_TRANSPORTS = Object.freeze({
     provider: 'lastfm',
     label: 'Last.fm',
     url: 'https://ws.audioscrobbler.com/2.0/?method=artist.search&artist=radiohead&format=json&limit=1',
+    buildUrl: (cfg) => {
+      const key = String(cfg('lastfmApiKey') || '').trim()
+      const u = new URL('https://ws.audioscrobbler.com/2.0/?method=artist.search&artist=radiohead&format=json&limit=1')
+      if (key) u.searchParams.set('api_key', key)
+      return u
+    },
+    requiresAuth: true,
+    authConfigKey: 'lastfmApiKey',
     requiredFamily: 'auto',
     policy: 'auto',
     fallbackAllowed: true

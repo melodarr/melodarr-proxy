@@ -22,6 +22,7 @@ const GENERIC_PROVIDER_STATES = Object.freeze({
   TCP_FAILED: 'TCP_FAILED',
   TLS_FAILED: 'TLS_FAILED',
   HTTP_FAILED: 'HTTP_FAILED',
+  NOT_CONFIGURED: 'NOT_CONFIGURED',
   UNAVAILABLE: 'UNAVAILABLE',
   UNKNOWN: 'UNKNOWN'
 })
@@ -51,6 +52,7 @@ function classifyGenericProviderReport (report = {}) {
 
   const failedStep = report.failedStep || 'unknown'
 
+  if (failedStep === 'not_configured') return GENERIC_PROVIDER_STATES.NOT_CONFIGURED
   if (failedStep === 'dns') return GENERIC_PROVIDER_STATES.DNS_FAILED
   if (failedStep === 'tcp') return GENERIC_PROVIDER_STATES.TCP_FAILED
   if (failedStep === 'tls') return GENERIC_PROVIDER_STATES.TLS_FAILED
@@ -144,6 +146,12 @@ function recommendationsForGenericProviderState (state, provider = 'provider') {
     return [
       `${provider} is reachable at the network layer but returned an HTTP error.`,
       'Inspect HTTP status, authentication settings, quota/rate-limit headers, and provider configuration.'
+    ]
+  }
+
+  if (state === GENERIC_PROVIDER_STATES.NOT_CONFIGURED) {
+    return [
+      `${provider} requires an API credential. Configure it in Settings or via env vars before this provider can be diagnosed.`
     ]
   }
 

@@ -31,6 +31,21 @@ const RELEVANT_HEADER_NAMES = [
   'x-mb-version'
 ]
 
+const REDACTED_QUERY_PARAMS = ['api_key', 'apikey', 'token', 'key', 'secret', 'password', 'access_token']
+
+function redactUrl (urlLike) {
+  if (urlLike == null) return ''
+  try {
+    const u = urlLike instanceof URL ? new URL(urlLike.toString()) : new URL(String(urlLike))
+    for (const name of REDACTED_QUERY_PARAMS) {
+      if (u.searchParams.has(name)) u.searchParams.set(name, 'REDACTED')
+    }
+    return u.toString()
+  } catch {
+    return String(urlLike)
+  }
+}
+
 function pickHeaders (headers, allowList) {
   const out = {}
   if (!headers) return out
@@ -597,14 +612,53 @@ async function diagnoseGenericProvider (providerName) {
     }
   }
 
+  if (config.requiresAuth === true) {
+    const authValue = String(getConfigValue(config.authConfigKey) || '').trim()
+    if (!authValue) {
+      const checkedAt = new Date().toISOString()
+      const staticUrl = config.url ? new URL(config.url) : null
+      const familyPolicy = getGenericProviderIpFamily(config.provider, config.requiredFamily)
+      const family = familyPolicy === 6 || familyPolicy === 4 ? familyPolicy : undefined
+      const configuredIpFamily = family ? String(family) : 'auto'
+      const target = {
+        url: staticUrl ? redactUrl(staticUrl) : '',
+        hostname: staticUrl ? staticUrl.hostname : null,
+        configuredIpFamily,
+        policy: config.policy || 'auto',
+        fallbackAllowed: config.fallbackAllowed !== false
+      }
+      const error = {
+        code: 'NOT_CONFIGURED',
+        message: `${config.label || config.provider} API key not configured`
+      }
+      const diagnosis = {
+        summary: `${config.label || config.provider} has no API credential configured.`,
+        likelyCause: `Setting ${config.authConfigKey} is empty in proxy settings and the corresponding environment variable.`,
+        recommendations: [`Set ${config.authConfigKey} in Settings (or its env-var equivalent) before diagnosing ${config.provider}.`]
+      }
+      return {
+        provider: config.provider,
+        ok: false,
+        failedStep: 'not_configured',
+        error,
+        diagnosis,
+        target,
+        dns: { addresses: [], errors: {} },
+        timingsMs: { dns: null, tcp: null, tls: null, http: null, total: 0 },
+        checkedAt,
+        probes: []
+      }
+    }
+  }
+
   const timeout = Math.min(getConfigValue('upstreamTimeoutMs') || 8000, 5000)
   const startedAt = Date.now()
-  const url = new URL(config.url)
+  const url = config.buildUrl ? config.buildUrl(getConfigValue) : new URL(config.url)
   const familyPolicy = getGenericProviderIpFamily(config.provider, config.requiredFamily)
   const family = familyPolicy === 6 || familyPolicy === 4 ? familyPolicy : undefined
   const configuredIpFamily = family ? String(family) : 'auto'
   const target = {
-    url: url.toString(),
+    url: redactUrl(url),
     hostname: url.hostname,
     configuredIpFamily,
     policy: config.policy || 'auto',
@@ -685,6 +739,8 @@ module.exports = {
   errorDetails,
   summarizeFailure,
   summarizeGenericFailure,
+  redactUrl,
   RATE_LIMIT_HEADER_NAMES,
-  RELEVANT_HEADER_NAMES
+  RELEVANT_HEADER_NAMES,
+  REDACTED_QUERY_PARAMS
 }
