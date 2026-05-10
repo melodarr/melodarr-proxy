@@ -1,0 +1,115 @@
+name: Pre-release (develop)
+
+on:
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: pre-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Test
+        run: yarn test
+
+      - name: Install Melodash dependencies
+        working-directory: melodash
+        run: yarn install --immutable
+
+      - name: Melodash typecheck
+        working-directory: melodash
+        run: yarn run lint
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Ensure we fetch all history for rev-list
+
+      - name: Get latest stable tag
+        id: get_tag
+        run: |
+          git fetch --tags
+          # Only consider stable release tags (vMAJOR.MINOR.PATCH), excluding dev/prerelease tags
+          TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+          echo "latest_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Compute next dev version
+        id: version
+        run: |
+          BASE=${{ steps.get_tag.outputs.latest_tag }}
+          BASE=${BASE#v}
+
+          # fallback if no stable tag exists
+          if [ -z "$BASE" ]; then
+            BASE="0.5.0"
+          fi
+
+          COUNT=$(git rev-list --count origin/develop || git rev-list --count HEAD)
+          VERSION="${BASE}-dev.${COUNT}"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Use dev- prefix (not v) so the tag does not match the release workflow's v*.*.* trigger
+          echo "tag=dev-$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping tag creation"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push proxy image
+        run: |
+          docker build -t ghcr.io/melodarr/melodarr-proxy:${{ steps.version.outputs.version }} .
+          docker tag ghcr.io/melodarr/melodarr-proxy:${{ steps.version.outputs.version }} ghcr.io/melodarr/melodarr-proxy:latest-dev
+          docker push ghcr.io/melodarr/melodarr-proxy:${{ steps.version.outputs.version }}
+          docker push ghcr.io/melodarr/melodarr-proxy:latest-dev
+
+      - name: Build and push melodash image
+        run: |
+          docker build -t ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.version.outputs.version }} ./melodash
+          docker tag ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.version.outputs.version }} ghcr.io/melodarr/melodarr-proxy-melodash:latest-dev
+          docker push ghcr.io/melodarr/melodarr-proxy-melodash:${{ steps.version.outputs.version }}
+          docker push ghcr.io/melodarr/melodarr-proxy-melodash:latest-dev
