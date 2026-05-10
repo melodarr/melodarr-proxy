@@ -29,7 +29,9 @@ const LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS = Object.freeze([
   'artistAliases',
   'links',
   'images',
-  'albums'
+  'albums',
+  'ratings',
+  'rating'
 ])
 
 const LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS = Object.freeze([
@@ -263,8 +265,7 @@ function normalizeAlbum (album = {}) {
   const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
   const images = normalizeArray(album.images)
 
-  return {
-    ...album,
+  const out = {
     id: asString(album.id || album.foreignAlbumId),
     oldIds: normalizeStringArray(album.oldIds || album.OldIds),
     title: asString(album.title || album.name || album.albumName),
@@ -274,6 +275,7 @@ function normalizeAlbum (album = {}) {
     releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
     rating: normalizeRating(album.rating || album.ratings),
     ratings: normalizeRatings(album.ratings || album.rating),
+    firstReleaseDate: asString(album.firstReleaseDate || album.releaseDate) || null,
     releaseDate: releaseDate || null,
     releases: normalizeArray(album.releases),
     genres: normalizeStringArray(album.genres),
@@ -282,16 +284,25 @@ function normalizeAlbum (album = {}) {
     links: normalizeArray(album.links),
     remoteCover: asString(album.remoteCover || images[0]?.remoteUrl || images[0]?.url)
   }
+
+  if ('artistId' in album) out.artistId = asString(album.artistId)
+  if ('artists' in album) out.artists = normalizeArray(album.artists)
+  if ('disambiguation' in album) out.disambiguation = asString(album.disambiguation)
+  if ('overview' in album) out.overview = asString(album.overview)
+  if ('providers' in album) out.providers = album.providers
+
+  return out
 }
 
 function toSkyhookArtistResource (artist = {}) {
+  const id = asString(artist.id || artist.Id || artist.foreignArtistId)
   return {
     genres: normalizeStringArray(artist.genres || artist.Genres),
     artistUrl: asString(artist.artistUrl || artist.ArtistUrl || artist.aristUrl || artist.AristUrl),
     overview: asString(artist.overview || artist.Overview),
     type: asString(artist.type || artist.Type || LIDARR_SKYHOOK_ARTIST_DEFAULTS.type),
     disambiguation: asString(artist.disambiguation || artist.Disambiguation),
-    id: asString(artist.id || artist.Id || artist.foreignArtistId),
+    id,
     oldIds: normalizeStringArray(artist.oldIds || artist.OldIds),
     images: normalizeArray(artist.images || artist.Images).map(normalizeImageResource),
     links: normalizeArray(artist.links || artist.Links).map(normalizeLinkResource),
@@ -387,11 +398,13 @@ function withArtistLookupDefaults (artist = {}) {
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums).map(normalizeAlbum)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum),
+    ratings: normalizeRatings(artist.ratings || artist.rating),
+    rating: normalizeRating(artist.rating || artist.ratings)
   }
 
   for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
-    if (key in artist) out[key] = artist[key]
+    if (key !== 'ratings' && key !== 'rating' && key in artist) out[key] = artist[key]
   }
 
   if ('providers' in artist) out.providers = artist.providers
@@ -418,11 +431,14 @@ function withSkyhookArtistDefaults (artist = {}) {
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
     images: normalizeArray(artist.images),
-    albums: normalizeArray(artist.albums).map(normalizeAlbum)
+    albums: normalizeArray(artist.albums).map(normalizeAlbum),
+    genres: normalizeStringArray(artist.genres),
+    ratings: normalizeRatings(artist.ratings || artist.rating),
+    rating: normalizeRating(artist.rating || artist.ratings)
   }
 
   for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
-    if (key in artist) out[key] = artist[key]
+    if (key !== 'ratings' && key !== 'rating' && key !== 'genres' && key in artist) out[key] = artist[key]
   }
 
   if ('providers' in artist) out.providers = artist.providers

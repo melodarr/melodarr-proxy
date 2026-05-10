@@ -6,12 +6,31 @@ const { safeProviderCall } = require('./safeProviderCall')
 const providerMetrics = require('../health/providerMetrics')
 const { normalizeAliases, normalizeStringArray } = require('../utils/lidarrArtist')
 
-const providers = {
+const customProviderModule = require('./custom.provider')
+
+const builtinProviders = {
   musicbrainz: require('./musicbrainz.provider'),
   lastfm: require('./lastfm.provider'),
   discogs: require('./discogs.provider'),
   theaudiodb: require('./theaudiodb.provider'),
   itunes: require('./itunes.provider')
+}
+
+function getAllProviders () {
+  const all = { ...builtinProviders }
+  let customProviders = []
+  try {
+    customProviders = JSON.parse(getConfigValue('customProviders') || '[]')
+  } catch (err) {
+    logger.warn('Failed to parse customProviders config', { error: err.message })
+  }
+  for (const cp of customProviders) {
+    if (cp && cp.id) {
+      const id = String(cp.id).trim().toLowerCase()
+      if (id) all[id] = customProviderModule.createCustomProvider({ ...cp, id })
+    }
+  }
+  return all
 }
 
 function mergeIds (existingIds, nextIds) {
@@ -49,9 +68,21 @@ async function aggregateArtist (term) {
   const providerNamesStr = getConfigValue('metadataProviders') || 'musicbrainz'
   const providerNames = providerNamesStr.split(',').map(s => s.trim().toLowerCase())
 
+  const providerPriorityStr = getConfigValue('providerPriority') || ''
+  const providerPriority = providerPriorityStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+
+  function getPriorityWeight (providerName) {
+    if (providerPriority.length === 0) return 0
+    const index = providerPriority.indexOf(providerName)
+    if (index === -1) return 0
+    return (providerPriority.length - index) * 1000000
+  }
+
+  const allProviders = getAllProviders()
+
   const activeProviders = providerNames
-    .filter(name => providers[name])
-    .map(name => providers[name])
+    .filter(name => allProviders[name])
+    .map(name => allProviders[name])
 
   if (activeProviders.length === 0) {
     throw new Error('No active metadata providers configured')
@@ -135,9 +166,10 @@ async function aggregateArtist (term) {
       successfulProviders++
       const data = outcome.value.result
       const provider = outcome.value.provider
-      const score = getProviderScore(provider, data)
+      const adaptiveScore = getProviderScore(provider, data)
+      const priorityWeight = getPriorityWeight(provider)
 
-      validOutcomes.push({ provider, data, score })
+      validOutcomes.push({ provider, data, adaptiveScore, priorityWeight })
     } else {
       partial = true
       const err = outcome.reason
@@ -147,19 +179,25 @@ async function aggregateArtist (term) {
     }
   }
 
-  // Sort by score descending to prefer higher quality data
-  validOutcomes.sort((a, b) => b.score - a.score)
+  // Sort by configured priority first, then by the priority-free adaptive score.
+  validOutcomes.sort((a, b) => {
+    if (a.priorityWeight !== b.priorityWeight) {
+      return b.priorityWeight - a.priorityWeight
+    }
+    return b.adaptiveScore - a.adaptiveScore
+  })
 
   let overallConfidence = 0
   if (validOutcomes.length > 0) {
-    overallConfidence = validOutcomes[0].score
+    overallConfidence = validOutcomes[0].adaptiveScore
   }
 
   for (const outcome of validOutcomes) {
-    const { data, score, provider } = outcome
+    const { data, adaptiveScore, priorityWeight, provider } = outcome
 
     // Use the first returned artist name we get if we don't have a good one yet
-    // Since validOutcomes are sorted by score, the best provider gets to name the artist
+    // Since validOutcomes are sorted by priority and then adaptive score, the best
+    // provider gets to name the artist.
     if (data.artistName && mergedArtistName === term) {
       mergedArtistName = data.artistName
     }
@@ -181,56 +219,146 @@ async function aggregateArtist (term) {
       aliases = providerAliases
     }
     for (const album of data.albums) {
-      // Simple deduplication by normalized name
+      // Deduplication by MBID (primary) or normalized name (fallback)
+      const mbid = album.ids && album.ids.musicbrainzReleaseGroupId
       const normName = album.name.toLowerCase().trim()
-      const existing = albumMap.get(normName)
+
+      let existing = null
+      if (mbid && albumMap.has(mbid)) {
+        existing = albumMap.get(mbid)
+      } else if (albumMap.has(normName)) {
+        const potentialMatch = albumMap.get(normName)
+        const matchMbid = potentialMatch.ids?.musicbrainzReleaseGroupId
+
+        // Merge by name ONLY IF at least one lacks an MBID.
+        // If BOTH have MBIDs and they differ, they are distinct releases.
+        if (!mbid || !matchMbid || mbid === matchMbid) {
+          existing = potentialMatch
+        }
+      }
 
       if (existing) {
+        if (!existing.provenance) {
+          existing.provenance = {
+            name: existing.provider,
+            year: existing.year ? existing.provider : null,
+            releaseDate: existing.releaseDate ? existing.provider : null,
+            imageUrl: existing.imageUrl ? (existing.imageProvider || existing.provider) : null,
+            rating: existing.rating?.count > 0 ? existing.provider : null
+          }
+        }
+
         existing.ids = mergeIds(existing.ids, album.ids)
         const nextRating = normalizeProviderRating(album)
         if (shouldReplaceRating(existing.rating, nextRating)) {
           existing.rating = nextRating
           existing.ratings = { votes: nextRating.count, value: nextRating.value }
+          existing.provenance.rating = provider
         }
 
-        if (!existing.imageUrl && album.imageUrl) {
-          existing.imageUrl = album.imageUrl
+        if (album.imageUrl) {
+          if (!existing.imageUrl) {
+            existing.imageUrl = album.imageUrl
+            existing.imageProvider = provider
+            existing.imagePriorityWeight = priorityWeight
+            existing.provenance.imageUrl = provider
+          } else {
+            const getScore = (url, source, pw) => {
+              let score = 10
+              if (source === 'audiodb') score += 130
+              else if (source === 'coverartarchive') score += 70
+              else if (source === 'itunes') score += 70
+              if (url && url.startsWith('https://')) score += 5
+              if (pw > 0) score += Math.min(25, Math.floor(pw / 1000000) * 5)
+              return score
+            }
+
+            const isHostWithinDomain = (value, domain) => {
+              try {
+                const host = new URL(value).hostname.toLowerCase()
+                const normalizedDomain = domain.toLowerCase()
+                return host === normalizedDomain || host.endsWith(`.${normalizedDomain}`)
+              } catch (_) {
+                return false
+              }
+            }
+
+            const existingSource = isHostWithinDomain(existing.imageUrl, 'coverartarchive.org') ? 'coverartarchive' : (existing.imageProvider || existing.provenance.imageUrl || existing.provider)
+            const newSource = isHostWithinDomain(album.imageUrl, 'coverartarchive.org') ? 'coverartarchive' : provider
+
+            const existingScore = getScore(existing.imageUrl, existingSource, existing.imagePriorityWeight || 0)
+            const newScore = getScore(album.imageUrl, newSource, priorityWeight)
+
+            if (newScore > existingScore) {
+              existing.imageUrl = album.imageUrl
+              existing.imageProvider = provider
+              existing.imagePriorityWeight = priorityWeight
+              existing.provenance.imageUrl = provider
+            }
+          }
         }
 
         // If it exists, try to enrich with year if missing
         if (!existing.year && album.year) {
           existing.year = album.year
           existing.releaseDate = album.releaseDate || existing.releaseDate
-          existing.score = score
+          if (album.releaseDate) existing.provenance.releaseDate = provider
+          existing.adaptiveScore = adaptiveScore
+          existing.priorityWeight = priorityWeight
           existing.provider = provider
-        } else if (existing.year && album.year && score > existing.score) {
-          // If both have years, let the higher scored provider win
-          existing.year = album.year
-          existing.releaseDate = album.releaseDate || existing.releaseDate
-          existing.score = score
-          existing.provider = provider
-        } else if (album.releaseDate && (!existing.releaseDate || album.releaseDate.length > existing.releaseDate.length)) {
-          // Same year, but the incoming provider has a more precise date
+          existing.provenance.year = provider
+          existing.provenance.name = provider
+        } else if (existing.year && album.year && existing.year !== album.year) {
+          logger.debug(`[Merge] Album year conflict for '${album.name}': keeping ${existing.year} (${existing.provenance?.year || existing.provider}) over ${album.year} (${provider})`)
+        }
+
+        if (album.releaseDate && (!existing.releaseDate || album.releaseDate.length > existing.releaseDate.length)) {
+          // The incoming provider has a more precise date
           // (e.g. iTunes "1997-05-21T07:00:00Z" beats MB "1997"). Take it
           // even when the score doesn't win — date precision is independent
           // of overall provider quality and Lidarr cares about full ISO.
           existing.releaseDate = album.releaseDate
+          existing.provenance.releaseDate = provider
+        }
+
+        const mergedMbid = existing.ids?.musicbrainzReleaseGroupId
+        if (mergedMbid && !albumMap.has(mergedMbid)) {
+          albumMap.set(mergedMbid, existing)
+        }
+        if (!albumMap.has(normName)) {
+          albumMap.set(normName, existing)
         }
       } else {
-        albumMap.set(normName, {
+        const newAlbum = {
           name: album.name,
           year: album.year,
           releaseDate: album.releaseDate || null,
           imageUrl: album.imageUrl || '',
+          imageProvider: album.imageUrl ? provider : null,
+          imagePriorityWeight: album.imageUrl ? priorityWeight : 0,
           rating: normalizeProviderRating(album),
           ratings: {
             votes: normalizeProviderRating(album).count,
             value: normalizeProviderRating(album).value
           },
           ids: mergeIds(null, album.ids),
-          score,
-          provider
-        })
+          adaptiveScore,
+          priorityWeight,
+          provider,
+          provenance: {
+            name: provider,
+            year: album.year ? provider : null,
+            releaseDate: album.releaseDate ? provider : null,
+            imageUrl: album.imageUrl ? provider : null,
+            rating: normalizeProviderRating(album).count > 0 ? provider : null
+          }
+        }
+        if (mbid) {
+          albumMap.set(mbid, newAlbum)
+        }
+        if (!albumMap.has(normName)) {
+          albumMap.set(normName, newAlbum)
+        }
       }
     }
   }
@@ -240,7 +368,7 @@ async function aggregateArtist (term) {
   const normalizedArtist = String(mergedArtistName || term).trim().toLowerCase()
 
   for (const outcome of validOutcomes) {
-    const { data, provider } = outcome
+    const { data, provider, priorityWeight } = outcome
 
     // 1. Artist profile images
     if (data.images && data.images.length > 0) {
@@ -251,6 +379,7 @@ async function aggregateArtist (term) {
           height: img.height,
           width: img.width,
           imageSource: provider,
+          priorityWeight,
           type: 'artist',
           isSelfTitled: false
         })
@@ -273,6 +402,7 @@ async function aggregateArtist (term) {
           url: album.imageUrl,
           coverType: 'poster',
           imageSource,
+          priorityWeight,
           type: 'album',
           isSelfTitled
         })
@@ -316,6 +446,14 @@ async function aggregateArtist (term) {
     // HTTPS bonus
     if (candidate.url && candidate.url.startsWith('https://')) score += 5
 
+    // Priority bonus
+    const pw = getPriorityWeight(candidate.imageSource)
+    if (pw > 0) {
+      // Keep provider priority as a secondary signal so resolution, source, and HTTPS still matter.
+      const priorityBonus = Math.min(25, Math.floor(pw / 1000000) * 5)
+      score += priorityBonus
+    }
+
     // Adaptive health multiplier
     const metricsData = providerMetrics.get(candidate.imageSource)
     const healthScore = providerMetrics.computeScore(metricsData) || 0.5
@@ -333,7 +471,12 @@ async function aggregateArtist (term) {
       uniqueScored.push(img)
     }
   }
-  uniqueScored.sort((a, b) => b.score - a.score)
+  uniqueScored.sort((a, b) => {
+    if (a.priorityWeight !== b.priorityWeight) {
+      return b.priorityWeight - a.priorityWeight
+    }
+    return b.score - a.score
+  })
 
   images = []
   if (uniqueScored.length > 0) {
@@ -354,7 +497,8 @@ async function aggregateArtist (term) {
   }
 
   const isFull = successfulProviders === orderedProviders.length
-  const albumCount = Array.from(albumMap.values()).length
+  const uniqueAlbums = Array.from(new Set(albumMap.values()))
+  const albumCount = uniqueAlbums.length
   const isEmpty = albumCount === 0
 
   if (isEmpty) {
@@ -377,7 +521,7 @@ async function aggregateArtist (term) {
     artistAliases: aliases,
     images,
     imageDebug,
-    albums: Array.from(albumMap.values()).map(a => ({
+    albums: uniqueAlbums.map(a => ({
       name: a.name,
       year: a.year,
       releaseDate: a.releaseDate || null,
@@ -385,14 +529,15 @@ async function aggregateArtist (term) {
       rating: a.rating || { count: 0, value: 0 },
       ratings: a.ratings || { votes: 0, value: 0 },
       ids: a.ids || {},
-      provider: a.provider
+      provider: a.provider,
+      provenance: a.provenance
     })),
     partial,
     warning: partial ? `Some providers failed: ${warningMessages.join(' | ')}` : null,
     providerCount: successfulProviders,
     providers: validOutcomes.map(outcome => ({
       name: outcome.provider,
-      score: outcome.score,
+      score: outcome.adaptiveScore,
       albumCount: outcome.data.albums?.length || 0
     })),
     providerErrors,
@@ -402,10 +547,11 @@ async function aggregateArtist (term) {
 
 async function testProvider (providerName, term) {
   const normalizedName = String(providerName || '').trim().toLowerCase()
-  const provider = providers[normalizedName]
+  const allProviders = getAllProviders()
+  const provider = allProviders[normalizedName]
 
   if (!provider) {
-    const validProviders = Object.keys(providers).join(', ')
+    const validProviders = Object.keys(allProviders).join(', ')
     throw new Error(`Unknown provider "${providerName}". Valid providers: ${validProviders}`)
   }
 
