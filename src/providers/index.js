@@ -218,7 +218,12 @@ async function aggregateArtist (term) {
     if (providerAliases.length > 0 && aliases.length === 0) {
       aliases = providerAliases
     }
-    for (const album of data.albums) {
+    for (const album of (Array.isArray(data.albums) ? data.albums : [])) {
+      // Skip albums with missing or empty names
+      if (!album.name || typeof album.name !== 'string' || !album.name.trim()) {
+        continue
+      }
+
       // Deduplication by MBID (primary) or normalized name (fallback)
       const mbid = album.ids && album.ids.musicbrainzReleaseGroupId
       const normName = album.name.toLowerCase().trim()

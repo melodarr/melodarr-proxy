@@ -38,7 +38,8 @@ describe('Startup Validator', () => {
   })
 
   it('validates correct configuration successfully', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -49,6 +50,11 @@ describe('Startup Validator', () => {
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.doesNotThrow(() => validateStartup())
     assert.strictEqual(loggerInfoMock.mock.calls.length, 1)
@@ -57,7 +63,8 @@ describe('Startup Validator', () => {
   })
 
   it('accepts appContact as a valid http(s) contact URL', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -69,6 +76,11 @@ describe('Startup Validator', () => {
       if (key === 'appContact') return 'https://github.com/melodarr/melodarr-proxy'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.doesNotThrow(() => validateStartup())
     assert.strictEqual(loggerInfoMock.mock.calls.length, 1)
@@ -77,7 +89,8 @@ describe('Startup Validator', () => {
   })
 
   it('fails if cacheTtlSeconds is missing or invalid', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return -1 // invalid
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -88,6 +101,11 @@ describe('Startup Validator', () => {
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
     assert.strictEqual(loggerErrorMock.mock.calls[0].arguments[0], 'Startup Validation Failed: Invalid cacheTtlSeconds configuration (must be a positive number).')
@@ -95,7 +113,8 @@ describe('Startup Validator', () => {
   })
 
   it('fails if upstreamTimeoutMs is missing or invalid', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 'not_a_number'
       if (key === 'serverTimeoutMs') return 15000
@@ -106,6 +125,11 @@ describe('Startup Validator', () => {
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
     assert.strictEqual(loggerErrorMock.mock.calls[0].arguments[0], 'Startup Validation Failed: Invalid upstreamTimeoutMs configuration (must be a positive number).')
@@ -113,7 +137,8 @@ describe('Startup Validator', () => {
   })
 
   it('fails if musicbrainzBaseUrl is invalid URL', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -124,6 +149,11 @@ describe('Startup Validator', () => {
       if (key === 'musicbrainzBaseUrl') return 'not_a_url'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
     assert.strictEqual(loggerErrorMock.mock.calls[0].arguments[0], 'Startup Validation Failed: Invalid musicbrainzBaseUrl configuration (must be a valid HTTP URL).')
@@ -131,7 +161,8 @@ describe('Startup Validator', () => {
   })
 
   it('fails if minRequestIntervalMs is invalid', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -142,6 +173,11 @@ describe('Startup Validator', () => {
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
     assert.strictEqual(loggerErrorMock.mock.calls[0].arguments[0], 'Startup Validation Failed: Invalid minRequestIntervalMs configuration (must be a non-negative number).')
@@ -149,7 +185,8 @@ describe('Startup Validator', () => {
   })
 
   it('fails if upstreamQueueMax is missing or invalid', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -160,6 +197,11 @@ describe('Startup Validator', () => {
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return validConfigValue(key)
     })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
+    })
 
     assert.throws(() => validateStartup(), /process\.exit\(\) was called with 1/)
     assert.strictEqual(loggerErrorMock.mock.calls[0].arguments[0], 'Startup Validation Failed: Invalid upstreamQueueMax configuration (must be a positive number).')
@@ -167,7 +209,8 @@ describe('Startup Validator', () => {
   })
 
   it('fails if REDIS_ENABLED=true but REDIS_URL is missing', () => {
-    getConfigValueMock.mock.mockImplementation((key) => {
+    mock.restoreAll()
+    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -177,6 +220,11 @@ describe('Startup Validator', () => {
       if (key === 'upstreamQueueMax') return 50
       if (key === 'musicbrainzBaseUrl') return 'https://musicbrainz.org/ws/2'
       return validConfigValue(key)
+    })
+    loggerInfoMock = mock.method(logger, 'info', () => {})
+    loggerErrorMock = mock.method(logger, 'error', () => {})
+    exitSpy = mock.method(process, 'exit', (code) => {
+      throw new Error(`process.exit() was called with ${code}`)
     })
 
     const originalRedisEnabled = process.env.REDIS_ENABLED
