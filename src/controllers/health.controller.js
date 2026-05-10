@@ -4,8 +4,19 @@ const upstreamMonitor = require('../monitors/upstream.monitor')
 const { getProviderScore } = require('../providers/scoring')
 const { getAppVersion } = require('../utils/version')
 const { buildNetworkHealthSummary } = require('../infrastructure/network/network-diagnostics.service')
+const { MUSICBRAINZ_STATES } = require('../infrastructure/network/network-state')
 
 const DEGRADED_UPSTREAM = new Set(['degraded', 'rate_limited', 'timeout'])
+
+// Network states that indicate degraded MusicBrainz connectivity
+const DEGRADED_NETWORK_STATES = new Set([
+  MUSICBRAINZ_STATES.DNS_FAILED,
+  MUSICBRAINZ_STATES.NO_ROUTE,
+  MUSICBRAINZ_STATES.TCP_FAILED,
+  MUSICBRAINZ_STATES.TLS_FAILED,
+  MUSICBRAINZ_STATES.HTTP_FAILED,
+  MUSICBRAINZ_STATES.UNAVAILABLE
+])
 
 function buildLivenessPayload () {
   const memoryUsage = process.memoryUsage()
@@ -35,15 +46,14 @@ function buildLivenessPayload () {
 function getNetworkStatus () {
   const networkSummary = buildNetworkHealthSummary()
   const mbz = networkSummary && networkSummary.musicbrainz
-  const mbzState = typeof mbz?.state === 'string' ? mbz.state.toLowerCase() : null
 
   if (!mbz) return 'ok'
 
-  if (mbzState === 'unknown') {
+  if (mbz.state === MUSICBRAINZ_STATES.UNKNOWN) {
     return 'ok'
   }
 
-  if (typeof mbz.state === 'string' && DEGRADED_UPSTREAM.has(mbzState)) {
+  if (DEGRADED_NETWORK_STATES.has(mbz.state)) {
     return 'degraded'
   }
 

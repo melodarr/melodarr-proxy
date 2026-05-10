@@ -13,7 +13,7 @@ export function NetworkBanner() {
     : `MusicBrainz IPv6 diagnostics are degraded (${reason}).`
 
   return (
-    <div className="bg-destructive/15 text-destructive px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium border-b border-destructive/20">
+    <div className="bg-red-500/15 text-red-600 dark:text-red-500 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium border-b border-red-500/20">
       <AlertCircle className="w-4 h-4" />
       <span>{message}</span>
     </div>
