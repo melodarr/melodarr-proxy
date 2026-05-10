@@ -87,6 +87,8 @@ Request flow in plain terms:
 
 See [docs/architecture.md](docs/architecture.md) for the runtime diagram covering Lidarr, Melodash, Redis, providers, provider scoring, health, and circuit breaker flow.
 
+AI-assisted planning and handoffs are documented in [docs/ai/phase-1-operating-model.md](docs/ai/phase-1-operating-model.md).
+
 ## Features
 
 - Lidarr-style artist lookup, artist discovery, search, and song-to-album discovery

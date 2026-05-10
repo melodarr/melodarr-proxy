@@ -53,6 +53,8 @@ Larger changes should start as an issue before implementation, especially when t
 
 See [GOVERNANCE.md](GOVERNANCE.md) for project decision-making and [MAINTAINERS.md](MAINTAINERS.md) for ownership.
 
+AI-assisted work follows the Phase 1 operating model in [docs/ai/phase-1-operating-model.md](docs/ai/phase-1-operating-model.md).
+
 ## Breaking Changes
 
 Breaking changes require an issue, migration notes, changelog entry, and updated docs before release.
