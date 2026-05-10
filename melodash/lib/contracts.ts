@@ -1,6 +1,19 @@
 /**
  * Shared contract definitions for Lidarr Mirror diagnostic UI.
  *
+ * Source: Lidarr
+ * Files:
+ *   - src/Lidarr.Api.V1/Indexers/ReleaseResource.cs
+ *   - src/Lidarr.Api.V1/Indexers/ReleaseController.cs
+ *   - src/Lidarr.Api.V1/Queue/QueueResource.cs
+ *   - src/Lidarr.Api.V1/Queue/QueueDetailsController.cs
+ *
+ * Commit:
+ *   498de3fc51ff3297632b45560bab0e3c50e2c092
+ *
+ * Notes:
+ *   Derived from serialized API DTOs, not database models.
+ *
  * These MUST match the backend serializers in src/utils/lidarrArtist.js.
  * The backend exports:
  *   - LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS  → Artist Lookup response shape
@@ -12,7 +25,11 @@
  *        src/utils/lidarrArtist.js` to cross-reference.
  */
 
-export type ContractFieldDef = { key: string; required: boolean };
+export type ContractFieldKind = "source field" | "omitted when default";
+export type ContractFieldDef = { key: string; kind: ContractFieldKind };
+
+const sourceField = (key: string): ContractFieldDef => ({ key, kind: "source field" });
+const omittedWhenDefault = (key: string): ContractFieldDef => ({ key, kind: "omitted when default" });
 
 /* ────────────────────────────────────────────────────────────────────────────
    Artist Lookup — GET /api/v1/artist/lookup?term=…
@@ -21,12 +38,12 @@ export type ContractFieldDef = { key: string; required: boolean };
    ──────────────────────────────────────────────────────────────────────── */
 
 export const ARTIST_LOOKUP_CONTRACT: ContractFieldDef[] = [
-  { key: "artistName", required: true },
-  { key: "foreignArtistId", required: true },
-  { key: "overview", required: false },
-  { key: "images", required: false },
-  { key: "albums", required: false },
-  { key: "ratings", required: false },
+  sourceField("artistName"),
+  sourceField("foreignArtistId"),
+  omittedWhenDefault("overview"),
+  omittedWhenDefault("images"),
+  omittedWhenDefault("albums"),
+  omittedWhenDefault("ratings"),
 ];
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -36,14 +53,14 @@ export const ARTIST_LOOKUP_CONTRACT: ContractFieldDef[] = [
    ──────────────────────────────────────────────────────────────────────── */
 
 export const ARTIST_BY_ID_CONTRACT: ContractFieldDef[] = [
-  { key: "id", required: true },
-  { key: "artistName", required: true },
-  { key: "overview", required: false },
-  { key: "images", required: true },
-  { key: "albums", required: true },
-  { key: "rating", required: false },
-  { key: "links", required: false },
-  { key: "genres", required: false },
+  sourceField("id"),
+  sourceField("artistName"),
+  omittedWhenDefault("overview"),
+  sourceField("images"),
+  sourceField("albums"),
+  omittedWhenDefault("rating"),
+  omittedWhenDefault("links"),
+  omittedWhenDefault("genres"),
 ];
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -53,35 +70,98 @@ export const ARTIST_BY_ID_CONTRACT: ContractFieldDef[] = [
    ──────────────────────────────────────────────────────────────────────── */
 
 export const ALBUM_BY_ID_CONTRACT: ContractFieldDef[] = [
-  { key: "title", required: true },
-  { key: "id", required: true },
-  { key: "releases", required: false },
-  { key: "artists", required: false },
-  { key: "images", required: false },
-  { key: "rating", required: false },
-  { key: "genres", required: false },
+  sourceField("title"),
+  sourceField("id"),
+  omittedWhenDefault("releases"),
+  omittedWhenDefault("artists"),
+  omittedWhenDefault("images"),
+  omittedWhenDefault("rating"),
+  omittedWhenDefault("genres"),
 ];
 
 /* ────────────────────────────────────────────────────────────────────────────
    Release Search — GET /api/v1/release
-   Stub endpoint — returns []. Fields are aspirational.
+   Source-derived Lidarr ReleaseResource contract.
+   Empty [] is valid when no indexer candidates exist.
    ──────────────────────────────────────────────────────────────────────── */
 
 export const RELEASE_SEARCH_CONTRACT: ContractFieldDef[] = [
-  { key: "guid", required: false },
-  { key: "title", required: false },
-  { key: "approved", required: false },
-  { key: "rejections", required: false },
+  sourceField("age"),
+  sourceField("ageHours"),
+  sourceField("ageMinutes"),
+  sourceField("airDate"),
+  sourceField("albumTitle"),
+  sourceField("approved"),
+  sourceField("artistName"),
+  sourceField("commentUrl"),
+  sourceField("customFormatScore"),
+  sourceField("customFormats"),
+  sourceField("discography"),
+  sourceField("downloadAllowed"),
+  sourceField("downloadUrl"),
+  sourceField("guid"),
+  sourceField("id"),
+  sourceField("indexer"),
+  sourceField("indexerFlags"),
+  sourceField("indexerId"),
+  sourceField("infoHash"),
+  sourceField("infoUrl"),
+  sourceField("leechers"),
+  sourceField("magnetUrl"),
+  sourceField("protocol"),
+  sourceField("publishDate"),
+  sourceField("quality"),
+  sourceField("qualityWeight"),
+  sourceField("rejected"),
+  sourceField("rejections"),
+  sourceField("releaseGroup"),
+  sourceField("releaseHash"),
+  sourceField("releaseWeight"),
+  sourceField("sceneSource"),
+  sourceField("seeders"),
+  sourceField("size"),
+  sourceField("subGroup"),
+  sourceField("temporarilyRejected"),
+  sourceField("title"),
+  omittedWhenDefault("albumId"),
+  omittedWhenDefault("artistId"),
+  omittedWhenDefault("downloadClient"),
+  omittedWhenDefault("downloadClientId"),
 ];
 
 /* ────────────────────────────────────────────────────────────────────────────
    Queue Details — GET /api/v1/queue/details
-   Stub endpoint — returns []. Fields are aspirational.
+   Source-derived Lidarr QueueResource contract.
+   Empty [] is valid when no active/pending downloads exist.
    ──────────────────────────────────────────────────────────────────────── */
 
 export const QUEUE_DETAILS_CONTRACT: ContractFieldDef[] = [
-  { key: "artistId", required: false },
-  { key: "albumId", required: false },
-  { key: "status", required: false },
-  { key: "trackedDownloadStatus", required: false },
+  sourceField("added"),
+  sourceField("album"),
+  sourceField("albumId"),
+  sourceField("artist"),
+  sourceField("artistId"),
+  sourceField("customFormatScore"),
+  sourceField("customFormats"),
+  sourceField("downloadClient"),
+  sourceField("downloadClientHasPostImportCategory"),
+  sourceField("downloadForced"),
+  sourceField("downloadId"),
+  sourceField("errorMessage"),
+  sourceField("estimatedCompletionTime"),
+  sourceField("id"),
+  sourceField("indexer"),
+  sourceField("outputPath"),
+  sourceField("protocol"),
+  sourceField("quality"),
+  sourceField("size"),
+  sourceField("sizeleft"),
+  sourceField("status"),
+  sourceField("statusMessages"),
+  sourceField("timeleft"),
+  sourceField("title"),
+  sourceField("trackFileCount"),
+  sourceField("trackHasFileCount"),
+  sourceField("trackedDownloadState"),
+  sourceField("trackedDownloadStatus"),
 ];
