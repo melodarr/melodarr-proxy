@@ -465,7 +465,7 @@ function withArtistLookupDefaults (artist = {}) {
 
   if (isLidarrAddArtistPayload(artist)) {
     for (const key of LIDARR_ADD_ARTIST_OPTIONAL_KEYS) {
-      if (key in artist) out[key] = artist[key]
+      if (Object.prototype.hasOwnProperty.call(artist, key)) out[key] = artist[key]
     }
   }
 
