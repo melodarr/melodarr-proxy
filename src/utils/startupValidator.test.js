@@ -19,12 +19,11 @@ function validConfigValue (key) {
 
 describe('Startup Validator', () => {
   let exitSpy
-  let getConfigValueMock
   let loggerInfoMock
   let loggerErrorMock
 
   beforeEach(() => {
-    getConfigValueMock = mock.method(store, 'getConfigValue', () => undefined)
+    mock.method(store, 'getConfigValue', () => undefined)
     loggerInfoMock = mock.method(logger, 'info', () => {})
     loggerErrorMock = mock.method(logger, 'error', () => {})
 
@@ -39,7 +38,7 @@ describe('Startup Validator', () => {
 
   it('validates correct configuration successfully', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -64,7 +63,7 @@ describe('Startup Validator', () => {
 
   it('accepts appContact as a valid http(s) contact URL', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -90,7 +89,7 @@ describe('Startup Validator', () => {
 
   it('fails if cacheTtlSeconds is missing or invalid', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return -1 // invalid
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -114,7 +113,7 @@ describe('Startup Validator', () => {
 
   it('fails if upstreamTimeoutMs is missing or invalid', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 'not_a_number'
       if (key === 'serverTimeoutMs') return 15000
@@ -138,7 +137,7 @@ describe('Startup Validator', () => {
 
   it('fails if musicbrainzBaseUrl is invalid URL', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -162,7 +161,7 @@ describe('Startup Validator', () => {
 
   it('fails if minRequestIntervalMs is invalid', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -186,7 +185,7 @@ describe('Startup Validator', () => {
 
   it('fails if upstreamQueueMax is missing or invalid', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
@@ -210,7 +209,7 @@ describe('Startup Validator', () => {
 
   it('fails if REDIS_ENABLED=true but REDIS_URL is missing', () => {
     mock.restoreAll()
-    getConfigValueMock = mock.method(store, 'getConfigValue', (key) => {
+    mock.method(store, 'getConfigValue', (key) => {
       if (key === 'cacheTtlSeconds') return 3600
       if (key === 'upstreamTimeoutMs') return 5000
       if (key === 'serverTimeoutMs') return 15000
