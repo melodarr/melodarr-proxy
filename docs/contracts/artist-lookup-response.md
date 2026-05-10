@@ -22,7 +22,7 @@ The response body is always a top-level JSON array:
 [
   {
     "artistName": "Radiohead",
-    "id": "musicbrainz:8bfac288-ccc5-448d-9573-c33ea2aa5c30",
+    "id": "8bfac288-ccc5-448d-9573-c33ea2aa5c30",
     "foreignArtistId": "8bfac288-ccc5-448d-9573-c33ea2aa5c30",
     "disambiguation": "",
     "overview": "",
