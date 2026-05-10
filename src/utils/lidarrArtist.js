@@ -314,8 +314,9 @@ function normalizeAlbum (album = {}) {
   const type = asString(album.type || album.albumType || album.primaryType || 'Album')
   const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
   const imageUrl = asString(album.imageUrl || album.remoteCover)
-  const images = normalizeArray(album.images).length > 0
-    ? normalizeArray(album.images).map(normalizeLookupImage)
+  const normalizedAlbumImages = normalizeArray(album.images)
+  const images = normalizedAlbumImages.length > 0
+    ? normalizedAlbumImages.map(normalizeLookupImage)
     : (imageUrl ? [normalizeLookupImage({ coverType: 'cover', url: imageUrl })] : [])
 
   const out = {
