@@ -134,7 +134,17 @@ function renderSettings (data) {
       input.type = typeof info.value === 'number' ? 'number' : 'text'
 
       if (typeof info.value === 'number') {
-        input.min = '1'
+        // Keys that allow 0 as minimum value (non-negative)
+        const allowZeroKeys = [
+          'minRequestIntervalMs',
+          'providerMinRequestIntervalMs',
+          'itunesMinRequestIntervalMs',
+          'lastfmMinRequestIntervalMs',
+          'discogsMinRequestIntervalMs',
+          'theAudioDbMinRequestIntervalMs',
+          'customProviderMinRequestIntervalMs'
+        ]
+        input.min = allowZeroKeys.includes(key) ? '0' : '1'
       }
     }
 

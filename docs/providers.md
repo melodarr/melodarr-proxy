@@ -19,7 +19,7 @@ This keeps cold artist lookup within the intended request budget while still giv
 | `discogs` | `DISCOGS_TOKEN` | Release years and discography data | Higher call cost; best used selectively. |
 | Custom Providers | Auth Headers / Query Params | Flexible | Add custom external API mapping endpoints via `CUSTOM_PROVIDERS`. |
 
-> **Note:** The singular custom provider environment variables (e.g. `CUSTOM_PROVIDER_NAME`, `CUSTOM_PROVIDER_BASE_URL`) have been deprecated and removed. You must now configure an array of providers via the `CUSTOM_PROVIDERS` JSON environment variable or in the Melodash UI.
+> **Note:** `CUSTOM_PROVIDERS` (JSON array format) is the current supported environment-variable format for custom providers, and the Melodash UI can also be used to manage them. The `.env.example` file still documents legacy singular `CUSTOM_PROVIDER_*` variables (e.g., `CUSTOM_PROVIDER_NAME`, `CUSTOM_PROVIDER_BASE_URL`) for backward compatibility, but these are deprecated. Migrate to the `CUSTOM_PROVIDERS` JSON array format for new configurations.
 
 ## Configuration
 
