@@ -1,0 +1,97 @@
+{
+  "query": "Radiohead",
+  "provider": "itunes",
+  "status": "success",
+  "result": {
+    "schemaVersion": "skyhook-v1",
+    "artistName": "Radiohead",
+    "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+    "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+    "oldIds": [],
+    "aliases": [],
+    "artistAliases": [],
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "https://fixtures.melodarr.local/itunes/radiohead/artist-poster.jpg"
+      },
+      {
+        "coverType": "clearlogo",
+        "url": "https://fixtures.melodarr.local/itunes/radiohead/logo.png",
+        "remoteUrl": "https://fixtures.melodarr.local/itunes/radiohead/logo.png"
+      }
+    ],
+    "albums": [
+      {
+        "id": "1097861387",
+        "title": "OK Computer",
+        "name": "OK Computer",
+        "year": 1997,
+        "firstReleaseDate": "1997-05-21T07:00:00Z",
+        "releaseDate": "1997-05-21T07:00:00Z",
+        "imageUrl": "https://fixtures.melodarr.local/itunes/radiohead/ok-computer-600x600bb.jpg",
+        "images": [
+          {
+            "coverType": "cover",
+            "url": "https://fixtures.melodarr.local/itunes/radiohead/ok-computer-600x600bb.jpg",
+            "remoteUrl": "https://fixtures.melodarr.local/itunes/radiohead/ok-computer-600x600bb.jpg"
+          }
+        ],
+        "remoteCover": "https://fixtures.melodarr.local/itunes/radiohead/ok-computer-600x600bb.jpg",
+        "ids": {
+          "itunesCollectionId": "1097861387"
+        },
+        "provider": "itunes",
+        "providerMetadata": {
+          "source": "Apple iTunes Search",
+          "country": "US",
+          "collectionExplicitness": "notExplicit",
+          "primaryGenreName": "Alternative"
+        }
+      },
+      {
+        "id": "1097862870",
+        "title": "Kid A",
+        "name": "Kid A",
+        "year": 2000,
+        "firstReleaseDate": "2000-10-02T07:00:00Z",
+        "releaseDate": "2000-10-02T07:00:00Z",
+        "imageUrl": "https://fixtures.melodarr.local/itunes/radiohead/kid-a-600x600bb.jpg",
+        "images": [
+          {
+            "coverType": "cover",
+            "url": "https://fixtures.melodarr.local/itunes/radiohead/kid-a-600x600bb.jpg"
+          }
+        ],
+        "remoteCover": "https://fixtures.melodarr.local/itunes/radiohead/kid-a-600x600bb.jpg",
+        "ids": {
+          "itunesCollectionId": "1097862870"
+        },
+        "provider": "itunes",
+        "providerMetadata": {
+          "source": "Apple iTunes Search",
+          "country": "US",
+          "collectionExplicitness": "notExplicit",
+          "primaryGenreName": "Alternative"
+        }
+      }
+    ],
+    "partial": false,
+    "warning": null,
+    "providerCount": 1,
+    "providers": [
+      {
+        "name": "itunes",
+        "score": 75,
+        "albumCount": 2,
+        "metadata": {
+          "country": "US",
+          "entity": "album",
+          "attribute": "artistTerm"
+        }
+      }
+    ],
+    "providerErrors": [],
+    "confidence": 75
+  }
+}

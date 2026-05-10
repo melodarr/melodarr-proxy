@@ -1,0 +1,20 @@
+{
+  "query": "No Provider Results",
+  "status": "empty",
+  "results": [],
+  "partial": false,
+  "warning": null,
+  "providers": [
+    {
+      "name": "musicbrainz",
+      "status": "empty",
+      "albumCount": 0
+    },
+    {
+      "name": "itunes",
+      "status": "empty",
+      "albumCount": 0
+    }
+  ],
+  "providerErrors": []
+}
