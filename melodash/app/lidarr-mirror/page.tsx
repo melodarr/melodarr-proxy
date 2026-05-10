@@ -9,6 +9,10 @@ import {
  RELEASE_SEARCH_CONTRACT,
  QUEUE_DETAILS_CONTRACT,
 } from "@/lib/contracts";
+import {
+ MOCK_QUEUE_DETAILS_ACTIVE,
+ MOCK_RELEASE_SEARCH_MIXED,
+} from "@/lib/lidarr-mock-fixtures";
 
 import {
  Activity,
@@ -58,6 +62,13 @@ const PRESETS: Record<string, Preset[]> = {
  ],
  "album-by-id": [
  { label: "OK Computer", values: { id: "b1392450-e666-3926-a536-22c65f834433" } },
+ ],
+ "release-search": [
+ { label: "Artist 700", values: { artistId: "700" } },
+ { label: "Album 6271", values: { albumId: "6271" } },
+ ],
+ "queue-details": [
+ { label: "Artist 700", values: { artistId: "700" } },
  ],
 };
 
@@ -151,6 +162,11 @@ type EndpointResult = {
  error: string | null;
 };
 
+type MockResult = {
+ label: string;
+ data: unknown;
+};
+
 type ContractField = {
  key: string;
  present: boolean;
@@ -214,6 +230,10 @@ function evaluateContract(
  data: unknown,
  fieldDefs: Array<{ key: string; required: boolean }>
 ): ContractField[] {
+ if (Array.isArray(data) && data.length === 0) {
+ return [];
+ }
+
  if (!data || typeof data !== "object") {
  return fieldDefs.map((f) => ({ ...f, present: false }));
  }
@@ -464,6 +484,7 @@ function EndpointSection({
  inputHint,
  renderAfterResult,
  autoExecuteTrigger,
+ mockResults,
 }: {
  id: string;
  title: string;
@@ -484,6 +505,7 @@ function EndpointSection({
  inputHint?: string;
  renderAfterResult?: (result: EndpointResult) => React.ReactNode;
  autoExecuteTrigger?: number;
+ mockResults?: MockResult[];
 }) {
  const [values, setValues] = useState<Record<string, string>>({});
  const [viewMode, setViewMode] = useState<ViewMode>("formatted");
@@ -651,6 +673,24 @@ function EndpointSection({
  if (!lastUrl) return;
  await execute(lastUrl);
  }, [lastUrl, execute]);
+
+ const useMockResult = useCallback(
+ (mock: MockResult) => {
+ if (result) setPrevResult(result);
+ setResult({
+ data: mock.data,
+ timing: 0,
+ headers: {
+ "x-melodash-mock": "true",
+ },
+ error: null,
+ });
+ setLastUrl(null);
+ setShowDiff(false);
+ setCollapsed(false);
+ },
+ [result],
+ );
 
  const contract = result?.data
  ? evaluateContract(result.data, contractFields)
@@ -861,6 +901,23 @@ function EndpointSection({
  <div className="flex items-center gap-1.5 text-xs text-blue-700 dark:text-blue-400/70">
  <MousePointerClick className="h-3 w-3" />
  {inputHint}
+ </div>
+ )}
+
+ {/* Source-derived mock fixtures */}
+ {mockResults && mockResults.length > 0 && (
+ <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-page px-3 py-2">
+ <span className="text-xs text-muted">Mock source fixture:</span>
+ {mockResults.map((mock) => (
+ <button
+ key={mock.label}
+ type="button"
+ onClick={() => useMockResult(mock)}
+ className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[11px] font-medium text-purple-200 transition-colors hover:bg-purple-500/20"
+ >
+ {mock.label}
+ </button>
+ ))}
  </div>
  )}
 
@@ -1260,21 +1317,6 @@ export default function LidarrMirrorPage() {
  () => (selectedAlbumId ? { id: selectedAlbumId } : undefined),
  [selectedAlbumId],
  );
- const releaseExternal = useMemo(
- () =>
- selectedArtistId || selectedAlbumId
- ? {
- ...(selectedArtistId ? { artistId: selectedArtistId } : {}),
- ...(selectedAlbumId ? { albumId: selectedAlbumId } : {}),
- }
- : undefined,
- [selectedArtistId, selectedAlbumId],
- );
- const queueExternal = useMemo(
- () => (selectedArtistId ? { artistId: selectedArtistId } : undefined),
- [selectedArtistId],
- );
-
  return (
  <main className="container mx-auto max-w-screen-2xl space-y-6 p-8">
  <div>
@@ -1422,20 +1464,20 @@ export default function LidarrMirrorPage() {
  <EndpointSection
  id="release-search"
  title="Release Search"
- description="Search for release candidates by foreignArtistId (MBID) or foreignAlbumId (MBID)."
+ description="Search indexer/download candidates by Lidarr artistId or albumId. Metadata-only proxy responses are normally empty."
  method="GET"
  path="/api/v1/release"
  icon={Layers}
  inputs={[
  {
  name: "artistId",
- label: "foreignArtistId (MBID)",
- placeholder: "e.g. a74b1b7f-71a5-4011-9441-d0b5e4122711",
+ label: "artistId (Lidarr numeric ID)",
+ placeholder: "e.g. 700",
  },
  {
  name: "albumId",
- label: "foreignAlbumId (MBID)",
- placeholder: "e.g. b1392450-e666-3926-a536-22c65f834433",
+ label: "albumId (Lidarr numeric ID)",
+ placeholder: "e.g. 6271",
  },
  ]}
  contractFields={RELEASE_FIELDS}
@@ -1445,12 +1487,12 @@ export default function LidarrMirrorPage() {
  if (v.albumId?.trim()) params.set("albumId", v.albumId.trim());
  return params.toString() ? `/api/v1/release?${params}` : null;
  }}
- externalValues={releaseExternal}
  inputHint={
- selectedArtistName || selectedAlbumTitle
- ? `Auto-filled from selections`
- : undefined
+ "This endpoint is for indexer candidates, not MusicBrainz metadata. Empty [] is valid when no indexer backend is configured."
  }
+ mockResults={[
+ { label: "Mixed release candidates", data: MOCK_RELEASE_SEARCH_MIXED },
+ ]}
  />
 
  {/* 5 — Queue Details */}
@@ -1464,8 +1506,8 @@ export default function LidarrMirrorPage() {
  inputs={[
  {
  name: "artistId",
- label: "foreignArtistId (optional, MBID)",
- placeholder: "e.g. a74b1b7f-71a5-4011-9441-d0b5e4122711",
+ label: "artistId (optional Lidarr numeric ID)",
+ placeholder: "e.g. 700",
  },
  ]}
  contractFields={QUEUE_FIELDS}
@@ -1474,10 +1516,11 @@ export default function LidarrMirrorPage() {
  if (v.artistId?.trim()) params.set("artistId", v.artistId.trim());
  return `/api/v1/queue/details${params.toString() ? `?${params}` : ""}`;
  }}
- externalValues={queueExternal}
- inputHint={selectedArtistName ? `Auto-filled from "${selectedArtistName}"` : undefined}
+ inputHint="Queue entries reflect active or pending downloads only. Empty [] is valid when nothing is downloading."
+ mockResults={[
+ { label: "Active download", data: MOCK_QUEUE_DETAILS_ACTIVE },
+ ]}
  />
  </main>
  );
 }
-

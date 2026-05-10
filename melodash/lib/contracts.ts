@@ -64,24 +64,87 @@ export const ALBUM_BY_ID_CONTRACT: ContractFieldDef[] = [
 
 /* ────────────────────────────────────────────────────────────────────────────
    Release Search — GET /api/v1/release
-   Stub endpoint — returns []. Fields are aspirational.
+   Source-derived Lidarr ReleaseResource contract.
+   Empty [] is valid when no indexer candidates exist.
    ──────────────────────────────────────────────────────────────────────── */
 
 export const RELEASE_SEARCH_CONTRACT: ContractFieldDef[] = [
-  { key: "guid", required: false },
-  { key: "title", required: false },
-  { key: "approved", required: false },
-  { key: "rejections", required: false },
+  { key: "age", required: true },
+  { key: "ageHours", required: true },
+  { key: "ageMinutes", required: true },
+  { key: "airDate", required: true },
+  { key: "albumTitle", required: true },
+  { key: "approved", required: true },
+  { key: "artistName", required: true },
+  { key: "commentUrl", required: true },
+  { key: "customFormatScore", required: true },
+  { key: "customFormats", required: true },
+  { key: "discography", required: true },
+  { key: "downloadAllowed", required: true },
+  { key: "downloadUrl", required: true },
+  { key: "guid", required: true },
+  { key: "id", required: true },
+  { key: "indexer", required: true },
+  { key: "indexerFlags", required: true },
+  { key: "indexerId", required: true },
+  { key: "infoHash", required: true },
+  { key: "infoUrl", required: true },
+  { key: "leechers", required: true },
+  { key: "magnetUrl", required: true },
+  { key: "protocol", required: true },
+  { key: "publishDate", required: true },
+  { key: "quality", required: true },
+  { key: "qualityWeight", required: true },
+  { key: "rejected", required: true },
+  { key: "rejections", required: true },
+  { key: "releaseGroup", required: true },
+  { key: "releaseHash", required: true },
+  { key: "releaseWeight", required: true },
+  { key: "sceneSource", required: true },
+  { key: "seeders", required: true },
+  { key: "size", required: true },
+  { key: "subGroup", required: true },
+  { key: "temporarilyRejected", required: true },
+  { key: "title", required: true },
+  { key: "albumId", required: false },
+  { key: "artistId", required: false },
+  { key: "downloadClient", required: false },
+  { key: "downloadClientId", required: false },
 ];
 
 /* ────────────────────────────────────────────────────────────────────────────
    Queue Details — GET /api/v1/queue/details
-   Stub endpoint — returns []. Fields are aspirational.
+   Source-derived Lidarr QueueResource contract.
+   Empty [] is valid when no active/pending downloads exist.
    ──────────────────────────────────────────────────────────────────────── */
 
 export const QUEUE_DETAILS_CONTRACT: ContractFieldDef[] = [
-  { key: "artistId", required: false },
-  { key: "albumId", required: false },
-  { key: "status", required: false },
-  { key: "trackedDownloadStatus", required: false },
+  { key: "added", required: true },
+  { key: "album", required: true },
+  { key: "albumId", required: true },
+  { key: "artist", required: true },
+  { key: "artistId", required: true },
+  { key: "customFormatScore", required: true },
+  { key: "customFormats", required: true },
+  { key: "downloadClient", required: true },
+  { key: "downloadClientHasPostImportCategory", required: true },
+  { key: "downloadForced", required: true },
+  { key: "downloadId", required: true },
+  { key: "errorMessage", required: true },
+  { key: "estimatedCompletionTime", required: true },
+  { key: "id", required: true },
+  { key: "indexer", required: true },
+  { key: "outputPath", required: true },
+  { key: "protocol", required: true },
+  { key: "quality", required: true },
+  { key: "size", required: true },
+  { key: "sizeleft", required: true },
+  { key: "status", required: true },
+  { key: "statusMessages", required: true },
+  { key: "timeleft", required: true },
+  { key: "title", required: true },
+  { key: "trackFileCount", required: true },
+  { key: "trackHasFileCount", required: true },
+  { key: "trackedDownloadState", required: true },
+  { key: "trackedDownloadStatus", required: true },
 ];
