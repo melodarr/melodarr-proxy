@@ -333,7 +333,7 @@ describe('API E2E Tests', () => {
       const res = await client.get(`/api/album/${releaseGroupId}`)
 
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers['x-cache'], 'MISS')
+      assert.strictEqual(res.headers['x-cache'], 'HIT')
       assert.deepStrictEqual(Object.keys(res.data).sort(), [
         'artistId',
         'artists',
