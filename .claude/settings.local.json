@@ -3,9 +3,10 @@
     "allow": [
       "Bash(node *)",
       "Bash(npx tsc *)",
-      "Bash(gh issue *)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue view *)",
       "Bash(grep -E \"\\\\.(js|ts)$\")",
-      "Bash(gh label *)"
+      "Bash(gh label list *)"
     ]
   }
 }
