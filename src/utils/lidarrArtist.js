@@ -414,17 +414,30 @@ function toSkyhookArtistResource (artist = {}) {
   }
 }
 
-function toSkyhookArtistAlbumSummaryResource (album = {}) {
-  const normalized = normalizeAlbum(album)
+function normalizeAlbumSummary (album = {}) {
   return {
-    oldIds: normalizeStringArray(normalized.oldIds),
-    id: asString(normalized.id),
-    title: asString(normalized.title),
-    type: asString(normalized.type || 'Album'),
-    secondaryTypes: normalizeStringArray(normalized.secondaryTypes),
-    releaseStatuses: normalizeReleaseStatuses(normalized.releaseStatuses),
-    releaseDate: asString(normalized.releaseDate) || null,
-    rating: normalizeRatingResource(normalized.rating || normalized.ratings)
+    oldIds: normalizeStringArray(album.oldIds || album.OldIds),
+    id: asString(album.id || album.Id || album.foreignAlbumId),
+    title: asString(album.title || album.Title),
+    type: asString(album.type || album.Type || 'Album'),
+    secondaryTypes: normalizeStringArray(album.secondaryTypes || album.SecondaryTypes),
+    releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
+    releaseDate: asString(album.releaseDate || album.ReleaseDate) || null,
+    rating: normalizeRatingResource(album.rating || album.Rating || album.ratings)
+  }
+}
+
+function toSkyhookArtistAlbumSummaryResource (album = {}) {
+  const normalized = normalizeAlbumSummary(album)
+  return {
+    oldIds: normalized.oldIds,
+    id: normalized.id,
+    title: normalized.title,
+    type: normalized.type,
+    secondaryTypes: normalized.secondaryTypes,
+    releaseStatuses: normalized.releaseStatuses,
+    releaseDate: normalized.releaseDate,
+    rating: normalized.rating
   }
 }
 
