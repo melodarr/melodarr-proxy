@@ -16,6 +16,16 @@ const builtinProviders = {
   itunes: require('./itunes.provider')
 }
 
+function normalizeImageSource (source) {
+  const normalizedSource = String(source || '').trim().toLowerCase()
+  if (normalizedSource === 'audiodb') return 'theaudiodb'
+  return normalizedSource
+}
+
+function getProviderMetricName (provider) {
+  return normalizeImageSource(provider?.name)
+}
+
 function getAllProviders () {
   const all = { ...builtinProviders }
   let customProviders = []
@@ -92,10 +102,11 @@ async function aggregateArtist (term) {
   // more-reliable providers get scheduled first. Order doesn't change
   // the parallel execution, but it documents intent and matches how the
   // merge step downstream walks validOutcomes.
-  const orderedProviders = providerMetrics.sortByScore(activeProviders)
+  const orderedProviders = providerMetrics.sortByScore(activeProviders, getProviderMetricName)
 
   const results = await Promise.allSettled(
     orderedProviders.map(async provider => {
+      const providerName = normalizeImageSource(provider.name)
       const pStartTime = Date.now()
       try {
         // v0.3.38: safeProviderCall layers circuit-breaker skip + shape
@@ -103,9 +114,9 @@ async function aggregateArtist (term) {
         // provider call. Returns null when the breaker is open; we
         // surface that as a sentinel error so existing partial-failure
         // detection (Promise.allSettled rejection counting) still works.
-        const result = await safeProviderCall(provider.name, (q) => provider.searchArtist(q), term)
+        const result = await safeProviderCall(providerName, (q) => provider.searchArtist(q), term)
         if (result === null) {
-          const skipErr = new Error(`Provider ${provider.name} skipped (circuit breaker open)`)
+          const skipErr = new Error(`Provider ${providerName} skipped (circuit breaker open)`)
           skipErr.code = 'PROVIDER_DISABLED'
           throw skipErr
         }
@@ -114,18 +125,18 @@ async function aggregateArtist (term) {
         // Existing dashboard metrics — kept alongside the new providerMetrics
         // (different consumer: stats endpoint vs. adaptive sorting).
         if (metrics.recordProviderCall) {
-          metrics.recordProviderCall(provider.name, true, duration)
+          metrics.recordProviderCall(providerName, true, duration)
         }
 
-        return { provider: provider.name, result }
+        return { provider: providerName, result }
       } catch (error) {
         const duration = Date.now() - pStartTime
         const isTimeout = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.message?.toLowerCase().includes('timeout') || error.message?.toLowerCase().includes('timed out')
 
         if (isTimeout) {
-          logger.error(`Provider timeout [${provider.name}]`, { event: 'provider_timeout', provider: provider.name, duration })
+          logger.error(`Provider timeout [${providerName}]`, { event: 'provider_timeout', provider: providerName, duration })
         } else {
-          logger.error(`Provider error [${provider.name}]`, {
+          logger.error(`Provider error [${providerName}]`, {
             error: {
               message: error.message,
               code: error.code,
@@ -138,7 +149,7 @@ async function aggregateArtist (term) {
         }
 
         if (metrics.recordProviderCall) {
-          metrics.recordProviderCall(provider.name, false, duration, isTimeout)
+          metrics.recordProviderCall(providerName, false, duration, isTimeout)
         }
         throw error
       }
@@ -384,7 +395,7 @@ async function aggregateArtist (term) {
           coverType: img.coverType || 'poster',
           height: img.height,
           width: img.width,
-          imageSource: provider,
+          imageSource: normalizeImageSource(provider),
           priorityWeight,
           type: 'artist',
           isSelfTitled: false
@@ -407,7 +418,7 @@ async function aggregateArtist (term) {
         imageCandidates.push({
           url: album.imageUrl,
           coverType: 'poster',
-          imageSource,
+          imageSource: normalizeImageSource(imageSource),
           priorityWeight,
           type: 'album',
           isSelfTitled
@@ -444,7 +455,7 @@ async function aggregateArtist (term) {
       score += Math.floor(Math.sqrt(resolution) / 10)
     }
 
-    // Source weight (AudioDB > Discogs > Cover Art Archive > iTunes)
+    // Source weight (TheAudioDB > Discogs > Cover Art Archive > iTunes)
     if (candidate.imageSource === 'theaudiodb') score += 40
     else if (candidate.imageSource === 'discogs') score += 30
     else if (candidate.imageSource === 'coverartarchive') score += 20
@@ -493,7 +504,6 @@ async function aggregateArtist (term) {
 
     for (const image of uniqueScored) {
       const coverType = allowedCoverTypes.has(image.coverType) ? image.coverType : 'poster'
-
       counts[coverType] = counts[coverType] || 0
       const limit = limits[coverType] !== undefined ? limits[coverType] : 1
 

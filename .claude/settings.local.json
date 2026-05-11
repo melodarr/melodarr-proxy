@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(node *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue view *)",
+      "Bash(grep -E \"\\\\.(js|ts)$\")",
+      "Bash(gh label list *)"
     ]
   }
 }

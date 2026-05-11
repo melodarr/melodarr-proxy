@@ -115,9 +115,9 @@ function reset () {
   }
 }
 
-function sortByScore (items) {
+function sortByScore (items, getName = (item) => item.name) {
   return items
-    .map((item) => ({ item, score: computeScore(get(item.name)) }))
+    .map((item) => ({ item, score: computeScore(get(getName(item))) }))
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.item)
 }
