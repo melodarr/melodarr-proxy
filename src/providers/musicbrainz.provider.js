@@ -317,19 +317,23 @@ class MusicBrainzProvider {
       return summary
     }
 
-    const rawReleases = await this.fetchReleaseGroupReleases(summary.id)
-    const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
+    try {
+      const rawReleases = await this.fetchReleaseGroupReleases(summary.id)
+      const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
 
-    if (releases.length === 0) {
+      if (releases.length === 0) {
+        return summary
+      }
+
+      const trackCounts = releases.map(release => Number(release.trackCount) || 0)
+
+      return {
+        ...summary,
+        trackCount: trackCounts.length ? Math.max(...trackCounts) : summary.trackCount,
+        releases
+      }
+    } catch (err) {
       return summary
-    }
-
-    const trackCounts = releases.map(release => Number(release.trackCount) || 0)
-
-    return {
-      ...summary,
-      trackCount: trackCounts.length ? Math.max(...trackCounts) : summary.trackCount,
-      releases
     }
   }
 
