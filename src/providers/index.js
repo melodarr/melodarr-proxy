@@ -271,7 +271,7 @@ async function aggregateArtist (term) {
           } else {
             const getScore = (url, source, pw) => {
               let score = 10
-              if (source === 'audiodb') score += 130
+              if (source === 'theaudiodb') score += 130
               else if (source === 'coverartarchive') score += 70
               else if (source === 'itunes') score += 70
               if (url && url.startsWith('https://')) score += 5
@@ -428,7 +428,7 @@ async function aggregateArtist (term) {
     // Resolution bonus
     let width = 0
     let height = 0
-    if (candidate.imageSource === 'audiodb') {
+    if (candidate.imageSource === 'theaudiodb') {
       width = 1000
       height = 1000
     } else if (candidate.imageSource === 'itunes') {
@@ -444,8 +444,9 @@ async function aggregateArtist (term) {
       score += Math.floor(Math.sqrt(resolution) / 10)
     }
 
-    // Source weight
-    if (candidate.imageSource === 'audiodb') score += 30
+    // Source weight (AudioDB > Discogs > Cover Art Archive > iTunes)
+    if (candidate.imageSource === 'theaudiodb') score += 40
+    else if (candidate.imageSource === 'discogs') score += 30
     else if (candidate.imageSource === 'coverartarchive') score += 20
     else if (candidate.imageSource === 'itunes') score += 10
 
@@ -486,14 +487,28 @@ async function aggregateArtist (term) {
 
   images = []
   if (uniqueScored.length > 0) {
-    images = uniqueScored.slice(0, 6).map(image => ({
-      coverType: image.coverType || 'poster',
-      url: image.url,
-      remoteUrl: image.url,
-      imageSource: image.imageSource,
-      height: Number(image.height ?? 0) || 0,
-      width: Number(image.width ?? 0) || 0
-    }))
+    const allowedCoverTypes = new Set(['poster', 'fanart', 'logo', 'clearlogo'])
+    const limits = Object.assign(Object.create(null), { poster: 1, fanart: 1, logo: 1, clearlogo: 1 })
+    const counts = Object.assign(Object.create(null), { poster: 0, fanart: 0, logo: 0, clearlogo: 0 })
+
+    for (const image of uniqueScored) {
+      const coverType = allowedCoverTypes.has(image.coverType) ? image.coverType : 'poster'
+
+      counts[coverType] = counts[coverType] || 0
+      const limit = limits[coverType] !== undefined ? limits[coverType] : 1
+
+      if (counts[coverType] < limit) {
+        images.push({
+          coverType,
+          url: image.url,
+          remoteUrl: image.url,
+          imageSource: image.imageSource,
+          height: Number(image.height ?? 0) || 0,
+          width: Number(image.width ?? 0) || 0
+        })
+        counts[coverType]++
+      }
+    }
   }
 
   const imageDebug = uniqueScored.slice(0, 5).map(img => ({ url: img.url, score: img.score, source: img.imageSource, type: img.type }))
