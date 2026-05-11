@@ -244,3 +244,16 @@ test('providerMetrics — sortByScore preserves arbitrary item shape', () => {
   assert.equal(sorted[0].extra, 'payload')
   assert.equal(typeof sorted[0].searchArtist, 'function')
 })
+
+test('providerMetrics — sortByScore supports custom metric names', () => {
+  metrics.reset()
+  for (let i = 0; i < 5; i++) metrics.record('canonical', true, 50)
+  for (let i = 0; i < 5; i++) metrics.record('other', true, 5000)
+
+  const sorted = metrics.sortByScore([
+    { name: 'alias', metricName: 'canonical' },
+    { name: 'other', metricName: 'other' }
+  ], (item) => item.metricName)
+
+  assert.deepEqual(sorted.map((item) => item.name), ['alias', 'other'])
+})

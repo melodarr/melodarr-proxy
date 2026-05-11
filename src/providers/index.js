@@ -98,7 +98,7 @@ async function aggregateArtist (term) {
   // more-reliable providers get scheduled first. Order doesn't change
   // the parallel execution, but it documents intent and matches how the
   // merge step downstream walks validOutcomes.
-  const orderedProviders = providerMetrics.sortByScore(activeProviders)
+  const orderedProviders = providerMetrics.sortByScore(activeProviders, provider => normalizeImageSource(provider.name))
 
   const results = await Promise.allSettled(
     orderedProviders.map(async provider => {
