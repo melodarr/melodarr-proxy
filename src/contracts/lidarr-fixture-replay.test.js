@@ -76,12 +76,11 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
 
       const diff = structuralDiff(expected, res.body)
       
-      // It's normal to have some extraneous keys or missing keys if the mock data is very barebones.
-      // But we can assert that at least it didn't crash, and we can log the diffs.
-      if (diff.length > 0) {
-        // Just log the diffs for visibility in the test output
-        // console.log(`Structural diffs for ${file}:`, diff)
-      }
+      assert.equal(
+        diff.length,
+        0,
+        `Structural diffs for ${file}:\n${JSON.stringify(diff, null, 2)}`
+      )
       
       assert.equal(res.statusCode, 200)
     })
