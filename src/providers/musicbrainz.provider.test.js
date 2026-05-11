@@ -18,6 +18,30 @@ function setupMocks () {
   return { musicbrainzProvider, setMock: (fn) => { musicBrainzGetMock = fn } }
 }
 
+function makeMusicBrainzTracks (count, artistId = 'artist-panic') {
+  return Array.from({ length: count }, (_, index) => {
+    const position = index + 1
+    return {
+      id: `track-${position}`,
+      title: `Track ${position}`,
+      number: String(position),
+      position,
+      length: 180000 + position,
+      recording: {
+        id: `recording-${position}`,
+        title: `Track ${position}`,
+        length: 180000 + position,
+        'artist-credit': [{
+          artist: {
+            id: artistId,
+            name: 'Panic! at the Disco'
+          }
+        }]
+      }
+    }
+  })
+}
+
 test('MusicBrainz Provider', async (t) => {
   await t.test('searchArtist - returns exact artist match and albums', async () => {
     const { musicbrainzProvider, setMock } = setupMocks()
@@ -222,6 +246,482 @@ test('MusicBrainz Provider', async (t) => {
     assert.deepStrictEqual(result.albums.slice(0, 4).map(album => album.type), ['Album', 'EP', 'Album', 'EP'])
     assert.deepStrictEqual(result.albums[0].rating, { count: 1, value: 3 })
     assert.deepStrictEqual(result.albums[99].rating, { count: 100, value: 3 })
+  })
+
+  await t.test('lookupArtistById - enriches release group summaries with looked-up release tracks', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroupId = 'b8a4f1e0-viva-las-vengeance'
+    const releaseDate = '2022-08-19T00:00:00Z'
+    const calls = []
+
+    setMock(async (path, params) => {
+      calls.push({ path, params })
+
+      if (path === '/artist/artist-panic') {
+        return {
+          id: 'artist-panic',
+          name: 'Panic! at the Disco'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [{
+            id: releaseGroupId,
+            title: 'Viva Las Vengeance',
+            'primary-type': 'Album',
+            'first-release-date': releaseDate
+          }]
+        }
+      }
+      if (path === '/release') {
+        assert.strictEqual(params.artist, 'artist-panic')
+        assert.strictEqual(params.inc, 'release-groups+media+recordings+artist-credits')
+        return {
+          releases: [{
+            id: 'release-viva-las-vengeance',
+            title: 'Viva Las Vengeance',
+            date: releaseDate,
+            status: 'Official',
+            country: 'US',
+            'release-group': { id: releaseGroupId },
+            media: [{
+              title: 'Digital Media',
+              format: 'Digital Media',
+              position: 1,
+              tracks: makeMusicBrainzTracks(12)
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-panic')
+    const album = result.albums[0]
+    const expectedCover = `https://coverartarchive.org/release-group/${releaseGroupId}/front-250`
+
+    assert.strictEqual(album.id, releaseGroupId)
+    assert.strictEqual(album.title, 'Viva Las Vengeance')
+    assert.strictEqual(album.releaseDate, releaseDate)
+    assert.strictEqual(album.imageUrl, expectedCover)
+    assert.strictEqual(album.remoteCover, expectedCover)
+    assert.deepStrictEqual(album.images, [{
+      coverType: 'cover',
+      url: expectedCover,
+      remoteUrl: expectedCover
+    }])
+    assert.strictEqual(album.trackCount, 12)
+    assert.strictEqual(album.releases.length, 1)
+    assert.strictEqual(album.releases[0].trackCount, 12)
+    assert.strictEqual(album.releases[0].tracks.length, 12)
+    assert.strictEqual(album.releases[0].tracks[0].trackName, 'Track 1')
+    assert.strictEqual(album.releases[0].tracks[11].trackName, 'Track 12')
+    assert.strictEqual(calls.filter(call => call.path === '/release').length, 1)
+  })
+
+  await t.test('lookupArtistById - paginates artist releases so older albums receive tracks', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroupId = 'rg-vices-and-virtues'
+    const releaseOffsets = []
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-panic') {
+        return {
+          id: 'artist-panic',
+          name: 'Panic! at the Disco'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [{
+            id: releaseGroupId,
+            title: 'Vices & Virtues',
+            'primary-type': 'Album',
+            'first-release-date': '2011-03-18'
+          }]
+        }
+      }
+      if (path === '/release') {
+        assert.strictEqual(params.artist, 'artist-panic')
+        assert.strictEqual(params.limit, 100)
+        releaseOffsets.push(params.offset)
+
+        if (params.offset === 0) {
+          return {
+            count: 101,
+            releases: Array.from({ length: 100 }, (_, index) => ({
+              id: `rel-filler-${index + 1}`,
+              title: `Filler Release ${index + 1}`,
+              'release-group': { id: `rg-filler-${index + 1}` },
+              media: [{
+                title: 'Digital Media',
+                format: 'Digital Media',
+                position: 1,
+                tracks: makeMusicBrainzTracks(1, 'artist-panic')
+              }]
+            }))
+          }
+        }
+
+        return {
+          count: 101,
+          releases: [{
+            id: 'rel-vices-and-virtues',
+            title: 'Vices & Virtues',
+            date: '2011-03-18',
+            status: 'Official',
+            country: 'US',
+            'release-group': { id: releaseGroupId },
+            media: [{
+              title: 'CD',
+              format: 'CD',
+              position: 1,
+              tracks: makeMusicBrainzTracks(14, 'artist-panic')
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-panic')
+    const album = result.albums[0]
+
+    assert.deepStrictEqual(releaseOffsets, [0, 100])
+    assert.strictEqual(album.id, releaseGroupId)
+    assert.strictEqual(album.trackCount, 14)
+    assert.strictEqual(album.releases.length, 1)
+    assert.strictEqual(album.releases[0].id, 'rel-vices-and-virtues')
+    assert.strictEqual(album.releases[0].media[0].format, 'CD')
+    assert.strictEqual(album.releases[0].tracks.length, 14)
+  })
+
+  await t.test('lookupArtistById - uses release-group fallback when artist releases omit an album', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroupId = 'rg-vices-and-virtues'
+    const releaseQueries = []
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-panic') {
+        return {
+          id: 'artist-panic',
+          name: 'Panic! at the Disco'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [{
+            id: releaseGroupId,
+            title: 'Vices & Virtues',
+            'primary-type': 'Album',
+            'first-release-date': '2011-03-18'
+          }]
+        }
+      }
+      if (path === '/release') {
+        releaseQueries.push(params)
+
+        if (params.artist === 'artist-panic') {
+          return {
+            count: 1,
+            releases: [{
+              id: 'rel-unrelated',
+              title: 'Unrelated Release',
+              'release-group': { id: 'rg-unrelated' },
+              media: [{
+                title: 'Digital Media',
+                format: 'Digital Media',
+                position: 1,
+                tracks: makeMusicBrainzTracks(1, 'artist-panic')
+              }]
+            }]
+          }
+        }
+
+        assert.strictEqual(params['release-group'], releaseGroupId)
+        assert.strictEqual(params.inc, 'media+recordings+artist-credits')
+        return {
+          releases: [{
+            id: 'rel-vices-and-virtues',
+            title: 'Vices & Virtues',
+            date: '2011-03-18',
+            status: 'Official',
+            country: 'US',
+            media: [{
+              title: 'CD',
+              format: 'CD',
+              position: 1,
+              tracks: makeMusicBrainzTracks(14, 'artist-panic')
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-panic')
+    const album = result.albums[0]
+
+    assert.deepStrictEqual(releaseQueries.map(params => params.artist || params['release-group']), ['artist-panic', releaseGroupId])
+    assert.strictEqual(album.id, releaseGroupId)
+    assert.strictEqual(album.trackCount, 14)
+    assert.strictEqual(album.releases.length, 1)
+    assert.strictEqual(album.releases[0].id, 'rel-vices-and-virtues')
+    assert.strictEqual(album.releases[0].media[0].format, 'CD')
+    assert.strictEqual(album.releases[0].tracks.length, 14)
+  })
+
+  await t.test('lookupArtistById - falls back to one release lookup when browse release groups lack embedded releases', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    let releaseLookupCount = 0
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-fallback') {
+        return {
+          id: 'artist-fallback',
+          name: 'Fallback Artist'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [{
+            id: 'rg-fallback',
+            title: 'Fallback Album',
+            'primary-type': 'Album',
+            'first-release-date': '2022-08-19'
+          }]
+        }
+      }
+      if (path === '/release') {
+        releaseLookupCount += 1
+        assert.strictEqual(params.artist, 'artist-fallback')
+        return {
+          releases: [{
+            id: 'rel-fallback',
+            title: 'Fallback Album',
+            date: '2022-08-19',
+            'release-group': { id: 'rg-fallback' },
+            media: [{
+              title: 'CD',
+              format: 'CD',
+              position: 1,
+              tracks: makeMusicBrainzTracks(2, 'artist-fallback')
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-fallback')
+    const album = result.albums[0]
+
+    assert.strictEqual(releaseLookupCount, 1)
+    assert.strictEqual(album.trackCount, 2)
+    assert.strictEqual(album.releases.length, 1)
+    assert.strictEqual(album.releases[0].id, 'rel-fallback')
+    assert.strictEqual(album.releases[0].trackCount, 2)
+    assert.deepStrictEqual(album.releases[0].tracks.map(track => track.trackName), ['Track 1', 'Track 2'])
+  })
+
+  await t.test('lookupArtistById - preserves album summary and zero-track browse release when lookup has no tracks', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroupId = 'rg-no-tracks'
+    const releaseDate = '2022-08-19T00:00:00Z'
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-no-tracks') {
+        return {
+          id: 'artist-no-tracks',
+          name: 'No Tracks Artist'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [{
+            id: releaseGroupId,
+            title: 'No Tracks Album',
+            'primary-type': 'Album',
+            'first-release-date': releaseDate,
+            releases: [{
+              id: 'rel-no-tracks-browse',
+              title: 'No Tracks Album',
+              date: releaseDate,
+              media: [{
+                title: 'Digital Media',
+                format: 'Digital Media',
+                position: 1
+              }]
+            }]
+          }]
+        }
+      }
+      if (path === '/release') {
+        if (params['release-group']) {
+          assert.strictEqual(params['release-group'], releaseGroupId)
+          return {
+            releases: [{
+              id: 'rel-no-tracks-release-group-lookup',
+              title: 'No Tracks Album',
+              date: releaseDate,
+              media: [{
+                title: 'Digital Media',
+                format: 'Digital Media',
+                position: 1
+              }]
+            }]
+          }
+        }
+
+        assert.strictEqual(params.artist, 'artist-no-tracks')
+        return {
+          releases: [{
+            id: 'rel-no-tracks-lookup',
+            title: 'No Tracks Album',
+            date: releaseDate,
+            'release-group': { id: releaseGroupId },
+            media: [{
+              title: 'Digital Media',
+              format: 'Digital Media',
+              position: 1
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-no-tracks')
+    const album = result.albums[0]
+    const expectedCover = `https://coverartarchive.org/release-group/${releaseGroupId}/front-250`
+
+    assert.strictEqual(album.id, releaseGroupId)
+    assert.strictEqual(album.title, 'No Tracks Album')
+    assert.strictEqual(album.releaseDate, releaseDate)
+    assert.strictEqual(album.imageUrl, expectedCover)
+    assert.deepStrictEqual(album.images, [{
+      coverType: 'cover',
+      url: expectedCover,
+      remoteUrl: expectedCover
+    }])
+    assert.strictEqual(album.remoteCover, expectedCover)
+    assert.strictEqual(album.provider, 'musicbrainz')
+    assert.strictEqual(album.ids.musicbrainzReleaseGroupId, releaseGroupId)
+    assert.strictEqual(album.trackCount, 0)
+    assert.strictEqual(album.releases.length, 1)
+    assert.strictEqual(album.releases[0].id, 'rel-no-tracks-browse')
+    assert.strictEqual(album.releases[0].trackCount, 0)
+    assert.deepStrictEqual(album.releases[0].tracks, [])
+  })
+
+  await t.test('lookupArtistById - deduplicates duplicate release group ids for release lookup within a request', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    let releaseLookupCount = 0
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-duplicate-groups') {
+        return {
+          id: 'artist-duplicate-groups',
+          name: 'Duplicate Groups Artist'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [
+            {
+              id: 'rg-duplicate',
+              title: 'Duplicate Album',
+              'primary-type': 'Album',
+              'first-release-date': '2022-08-19'
+            },
+            {
+              id: 'rg-duplicate',
+              title: 'Duplicate Album',
+              'primary-type': 'Album',
+              'first-release-date': '2022-08-19'
+            }
+          ]
+        }
+      }
+      if (path === '/release') {
+        releaseLookupCount += 1
+        assert.strictEqual(params.artist, 'artist-duplicate-groups')
+        return {
+          releases: [{
+            id: 'rel-duplicate',
+            title: 'Duplicate Album',
+            'release-group': { id: 'rg-duplicate' },
+            media: [{
+              title: 'Digital Media',
+              format: 'Digital Media',
+              position: 1,
+              tracks: makeMusicBrainzTracks(1, 'artist-duplicate-groups')
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-duplicate-groups')
+
+    assert.strictEqual(releaseLookupCount, 1)
+    assert.deepStrictEqual(result.albums.map(album => album.ids.musicbrainzReleaseGroupId), ['rg-duplicate', 'rg-duplicate'])
+    assert.deepStrictEqual(result.albums.map(album => album.trackCount), [1, 1])
+  })
+
+  await t.test('lookupArtistById - deduplicates duplicate release group ids for release-group fallback lookup within a request', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    let releaseGroupLookupCount = 0
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-duplicate-fallback') {
+        return {
+          id: 'artist-duplicate-fallback',
+          name: 'Duplicate Fallback Artist'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [
+            {
+              id: 'rg-duplicate-fallback',
+              title: 'Duplicate Fallback Album',
+              'primary-type': 'Album',
+              'first-release-date': '2022-08-19'
+            },
+            {
+              id: 'rg-duplicate-fallback',
+              title: 'Duplicate Fallback Album',
+              'primary-type': 'Album',
+              'first-release-date': '2022-08-19'
+            }
+          ]
+        }
+      }
+      if (path === '/release') {
+        if (params['release-group']) {
+          releaseGroupLookupCount += 1
+          assert.strictEqual(params['release-group'], 'rg-duplicate-fallback')
+          return {
+            releases: [{
+              id: 'rel-duplicate-fallback',
+              title: 'Duplicate Fallback Album',
+              'release-group': { id: 'rg-duplicate-fallback' },
+              media: [{
+                title: 'Digital Media',
+                format: 'Digital Media',
+                position: 1,
+                tracks: makeMusicBrainzTracks(1, 'artist-duplicate-fallback')
+              }]
+            }]
+          }
+        }
+
+        assert.strictEqual(params.artist, 'artist-duplicate-fallback')
+        return { releases: [] }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-duplicate-fallback')
+
+    assert.strictEqual(releaseGroupLookupCount, 1)
+    assert.deepStrictEqual(result.albums.map(album => album.ids.musicbrainzReleaseGroupId), ['rg-duplicate-fallback', 'rg-duplicate-fallback'])
+    assert.deepStrictEqual(result.albums.map(album => album.trackCount), [1, 1])
   })
 
   await t.test('lookupAlbumById - returns release group metadata for Lidarr album refetch', async () => {

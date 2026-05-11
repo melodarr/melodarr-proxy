@@ -1,5 +1,35 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
+const {
+  LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
+  LIDARR_OPTIONAL_ARTIST_KEYS,
+  SKYHOOK_ALBUM_REQUIRED_KEYS,
+  SKYHOOK_RELEASE_REQUIRED_KEYS,
+  SKYHOOK_TRACK_REQUIRED_KEYS
+} = require('../utils/lidarrArtist')
+
+const SUPPORTED_ARTIST_LOOKUP_KEYS = new Set([
+  ...LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
+  ...LIDARR_OPTIONAL_ARTIST_KEYS,
+  'partial',
+  'warning'
+])
+
+function assertRequiredArtistLookupFields (artist) {
+  for (const key of LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS) {
+    assert.ok(Object.prototype.hasOwnProperty.call(artist, key), `Missing required artist field: ${key}`)
+  }
+}
+
+function assertNoUnsupportedArtistLookupFields (artist) {
+  for (const key of Object.keys(artist)) {
+    assert.ok(SUPPORTED_ARTIST_LOOKUP_KEYS.has(key), `Unsupported top-level artist field: ${key}`)
+  }
+}
+
+function sortedKeys (value) {
+  return Object.keys(value).sort()
+}
 
 function makeResponse () {
   return {
@@ -15,6 +45,9 @@ function makeResponse () {
       return this
     },
     json (body) {
+      if (!this.headers['Content-Type']) {
+        this.headers['Content-Type'] = 'application/json; charset=utf-8'
+      }
       this.body = body
       return this
     }
@@ -232,6 +265,62 @@ test('artist lookup requires a term', async () => {
   assert.equal(res.body.error, 'Missing required query parameter: term')
 })
 
+test('GET /api/v1/artist/lookup?term=Radiohead returns normalized mocked-provider artist data', async () => {
+  const radioheadMbid = 'a74b1b7f-71a5-4011-9441-d0b5e4122711'
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      id: radioheadMbid,
+      foreignArtistId: radioheadMbid,
+      disambiguation: '',
+      overview: 'English rock band from Abingdon, Oxfordshire.',
+      status: 'continuing',
+      oldIds: [],
+      aliases: ['On a Friday'],
+      artistAliases: ['On a Friday'],
+      links: [{ name: 'Official Website', url: 'https://www.radiohead.com/' }],
+      images: [{ coverType: 'poster', url: 'https://example.test/radiohead.jpg', remoteUrl: 'https://example.test/radiohead.jpg' }],
+      albums: [
+        {
+          name: 'OK Computer',
+          year: 1997,
+          releaseDate: '1997-05-21T00:00:00Z',
+          imageUrl: 'https://example.test/ok-computer.jpg',
+          provider: 'musicbrainz',
+          ids: { musicbrainzReleaseGroupId: 'b1392450-e666-3926-a536-22c65f834433' }
+        }
+      ],
+      confidence: 1,
+      providers: [{ name: 'musicbrainz' }, { name: 'itunes' }],
+      providerCount: 2,
+      partial: false,
+      warning: null,
+      debug: { shouldNotLeak: true },
+      providerErrors: [{ provider: 'unsupported-leak-check' }],
+      results: [{ shouldNotLeak: true }]
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'Radiohead' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Providers'], 'musicbrainz,itunes')
+  assert.ok(Array.isArray(res.body), 'Response should be a JSON array')
+  assert.equal(res.body.length, 1)
+
+  const artist = res.body[0]
+  assertRequiredArtistLookupFields(artist)
+  assertNoUnsupportedArtistLookupFields(artist)
+  assert.equal(artist.artistName, 'Radiohead')
+  assert.equal(artist.foreignArtistId, radioheadMbid)
+  assert.equal(artist.id, radioheadMbid)
+  assert.equal(artist.providers, undefined)
+  assert.equal(artist.debug, undefined)
+  assert.equal(artist.providerErrors, undefined)
+  assert.equal(artist.results, undefined)
+})
+
 test('artist lookup normalizes provider data and caches the response', async () => {
   let upstreamCalls = 0
   const { controller, cacheStore, lockCalls } = loadController({
@@ -320,6 +409,71 @@ test('artist lookup preserves ISO 8601 firstReleaseDate from provider (v0.3.36)'
   assert.equal(date, '1997-05-21T07:00:00Z', 'iTunes ISO date must pass through unchanged')
 })
 
+test('artist lookup preserves enriched album summary fields through normalization', async () => {
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      id: 'lookup-mbid',
+      foreignArtistId: 'lookup-mbid',
+      oldIds: ['lookup-old-id'],
+      aliases: ['Lookup Alias'],
+      artistAliases: ['Lookup Alias'],
+      links: [{ name: 'Homepage', url: 'https://example.test/artist' }],
+      albums: [{
+        name: 'Enriched Summary',
+        id: 'rg-enriched',
+        firstReleaseDate: '2004-02-03T00:00:00Z',
+        releaseDate: '2004-02-10T00:00:00Z',
+        imageUrl: 'https://example.test/summary-cover.jpg',
+        images: [
+          { coverType: 'cover', url: 'https://example.test/summary-cover.jpg', remoteUrl: 'https://example.test/summary-cover.jpg' }
+        ],
+        remoteCover: 'https://example.test/summary-cover.jpg',
+        provider: 'musicbrainz',
+        releases: [{
+          id: 'rel-enriched',
+          title: 'Enriched Summary',
+          releaseDate: '2004-02-10',
+          trackCount: 2,
+          tracks: []
+        }]
+      }],
+      confidence: 1,
+      providers: [{ name: 'musicbrainz' }],
+      providerCount: 1,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'Enriched Artist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  const artist = res.body[0]
+  const album = artist.albums[0]
+  assert.equal(artist.id, 'lookup-mbid')
+  assert.equal(artist.foreignArtistId, 'lookup-mbid')
+  assert.deepEqual(artist.oldIds, ['lookup-old-id'])
+  assert.deepEqual(artist.aliases, ['Lookup Alias'])
+  assert.deepEqual(artist.artistAliases, ['Lookup Alias'])
+  assert.deepEqual(artist.links, [{ name: 'Homepage', url: 'https://example.test/artist' }])
+  assert.equal(Object.prototype.hasOwnProperty.call(artist, 'providers'), false)
+
+  assert.equal(album.id, 'rg-enriched')
+  assert.equal(album.title, 'Enriched Summary')
+  assert.equal(album.firstReleaseDate, '2004-02-03T00:00:00Z')
+  assert.equal(album.releaseDate, '2004-02-10T00:00:00Z')
+  assert.equal(album.remoteCover, 'https://example.test/summary-cover.jpg')
+  assert.equal(album.provider, 'musicbrainz')
+  assert.deepEqual(album.images, [
+    { coverType: 'cover', url: 'https://example.test/summary-cover.jpg', remoteUrl: 'https://example.test/summary-cover.jpg' }
+  ])
+  assert.equal(album.releases[0].id, 'rel-enriched')
+  assert.equal(album.releases[0].trackCount, 2)
+  assert.deepEqual(album.releases[0].tracks, [])
+})
+
 test('artist lookup returns cached response without debug data by default', async () => {
   const cacheStore = new Map([
     ['artist:cached artist', {
@@ -394,12 +548,39 @@ test('artist lookup returns partial error response when all providers fail', asy
   await controller.handleArtistLookup({ query: { term: 'Broken Artist' } }, res)
 
   assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['Content-Type'], 'application/json; charset=utf-8')
+  assert.equal(res.headers['X-Providers'], 'unknown')
   assert.deepEqual(res.body, [])
   assert.deepEqual(lockCalls.at(-1), {
     method: 'releaseLock',
     key: 'lock:artist:broken artist',
     token: 'test-lock'
   })
+})
+
+test('artist lookup returns [] JSON without partial true for NoMatchArtist', async () => {
+  const { controller } = loadController({
+    aggregateArtist: async () => ({
+      artistName: '',
+      id: '',
+      foreignArtistId: '',
+      albums: [],
+      confidence: 0,
+      providers: [],
+      providerCount: 0,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'NoMatchArtist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['Content-Type'], 'application/json; charset=utf-8')
+  assert.equal(res.headers['X-Providers'], 'unknown')
+  assert.deepEqual(res.body, [])
+  assert.notEqual(res.body.partial, true)
 })
 
 test('artist lookup handles missing provider metadata gracefully with "unknown" header', async () => {
@@ -422,6 +603,7 @@ test('artist lookup handles missing provider metadata gracefully with "unknown" 
 
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['X-Providers'], 'unknown')
+  assert.equal(res.headers['Content-Type'], 'application/json; charset=utf-8')
   assert.equal(res.body[0].id, 'mock-mbid')
 })
 
@@ -430,6 +612,7 @@ test('artist lookup returns valid response when a provider partially fails', asy
     aggregateArtist: async (term) => ({
       artistName: term,
       id: 'partial-mbid',
+      foreignArtistId: 'partial-mbid',
       albums: [],
       confidence: 1,
       providers: [{ name: 'musicbrainz', score: 100 }],
@@ -443,7 +626,14 @@ test('artist lookup returns valid response when a provider partially fails', asy
   await controller.handleArtistLookup({ query: { term: 'partial failure' } }, res)
 
   assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Providers'], 'musicbrainz')
+  assert.equal(res.body.length, 1)
   assert.equal(res.body[0].id, 'partial-mbid')
+  assert.equal(res.body[0].foreignArtistId, 'partial-mbid')
+  assert.equal(res.body[0].partial, true)
+  assert.equal(res.body[0].warning, 'One or more providers failed')
+  assertRequiredArtistLookupFields(res.body[0])
+  assertNoUnsupportedArtistLookupFields(res.body[0])
 })
 
 test('artist lookup returns stale cache when upstream background refresh fails', async () => {
@@ -540,6 +730,90 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
   assert.equal(res.body.albums[0].id, 'rg-ok')
   assert.equal(res.body.albums[0].releaseDate, '1997-05-21T00:00:00Z')
   assert.equal(Object.prototype.hasOwnProperty.call(res.body.albums[0], 'firstReleaseDate'), false)
+})
+
+test('artist by id preserves nested release track data while enforcing strict SkyHook album keys', async () => {
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'Track Artist',
+      id,
+      disambiguation: '',
+      overview: 'Artist overview',
+      aliases: ['Track Alias'],
+      artistAliases: ['Track Alias'],
+      images: [
+        { coverType: 'poster', url: 'https://example.test/artist.jpg', remoteUrl: 'https://example.test/artist.jpg' }
+      ],
+      links: [{ name: 'Homepage', url: 'https://example.test/track-artist' }],
+      genres: ['Alternative'],
+      albums: [{
+        name: 'Tracked Album',
+        id: 'rg-tracked',
+        firstReleaseDate: '2010-01-01T00:00:00Z',
+        releaseDate: '2010-02-02',
+        imageUrl: 'https://example.test/tracked.jpg',
+        remoteCover: 'https://example.test/tracked.jpg',
+        provider: 'musicbrainz',
+        ids: { musicbrainzReleaseGroupId: 'rg-tracked' },
+        releases: [{
+          id: 'rel-tracked',
+          title: 'Tracked Album',
+          releaseDate: '2010-02-02',
+          status: 'Official',
+          trackCount: 2,
+          tracks: [{
+            artistId: id,
+            durationMs: 181000,
+            id: 'track-1',
+            recordingId: 'recording-1',
+            trackName: 'Track One',
+            trackNumber: '1',
+            trackPosition: 1,
+            mediumNumber: 1
+          }, {
+            artistId: id,
+            durationMs: 182000,
+            id: 'track-2',
+            recordingId: 'recording-2',
+            trackName: 'Track Two',
+            trackNumber: '2',
+            trackPosition: 2,
+            mediumNumber: 1
+          }]
+        }]
+      }],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 1 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: 'artist-track-id' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  const album = res.body.albums[0]
+  const release = album.releases[0]
+  assert.deepEqual(sortedKeys(album), [...SKYHOOK_ALBUM_REQUIRED_KEYS].sort())
+  assert.deepEqual(sortedKeys(release), [...SKYHOOK_RELEASE_REQUIRED_KEYS].sort())
+  assert.deepEqual(sortedKeys(release.tracks[0]), [...SKYHOOK_TRACK_REQUIRED_KEYS].sort())
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'firstReleaseDate'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'remoteCover'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'provider'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'ids'), false)
+  assert.equal(album.id, 'rg-tracked')
+  assert.equal(album.releaseDate, '2010-02-02T00:00:00Z')
+  assert.equal(release.id, 'rel-tracked')
+  assert.equal(release.trackCount, 2)
+  assert.equal(release.tracks.length, 2)
+  assert.equal(release.tracks[0].trackName, 'Track One')
+  assert.equal(release.tracks[0].artistId, 'artist-track-id')
+  assert.deepEqual(release.tracks[0].oldIds, [])
+  assert.deepEqual(release.tracks[0].oldRecordingIds, [])
+  assert.equal(release.tracks[1].trackName, 'Track Two')
 })
 
 test('artist by id enriches missing artist images and preserves MusicBrainz album ratings before returning SkyHook metadata', async () => {

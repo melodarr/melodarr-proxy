@@ -1,0 +1,147 @@
+{
+  "query": "Radiohead",
+  "status": "partial",
+  "partial": true,
+  "warning": "Some providers failed: itunes: upstream request failed",
+  "results": [
+    {
+      "schemaVersion": "skyhook-v1",
+      "artistName": "Radiohead",
+      "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "foreignArtistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+      "disambiguation": "English alternative rock band",
+      "overview": "English alternative rock band from Abingdon, Oxfordshire.",
+      "oldIds": [],
+      "aliases": [
+        "On a Friday"
+      ],
+      "artistAliases": [
+        "On a Friday"
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "https://fixtures.melodarr.local/musicbrainz/radiohead/poster.jpg",
+          "remoteUrl": "https://fixtures.melodarr.local/musicbrainz/radiohead/poster.jpg"
+        },
+        {
+          "coverType": "fanart",
+          "remoteUrl": "https://fixtures.melodarr.local/musicbrainz/radiohead/fanart.jpg"
+        }
+      ],
+      "albums": [
+        {
+          "id": "b1392450-e666-3926-a536-22c65f834433",
+          "title": "OK Computer",
+          "name": "OK Computer",
+          "year": 1997,
+          "firstReleaseDate": "1997-05-21",
+          "releaseDate": "1997-05-21",
+          "trackCount": 12,
+          "type": "Album",
+          "albumType": "Album",
+          "secondaryTypes": [],
+          "releaseStatuses": [
+            "Official"
+          ],
+          "imageUrl": "https://fixtures.melodarr.local/musicbrainz/release-group/b1392450-e666-3926-a536-22c65f834433/front-250.jpg",
+          "images": [
+            {
+              "coverType": "cover",
+              "remoteUrl": "https://fixtures.melodarr.local/musicbrainz/release-group/b1392450-e666-3926-a536-22c65f834433/front-250.jpg"
+            }
+          ],
+          "remoteCover": "https://fixtures.melodarr.local/musicbrainz/release-group/b1392450-e666-3926-a536-22c65f834433/front-250.jpg",
+          "rating": {
+            "count": 42,
+            "value": 4.8
+          },
+          "ratings": {
+            "votes": 42,
+            "value": 4.8
+          },
+          "ids": {
+            "musicbrainzReleaseGroupId": "b1392450-e666-3926-a536-22c65f834433"
+          },
+          "provider": "musicbrainz",
+          "providerMetadata": {
+            "source": "MusicBrainz",
+            "releaseGroupType": "album",
+            "country": "GB"
+          },
+          "releases": [
+            {
+              "id": "f5093c06-23e3-404f-aeaa-40f72885ee3a",
+              "title": "OK Computer",
+              "status": "Official",
+              "disambiguation": "",
+              "country": [
+                "GB"
+              ],
+              "releaseDate": "1997-05-21",
+              "trackCount": 12,
+              "media": [],
+              "tracks": []
+            }
+          ]
+        }
+      ],
+      "partial": true,
+      "warning": "Some providers failed: itunes: upstream request failed",
+      "providerCount": 2,
+      "providers": [
+        {
+          "name": "musicbrainz",
+          "status": "success",
+          "score": 100,
+          "albumCount": 1,
+          "metadata": {
+            "artistMbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+            "endpoint": "artist-lookup"
+          }
+        },
+        {
+          "name": "itunes",
+          "status": "failed",
+          "score": 0,
+          "albumCount": 0,
+          "error": {
+            "code": "UPSTREAM_REQUEST_FAILED",
+            "message": "upstream request failed"
+          }
+        }
+      ],
+      "providerErrors": [
+        {
+          "provider": "itunes",
+          "code": "UPSTREAM_REQUEST_FAILED",
+          "message": "upstream request failed"
+        }
+      ],
+      "confidence": 100
+    }
+  ],
+  "providers": [
+    {
+      "name": "musicbrainz",
+      "status": "success",
+      "albumCount": 1
+    },
+    {
+      "name": "itunes",
+      "status": "failed",
+      "albumCount": 0,
+      "error": {
+        "code": "UPSTREAM_REQUEST_FAILED",
+        "message": "upstream request failed"
+      }
+    }
+  ],
+  "providerErrors": [
+    {
+      "provider": "itunes",
+      "code": "UPSTREAM_REQUEST_FAILED",
+      "message": "upstream request failed"
+    }
+  ]
+}
