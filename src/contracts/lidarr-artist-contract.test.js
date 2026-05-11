@@ -17,6 +17,9 @@ const {
 
 const fixturesDir = path.join(__dirname, '../fixtures/lidarr')
 
+const VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID = 'b8fee959-1da5-450b-8708-8f218f6414d4'
+const VIVA_LAS_VENGEANCE_RELEASE_DATE = '2022-08-19T00:00:00Z'
+
 function readFixture (name) {
   return JSON.parse(fs.readFileSync(path.join(fixturesDir, name), 'utf8'))
 }
@@ -29,6 +32,25 @@ function assertKeysExact (obj, allowedKeys, label) {
   for (const key of allowedKeys) {
     assert.ok(key in obj, `${label} missing required key: "${key}"`)
   }
+}
+
+function makeTracks (count, artistId = 'b9472588-93f3-4922-a1a2-74082cdf9ce8') {
+  return Array.from({ length: count }, (_, index) => {
+    const position = index + 1
+    return {
+      artistId,
+      durationMs: 180000 + position,
+      id: `viva-track-${position}`,
+      oldIds: [],
+      recordingId: `viva-recording-${position}`,
+      oldRecordingIds: [],
+      trackName: `Track ${position}`,
+      trackNumber: String(position),
+      trackPosition: position,
+      explicit: false,
+      mediumNumber: 1
+    }
+  })
 }
 
 // ─── Top-level artist shape ──────────────────────────────────────────
@@ -166,6 +188,43 @@ test('Nested album images match image contract exactly', () => {
 
   for (const image of images) {
     assertKeysExact(image, SKYHOOK_IMAGE_REQUIRED_KEYS, 'nested album image')
+  }
+})
+
+test('Artist by ID nested Viva Las Vengeance releases preserve complete track counts', () => {
+  const artist = toSkyhookArtistResource({
+    id: 'b9472588-93f3-4922-a1a2-74082cdf9ce8',
+    artistName: 'Panic! at the Disco',
+    albums: [{
+      id: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID,
+      title: 'Viva Las Vengeance',
+      releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+      releases: [{
+        id: 'ec5aab3d-8f86-43c2-8b16-455ac84a97b2',
+        title: 'Viva Las Vengeance',
+        releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+        status: 'Official',
+        trackCount: 12,
+        media: [{
+          name: 'Digital Media',
+          format: 'Digital Media',
+          position: 1
+        }],
+        tracks: makeTracks(12)
+      }]
+    }]
+  })
+
+  const album = artist.albums.find(album => album.title === 'Viva Las Vengeance')
+  assert.ok(album, 'artist-by-id response must include Viva Las Vengeance')
+
+  const matchingRelease = album.releases.find(release => release.trackCount === 12)
+  assert.ok(matchingRelease, 'Viva Las Vengeance must include at least one 12-track release')
+
+  for (const release of album.releases) {
+    if (release.trackCount > 0) {
+      assert.equal(release.tracks.length, release.trackCount)
+    }
   }
 })
 

@@ -17,6 +17,10 @@ const {
 
 const fixturesDir = path.join(__dirname, '../fixtures/lidarr')
 
+const VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID = 'b8fee959-1da5-450b-8708-8f218f6414d4'
+const VIVA_LAS_VENGEANCE_RELEASE_DATE = '2022-08-19T00:00:00Z'
+const VIVA_LAS_VENGEANCE_COVER = `https://coverartarchive.org/release-group/${VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID}/front-250`
+
 function readFixture (name) {
   return JSON.parse(fs.readFileSync(path.join(fixturesDir, name), 'utf8'))
 }
@@ -29,6 +33,25 @@ function assertKeysExact (obj, allowedKeys, label) {
   for (const key of allowedKeys) {
     assert.ok(key in obj, `${label} missing required key: "${key}"`)
   }
+}
+
+function makeTracks (count, artistId = 'b9472588-93f3-4922-a1a2-74082cdf9ce8') {
+  return Array.from({ length: count }, (_, index) => {
+    const position = index + 1
+    return {
+      artistId,
+      durationMs: 180000 + position,
+      id: `viva-track-${position}`,
+      oldIds: [],
+      recordingId: `viva-recording-${position}`,
+      oldRecordingIds: [],
+      trackName: `Track ${position}`,
+      trackNumber: String(position),
+      trackPosition: position,
+      explicit: false,
+      mediumNumber: 1
+    }
+  })
 }
 
 test('Album by ID response matches SkyHook album contract exactly', () => {
@@ -134,6 +157,54 @@ test('Nested artist resources match SkyHook artist contract exactly', () => {
 
   for (const artist of album.artists) {
     assertKeysExact(artist, SKYHOOK_ARTIST_RESOURCE_KEYS, 'nested artist')
+  }
+})
+
+test('Album by ID Viva Las Vengeance includes complete image, media, and track metadata', () => {
+  const album = toSkyhookAlbumResource({
+    id: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID,
+    title: 'Viva Las Vengeance',
+    releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+    artistId: 'b9472588-93f3-4922-a1a2-74082cdf9ce8',
+    images: [{
+      coverType: 'cover',
+      url: VIVA_LAS_VENGEANCE_COVER,
+      remoteUrl: VIVA_LAS_VENGEANCE_COVER
+    }],
+    releases: [{
+      id: 'ec5aab3d-8f86-43c2-8b16-455ac84a97b2',
+      title: 'Viva Las Vengeance',
+      releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+      status: 'Official',
+      trackCount: 12,
+      media: [{
+        name: 'Digital Media',
+        format: 'Digital Media',
+        position: 1
+      }],
+      tracks: makeTracks(12)
+    }]
+  })
+
+  assert.equal(album.images.length, 1)
+  assert.deepEqual(album.images[0], {
+    coverType: 'cover',
+    url: VIVA_LAS_VENGEANCE_COVER,
+    height: 0,
+    width: 0
+  })
+
+  const release = album.releases[0]
+  assert.ok(release.media.length > 0, 'album-by-id release must include media')
+  assert.ok(release.tracks.length > 0, 'album-by-id release must include tracks')
+  assert.equal(release.trackCount, release.tracks.length)
+
+  for (const track of release.tracks) {
+    assert.notEqual(track.id, '')
+    assert.notEqual(track.recordingId, '')
+    assert.notEqual(track.trackName, '')
+    assert.ok(track.trackPosition > 0, 'trackPosition must be positive')
+    assert.ok(track.mediumNumber > 0, 'mediumNumber must be positive')
   }
 })
 

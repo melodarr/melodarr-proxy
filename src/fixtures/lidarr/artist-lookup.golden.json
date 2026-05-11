@@ -21,15 +21,36 @@
         "images": [
           {
             "coverType": "cover",
-            "url": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front",
-            "remoteUrl": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front"
+            "url": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front-250",
+            "remoteUrl": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front-250"
           }
         ],
-        "remoteCover": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front",
+        "remoteCover": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front-250",
         "provider": "musicbrainz",
         "ids": {
           "musicbrainzReleaseGroupId": "b1392450-e666-3926-a536-22c65f834433"
-        }
+        },
+        "releases": [
+          {
+            "id": "f5093e06-23e3-4a5e-8cfa-d9b6e2c7e9b0",
+            "title": "OK Computer",
+            "disambiguation": "UK first pressing",
+            "country": ["GB"],
+            "releaseDate": "1997-06-16",
+            "oldIds": [],
+            "label": ["Parlophone"],
+            "status": "Official",
+            "trackCount": 12,
+            "media": [
+              {
+                "name": "CD",
+                "format": "CD",
+                "position": 1
+              }
+            ],
+            "tracks": []
+          }
+        ]
       }
     ],
     "providers": [
