@@ -40,7 +40,6 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
 
     await t.test(`Replay ${file}`, async (subT) => {
       const { req, res } = mockReqRes()
-
       // Match fixture names explicitly so similarly named endpoints with different
       // response shapes are replayed against the correct controller.
       if (file.includes('skyhook-search') || file.startsWith('search-') || file.includes('-search.')) {
@@ -88,7 +87,6 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
       }
 
       const diff = structuralDiff(expected, res.body)
-
       assert.equal(
         diff.length,
         0,
