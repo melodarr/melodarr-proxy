@@ -100,9 +100,9 @@ For degraded responses, `X-Providers` lists providers whose usable normalized da
 
 ## Image Normalization
 
-Artist images are returned in the artist-level `images` array. Album images are returned in each album object's `images` array. Image objects are normalized to a Lidarr/SkyHook-compatible shape and include stable fields only.
+Artist images are returned in the artist-level `images` array. Album images are returned in each album object's `images` array. Image objects are normalized to a Lidarr/SkyHook-compatible shape.
 
-Image URLs are absolute URLs when provided by an upstream provider. Relative paths, provider-specific image envelopes, duplicate image entries, and unsupported provider-only fields are removed during normalization. If an image type is known, it is normalized to a stable type value such as `poster`, `banner`, `fanart`, `cover`, or `unknown`.
+During normalization, the proxy selects a usable image URL from the upstream image data (for example, `url` or `remoteUrl`) and may include `coverType` when that value is supplied upstream. The contract does not guarantee absolute-URL enforcement, duplicate removal, provider-envelope stripping, or remapping of image types to a fixed enum.
 
 If no valid images are available for an artist or album, the corresponding `images` field is an empty array.
 
