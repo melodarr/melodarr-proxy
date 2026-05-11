@@ -444,7 +444,7 @@ async function aggregateArtist (term) {
       score += Math.floor(Math.sqrt(resolution) / 10)
     }
 
-    // Source weight (AudioDB > Discogs > CoverArtArchive > iTunes)
+    // Source weight (AudioDB > Discogs > Cover Art Archive > iTunes)
     if (candidate.imageSource === 'theaudiodb') score += 40
     else if (candidate.imageSource === 'discogs') score += 30
     else if (candidate.imageSource === 'coverartarchive') score += 20
