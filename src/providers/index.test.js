@@ -186,6 +186,59 @@ test('Providers Index', async (t) => {
     assert.strictEqual(result.images[0].imageSource, 'theaudiodb')
   })
 
+  await t.test('aggregateArtist - normalizes provider metric names before adaptive sorting', async (subT) => {
+    delete require.cache[require.resolve('./index')]
+    let metricNames = []
+    subT.after(() => {
+      delete require.cache[require.resolve('../health/providerMetrics')]
+    })
+    require.cache[require.resolve('../settings/store')] = {
+      exports: { getConfigValue: () => 'theaudiodb,itunes' }
+    }
+    require.cache[require.resolve('../utils/logger')] = {
+      exports: { error () {}, warn () {}, info () {}, debug () {} }
+    }
+    require.cache[require.resolve('../metrics')] = { exports: {} }
+    require.cache[require.resolve('../health/providerMetrics')] = {
+      exports: {
+        computeScore: () => 1,
+        get: () => null,
+        sortByScore: (providers, getName) => {
+          metricNames = providers.map(provider => getName(provider))
+          return providers
+        }
+      }
+    }
+    require.cache[require.resolve('./scoring')] = {
+      exports: { getProviderScore: () => 0.9 }
+    }
+    require.cache[require.resolve('./theaudiodb.provider')] = {
+      exports: {
+        name: 'audiodb',
+        searchArtist: async () => ({
+          artistName: 'Alias Artist',
+          images: [],
+          albums: []
+        })
+      }
+    }
+    require.cache[require.resolve('./itunes.provider')] = {
+      exports: {
+        name: 'itunes',
+        searchArtist: async () => ({
+          artistName: 'Alias Artist',
+          images: [],
+          albums: []
+        })
+      }
+    }
+
+    const index = require('./index')
+    await index.aggregateArtist('Alias Artist')
+
+    assert.deepStrictEqual(metricNames, ['theaudiodb', 'itunes'])
+  })
+
   await t.test('aggregateArtist - preserves aliases from the highest scored provider with aliases', async () => {
     delete require.cache[require.resolve('./index')]
     require.cache[require.resolve('../settings/store')] = {

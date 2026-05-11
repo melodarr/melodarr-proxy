@@ -20,19 +20,19 @@ if (!fs.existsSync(OUT_DIR)) {
   fs.mkdirSync(OUT_DIR, { recursive: true })
 }
 
-async function fetchSkyhook(url) {
+async function fetchSkyhook (url) {
   console.log(`Fetching from ${url} ...`)
   const response = await fetch(url, {
     headers: {
       'User-Agent': 'Lidarr/1.0.0 (https://github.com/lidarr/Lidarr)',
-      'Accept': 'application/json'
+      Accept: 'application/json'
     }
   })
-  
+
   if (!response.ok) {
     throw new Error(`Skyhook returned ${response.status} ${response.statusText}`)
   }
-  
+
   const text = await response.text()
   try {
     const parsed = JSON.parse(text)
@@ -42,10 +42,10 @@ async function fetchSkyhook(url) {
   }
 }
 
-async function main() {
+async function main () {
   let url = ''
   let filename = ''
-  
+
   if (command === 'lookup') {
     url = `${SKYHOOK_BASE}/artist/lookup?term=${encodeURIComponent(param)}`
     filename = `lookup-${param.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`

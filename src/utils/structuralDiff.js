@@ -1,4 +1,4 @@
-function structuralDiff(expected, actual, path = 'root') {
+function structuralDiff (expected, actual, path = 'root') {
   const errors = []
 
   if (expected === null) {
@@ -42,7 +42,7 @@ function structuralDiff(expected, actual, path = 'root') {
         errors.push(...structuralDiff(expected[key], actual[key], `${path}.${key}`))
       }
     }
-    
+
     // We optionally can flag extra keys
     for (const key of actualKeys) {
       if (!expectedKeys.includes(key)) {
