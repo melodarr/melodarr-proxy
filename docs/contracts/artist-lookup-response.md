@@ -171,7 +171,7 @@ If stale or fallback normalized artist data is available, the response may inclu
 ```json
 {
   "partial": true,
-  "warning": "All providers failed; returning fallback data."
+  "warning": "One or more providers failed"
 }
 ```
 
