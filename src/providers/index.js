@@ -271,7 +271,7 @@ async function aggregateArtist (term) {
           } else {
             const getScore = (url, source, pw) => {
               let score = 10
-              if (source === 'audiodb') score += 130
+              if (source === 'theaudiodb') score += 130
               else if (source === 'coverartarchive') score += 70
               else if (source === 'itunes') score += 70
               if (url && url.startsWith('https://')) score += 5
@@ -428,7 +428,7 @@ async function aggregateArtist (term) {
     // Resolution bonus
     let width = 0
     let height = 0
-    if (candidate.imageSource === 'audiodb') {
+    if (candidate.imageSource === 'theaudiodb') {
       width = 1000
       height = 1000
     } else if (candidate.imageSource === 'itunes') {
@@ -444,8 +444,8 @@ async function aggregateArtist (term) {
       score += Math.floor(Math.sqrt(resolution) / 10)
     }
 
-    // Source weight (AudioDB > Discogs > iTunes)
-    if (candidate.imageSource === 'audiodb') score += 40
+    // Source weight (AudioDB > Discogs > CoverArtArchive > iTunes)
+    if (candidate.imageSource === 'theaudiodb') score += 40
     else if (candidate.imageSource === 'discogs') score += 30
     else if (candidate.imageSource === 'coverartarchive') score += 20
     else if (candidate.imageSource === 'itunes') score += 10
