@@ -41,8 +41,20 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
     await t.test(`Replay ${file}`, async (subT) => {
       const { req, res } = mockReqRes()
       
-      // Basic heuristic to route the fixture to the right controller
-      if (file.includes('lookup') || file.includes('search')) {
+      // Match fixture names explicitly so similarly named endpoints with different
+      // response shapes are replayed against the correct controller.
+      if (file.includes('skyhook-search') || file.startsWith('search-') || file.includes('-search.')) {
+        req.query.term = 'Radiohead'
+        subT.mock.method(providers, 'aggregateArtist', async () => ({
+          id: 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+          artistName: 'Radiohead',
+          albums: [],
+          providers: [],
+          confidence: 100,
+          score: 100
+        }))
+        await skyhookController.handleSearch(req, res)
+      } else if (file.includes('lookup')) {
         req.query.term = 'Radiohead'
         // We'd mock upstream to return something that gets processed
         subT.mock.method(providers, 'aggregateArtist', async () => ({
