@@ -92,8 +92,10 @@ function expectedShapeForFixture (file, expected) {
 }
 
 test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
-  // If we don't have raw fixtures yet, we can skip or use golden fixtures.
-  const fixturesDir = fs.existsSync(RAW_FIXTURES_DIR) ? RAW_FIXTURES_DIR : GOLDEN_FIXTURES_DIR
+  // Use golden fixtures by default so test expectations are deterministic across environments.
+  // Raw fixture replay must be explicitly enabled, e.g. `LIDARR_REPLAY_RAW=1`.
+  const useRawFixtures = process.env.LIDARR_REPLAY_RAW === '1'
+  const fixturesDir = useRawFixtures ? RAW_FIXTURES_DIR : GOLDEN_FIXTURES_DIR
 
   if (!fs.existsSync(fixturesDir)) {
     console.warn('No fixtures directory found to run replay tests against.')
