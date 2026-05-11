@@ -98,7 +98,7 @@ router.get('/v0.4/recent/album', proxyRateLimiter, proxyAuthMiddleware, proxySta
 // Lidarr's C# URI builder strips query parameters from base URLs, so we must allow the key in the path
 const pathAuthMiddleware = (req, res, next) => {
   if (req.params.apiKey) {
-    req.query.api_key = req.params.apiKey
+    req.pathApiKey = req.params.apiKey
     return next()
   }
   return next('route')
