@@ -83,7 +83,7 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
         }))
         await skyhookController.handleAlbumById(req, res)
       } else {
-        // Skip for unhandled fixture types
+        subT.skip(`Unhandled fixture type for ${file}`)
         return
       }
 
