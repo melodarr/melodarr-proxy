@@ -312,13 +312,17 @@ class MusicBrainzProvider {
     return Array.isArray(releaseResult?.releases) ? releaseResult.releases : []
   }
 
-  async enrichMissingReleaseGroupSummary (summary, fallbackArtistId) {
+  async enrichMissingReleaseGroupSummary (summary, fallbackArtistId, releaseGroupReleasesCache = new Map()) {
     if (!summary?.id || this.hasUsableReleaseTracks(summary.releases)) {
       return summary
     }
 
     try {
-      const rawReleases = await this.fetchReleaseGroupReleases(summary.id)
+      let rawReleases = releaseGroupReleasesCache.get(summary.id)
+      if (!rawReleases) {
+        rawReleases = await this.fetchReleaseGroupReleases(summary.id)
+        releaseGroupReleasesCache.set(summary.id, rawReleases)
+      }
       const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
 
       if (releases.length === 0) {
@@ -339,6 +343,7 @@ class MusicBrainzProvider {
 
   async mapReleaseGroupSummaries (releaseGroups = [], fallbackArtistId = '') {
     const releasesByGroup = await this.fetchArtistReleasesByGroup(fallbackArtistId)
+    const releaseGroupReleasesCache = new Map()
 
     const summaries = releaseGroups
       .filter((group) => {
@@ -352,7 +357,7 @@ class MusicBrainzProvider {
 
     const enrichedSummaries = []
     for (const summary of summaries) {
-      enrichedSummaries.push(await this.enrichMissingReleaseGroupSummary(summary, fallbackArtistId))
+      enrichedSummaries.push(await this.enrichMissingReleaseGroupSummary(summary, fallbackArtistId, releaseGroupReleasesCache))
     }
 
     return enrichedSummaries
