@@ -5,10 +5,13 @@ const path = require('node:path')
 
 const {
   SKYHOOK_ARTIST_RESOURCE_KEYS,
-  SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS,
+  SKYHOOK_ALBUM_REQUIRED_KEYS,
   SKYHOOK_IMAGE_REQUIRED_KEYS,
   SKYHOOK_LINK_REQUIRED_KEYS,
   SKYHOOK_RATING_REQUIRED_KEYS,
+  SKYHOOK_RELEASE_REQUIRED_KEYS,
+  SKYHOOK_TRACK_REQUIRED_KEYS,
+  SKYHOOK_MEDIUM_REQUIRED_KEYS,
   toSkyhookArtistResource
 } = require('../utils/lidarrArtist')
 
@@ -116,16 +119,16 @@ test('Artist link resources match link contract exactly', () => {
   }
 })
 
-// ─── Nested album summaries ─────────────────────────────────────────
+// ─── Nested albums ──────────────────────────────────────────────────
 
-test('Artist by ID nested albums match the Metadata summary contract exactly', () => {
+test('Artist by ID nested albums match the full SkyHook album contract exactly', () => {
   const fixture = readFixture('artist-by-id.golden.json')
   const artist = toSkyhookArtistResource(fixture)
 
   assert.ok(artist.albums.length > 0, 'fixture must contain at least one album')
 
   for (const album of artist.albums) {
-    assertKeysExact(album, SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS, 'nested album summary')
+    assertKeysExact(album, SKYHOOK_ALBUM_REQUIRED_KEYS, 'nested album')
   }
 })
 
@@ -140,18 +143,31 @@ test('Nested album rating resources match rating contract exactly', () => {
   }
 })
 
-test('Artist by ID nested albums omit releases and tracks for Lidarr GetArtistInfo', () => {
+test('Artist by ID nested albums include releases and tracks for Lidarr refresh completeness', () => {
   const fixture = readFixture('artist-by-id.golden.json')
   const artist = toSkyhookArtistResource(fixture)
 
   for (const album of artist.albums) {
-    assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
-    assert.equal(Object.prototype.hasOwnProperty.call(album, 'tracks'), false)
-    assert.equal(Object.prototype.hasOwnProperty.call(album, 'media'), false)
+    assert.ok(Array.isArray(album.releases), 'nested album must include releases')
+    assert.ok(album.releases.length > 0, 'nested album must include at least one release')
+
+    for (const release of album.releases) {
+      assertKeysExact(release, SKYHOOK_RELEASE_REQUIRED_KEYS, 'nested album release')
+      assert.ok(Array.isArray(release.tracks), 'nested album release must include tracks')
+      assert.ok(release.tracks.length > 0, 'nested album release must include at least one track')
+
+      for (const track of release.tracks) {
+        assertKeysExact(track, SKYHOOK_TRACK_REQUIRED_KEYS, 'nested album release track')
+      }
+
+      for (const medium of release.media) {
+        assertKeysExact(medium, SKYHOOK_MEDIUM_REQUIRED_KEYS, 'nested album release medium')
+      }
+    }
   }
 })
 
-test('Artist by ID nested Viva Las Vengeance returns a summary only', () => {
+test('Artist by ID nested Viva Las Vengeance preserves track metadata', () => {
   const artist = toSkyhookArtistResource({
     id: 'b9472588-93f3-4922-a1a2-74082cdf9ce8',
     artistName: 'Panic! at the Disco',
@@ -177,7 +193,8 @@ test('Artist by ID nested Viva Las Vengeance returns a summary only', () => {
 
   const album = artist.albums.find(album => album.title === 'Viva Las Vengeance')
   assert.ok(album, 'artist-by-id response must include Viva Las Vengeance')
-  assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
+  assert.equal(album.releases[0].trackCount, 12)
+  assert.equal(album.releases[0].tracks.length, 12)
 })
 
 // ─── Stripping unknown fields ───────────────────────────────────────

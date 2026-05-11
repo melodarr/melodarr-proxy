@@ -118,17 +118,6 @@ const SKYHOOK_ALBUM_REQUIRED_KEYS = Object.freeze([
   'releaseStatuses'
 ])
 
-const SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS = Object.freeze([
-  'oldIds',
-  'id',
-  'title',
-  'type',
-  'secondaryTypes',
-  'releaseStatuses',
-  'releaseDate',
-  'rating'
-])
-
 const SKYHOOK_RELEASE_REQUIRED_KEYS = Object.freeze([
   'disambiguation',
   'country',
@@ -314,6 +303,7 @@ function normalizeTrackResource (track = {}) {
 }
 
 function normalizeReleaseResource (release = {}) {
+  const tracks = normalizeArray(release.tracks || release.Tracks).map(normalizeTrackResource)
   return {
     disambiguation: asString(release.disambiguation || release.Disambiguation),
     country: normalizeStringArray(release.country || release.Country),
@@ -324,8 +314,8 @@ function normalizeReleaseResource (release = {}) {
     media: normalizeArray(release.media || release.Media).map(normalizeMediumResource),
     title: asString(release.title || release.Title),
     status: asString(release.status || release.Status || 'Official'),
-    trackCount: Number(release.trackCount ?? release.TrackCount ?? 0) || 0,
-    tracks: normalizeArray(release.tracks || release.Tracks).map(normalizeTrackResource)
+    trackCount: Number(release.trackCount ?? release.TrackCount ?? tracks.length) || 0,
+    tracks
   }
 }
 
@@ -410,36 +400,9 @@ function toSkyhookArtistResource (artist = {}) {
     links: normalizeArray(artist.links || artist.Links).map(normalizeLinkResource),
     artistName: asString(artist.artistName || artist.ArtistName),
     artistAliases: normalizeAliases(artist),
-    albums: normalizeArray(artist.albums || artist.Albums).map(toSkyhookArtistAlbumSummaryResource),
+    albums: normalizeArray(artist.albums || artist.Albums).map(toSkyhookAlbumResource),
     status: asString(artist.status || artist.Status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
     rating: normalizeRatingResource(artist.rating || artist.Rating || artist.ratings)
-  }
-}
-
-function normalizeAlbumSummary (album = {}) {
-  return {
-    oldIds: normalizeStringArray(album.oldIds || album.OldIds),
-    id: asString(album.id || album.Id || album.foreignAlbumId),
-    title: asString(album.title || album.Title),
-    type: asString(album.type || album.Type || 'Album'),
-    secondaryTypes: normalizeStringArray(album.secondaryTypes || album.SecondaryTypes),
-    releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
-    releaseDate: toIsoDate(album.releaseDate || album.ReleaseDate) || null,
-    rating: normalizeRatingResource(album.rating || album.Rating || album.ratings)
-  }
-}
-
-function toSkyhookArtistAlbumSummaryResource (album = {}) {
-  const normalized = normalizeAlbumSummary(album)
-  return {
-    oldIds: normalized.oldIds,
-    id: normalized.id,
-    title: normalized.title,
-    type: normalized.type,
-    secondaryTypes: normalized.secondaryTypes,
-    releaseStatuses: normalized.releaseStatuses,
-    releaseDate: normalized.releaseDate,
-    rating: normalized.rating
   }
 }
 
@@ -595,7 +558,6 @@ module.exports = {
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   LIDARR_OPTIONAL_ARTIST_KEYS,
   SKYHOOK_ARTIST_RESOURCE_KEYS,
-  SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS,
   SKYHOOK_ALBUM_REQUIRED_KEYS,
   SKYHOOK_RELEASE_REQUIRED_KEYS,
   SKYHOOK_TRACK_REQUIRED_KEYS,
@@ -609,7 +571,6 @@ module.exports = {
   normalizeLidarrArtistResponse,
   normalizeStringArray,
   toSkyhookAlbumResource,
-  toSkyhookArtistAlbumSummaryResource,
   toSkyhookArtistResource,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults

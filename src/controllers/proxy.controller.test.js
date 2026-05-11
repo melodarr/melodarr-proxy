@@ -725,7 +725,7 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
   assert.equal(Object.prototype.hasOwnProperty.call(res.body.albums[0], 'firstReleaseDate'), false)
 })
 
-test('artist by id returns album summaries without nested release track data', async () => {
+test('artist by id returns full nested album release track data', async () => {
   const { controller } = loadController({
     lookupArtistById: async (id) => ({
       artistName: 'Track Artist',
@@ -789,15 +789,21 @@ test('artist by id returns album summaries without nested release track data', a
 
   assert.equal(res.statusCode, 200)
   const album = res.body.albums[0]
-  assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
-  assert.equal(Object.prototype.hasOwnProperty.call(album, 'artists'), false)
-  assert.equal(Object.prototype.hasOwnProperty.call(album, 'artistId'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), true)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'firstReleaseDate'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'remoteCover'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'provider'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'ids'), false)
   assert.equal(album.id, 'rg-tracked')
+  assert.equal(album.title, 'Tracked Album')
+  assert.equal(album.type, 'Album')
   assert.equal(album.releaseDate, '2010-02-02T00:00:00Z')
+  assert.equal(album.releases.length, 1)
+  assert.equal(album.releases[0].id, 'rel-tracked')
+  assert.equal(album.releases[0].trackCount, 2)
+  assert.equal(album.releases[0].tracks.length, 2)
+  assert.equal(album.releases[0].tracks[0].trackName, 'Track One')
+  assert.equal(album.releases[0].tracks[1].trackName, 'Track Two')
 })
 
 test('artist by id enriches missing artist images and preserves MusicBrainz album ratings before returning SkyHook metadata', async () => {
