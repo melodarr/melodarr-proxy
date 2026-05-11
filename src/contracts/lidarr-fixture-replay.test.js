@@ -22,6 +22,8 @@ const {
 
 const RAW_FIXTURES_DIR = path.join(__dirname, '../fixtures/skyhook-raw')
 const GOLDEN_FIXTURES_DIR = path.join(__dirname, '../fixtures/lidarr')
+const DEFAULT_ARTIST_ID = 'a74b1b7f-71a5-4011-9441-d0b5e4122711'
+const DEFAULT_ARTIST_NAME = 'Radiohead'
 
 function mockReqRes (query = {}, params = {}) {
   const req = { query, params, headers: {} }
@@ -128,11 +130,13 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
         req.query.term = 'Radiohead'
         const artistCandidate = expected.find(item => item.artist)?.artist
         const albumCandidate = expected.find(item => item.album)?.album
+        const fallbackArtistId = artistCandidate?.id || albumCandidate?.artistId || DEFAULT_ARTIST_ID
+        const fallbackArtistName = albumCandidate?.artists?.[0]?.artistName || artistCandidate?.artistName || DEFAULT_ARTIST_NAME
         subT.mock.method(artistDiscovery, 'discoverArtists', async () => ([
           artistCandidate && {
             type: 'artist',
-            id: artistCandidate.id || 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
-            artistName: artistCandidate.artistName || 'Radiohead',
+            id: artistCandidate.id || fallbackArtistId,
+            artistName: artistCandidate.artistName || fallbackArtistName,
             aliases: artistCandidate.artistAliases || artistCandidate.aliases || [],
             disambiguation: artistCandidate.disambiguation || '',
             images: artistCandidate.images || [],
@@ -140,7 +144,7 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
           },
           albumCandidate && {
             type: 'album',
-            artistName: albumCandidate.artists?.[0]?.artistName || artistCandidate?.artistName || 'Radiohead',
+            artistName: fallbackArtistName,
             match: albumCandidate.title || 'Unknown Album',
             disambiguation: albumCandidate.disambiguation || '',
             overview: albumCandidate.overview || '',
@@ -151,7 +155,7 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
             images: albumCandidate.images || [],
             score: expected.find(item => item.album)?.score || 0,
             ids: {
-              musicbrainzArtistId: albumCandidate.artistId || artistCandidate?.id || 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+              musicbrainzArtistId: albumCandidate.artistId || fallbackArtistId,
               musicbrainzReleaseGroupId: albumCandidate.id || 'test-album'
             }
           }
