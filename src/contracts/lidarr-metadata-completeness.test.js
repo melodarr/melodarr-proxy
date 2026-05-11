@@ -8,7 +8,7 @@ const {
   SKYHOOK_IMAGE_REQUIRED_KEYS,
   SKYHOOK_LINK_REQUIRED_KEYS,
   SKYHOOK_RATING_REQUIRED_KEYS,
-  SKYHOOK_ALBUM_REQUIRED_KEYS,
+  SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS,
   SKYHOOK_ARTIST_RESOURCE_KEYS,
   SKYHOOK_RELEASE_REQUIRED_KEYS,
   SKYHOOK_TRACK_REQUIRED_KEYS,
@@ -380,22 +380,30 @@ describe('Cross-serializer consistency', () => {
     assert.deepStrictEqual(Object.keys(result).sort(), [...SKYHOOK_ARTIST_RESOURCE_KEYS].sort())
   })
 
-  it('nested album inherits correct schema from full provider', () => {
+  it('artist nested albums use Metadata summary schema from full provider', () => {
     const result = toSkyhookArtistResource(fullProvider)
     const album = result.albums[0]
-    assert.deepStrictEqual(Object.keys(album).sort(), [...SKYHOOK_ALBUM_REQUIRED_KEYS].sort())
+    assert.deepStrictEqual(Object.keys(album).sort(), [...SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS].sort())
   })
 
-  it('nested album images strip provider-layer keys', () => {
+  it('artist nested albums omit full album-only fields', () => {
     const result = toSkyhookArtistResource(fullProvider)
-    const albumImg = result.albums[0].images[0]
+    const album = result.albums[0]
+    assert.equal('images' in album, false)
+    assert.equal('artists' in album, false)
+    assert.equal('releases' in album, false)
+  })
+
+  it('album images strip provider-layer keys through full album serialization', () => {
+    const album = toSkyhookAlbumResource(fullProvider.albums[0])
+    const albumImg = album.images[0]
     assert.deepStrictEqual(Object.keys(albumImg).sort(), [...SKYHOOK_IMAGE_REQUIRED_KEYS].sort())
     assert.equal('imageSource' in albumImg, false)
   })
 
-  it('nested artist-in-album images strip extra keys', () => {
-    const result = toSkyhookArtistResource(fullProvider)
-    const nestedArtistImg = result.albums[0].artists[0].images[0]
+  it('nested artist-in-album images strip extra keys through full album serialization', () => {
+    const album = toSkyhookAlbumResource(fullProvider.albums[0])
+    const nestedArtistImg = album.artists[0].images[0]
     assert.deepStrictEqual(Object.keys(nestedArtistImg).sort(), [...SKYHOOK_IMAGE_REQUIRED_KEYS].sort())
     assert.equal('_extra' in nestedArtistImg, false)
   })
@@ -407,9 +415,9 @@ describe('Cross-serializer consistency', () => {
     assert.equal(mbLink.type, 'musicbrainz')
   })
 
-  it('nested release/track/medium have correct schemas through full path', () => {
-    const result = toSkyhookArtistResource(fullProvider)
-    const release = result.albums[0].releases[0]
+  it('nested release/track/medium have correct schemas through full album serialization path', () => {
+    const album = toSkyhookAlbumResource(fullProvider.albums[0])
+    const release = album.releases[0]
     assert.deepStrictEqual(Object.keys(release).sort(), [...SKYHOOK_RELEASE_REQUIRED_KEYS].sort())
 
     const track = release.tracks[0]
@@ -419,16 +427,12 @@ describe('Cross-serializer consistency', () => {
     assert.deepStrictEqual(Object.keys(medium).sort(), [...SKYHOOK_MEDIUM_REQUIRED_KEYS].sort())
   })
 
-  it('album produced by toSkyhookAlbumResource matches album nested in toSkyhookArtistResource', () => {
+  it('artist album summary and full album resource keep matching rating shape', () => {
     const albumInput = fullProvider.albums[0]
 
     const fromArtist = toSkyhookArtistResource(fullProvider).albums[0]
     const fromDirect = toSkyhookAlbumResource(albumInput)
 
-    // Keys must be identical
-    assert.deepStrictEqual(Object.keys(fromArtist).sort(), Object.keys(fromDirect).sort())
-
-    // Rating shapes must match
     assert.deepStrictEqual(
       Object.keys(fromArtist.rating).sort(),
       Object.keys(fromDirect.rating).sort()

@@ -2,10 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 const {
   LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
-  LIDARR_OPTIONAL_ARTIST_KEYS,
-  SKYHOOK_ALBUM_REQUIRED_KEYS,
-  SKYHOOK_RELEASE_REQUIRED_KEYS,
-  SKYHOOK_TRACK_REQUIRED_KEYS
+  LIDARR_OPTIONAL_ARTIST_KEYS
 } = require('../utils/lidarrArtist')
 
 const SUPPORTED_ARTIST_LOOKUP_KEYS = new Set([
@@ -25,10 +22,6 @@ function assertNoUnsupportedArtistLookupFields (artist) {
   for (const key of Object.keys(artist)) {
     assert.ok(SUPPORTED_ARTIST_LOOKUP_KEYS.has(key), `Unsupported top-level artist field: ${key}`)
   }
-}
-
-function sortedKeys (value) {
-  return Object.keys(value).sort()
 }
 
 function makeResponse () {
@@ -732,7 +725,7 @@ test('artist by id returns full artist payload for Lidarr path-segment lookup', 
   assert.equal(Object.prototype.hasOwnProperty.call(res.body.albums[0], 'firstReleaseDate'), false)
 })
 
-test('artist by id preserves nested release track data while enforcing strict SkyHook album keys', async () => {
+test('artist by id returns album summaries without nested release track data', async () => {
   const { controller } = loadController({
     lookupArtistById: async (id) => ({
       artistName: 'Track Artist',
@@ -796,24 +789,15 @@ test('artist by id preserves nested release track data while enforcing strict Sk
 
   assert.equal(res.statusCode, 200)
   const album = res.body.albums[0]
-  const release = album.releases[0]
-  assert.deepEqual(sortedKeys(album), [...SKYHOOK_ALBUM_REQUIRED_KEYS].sort())
-  assert.deepEqual(sortedKeys(release), [...SKYHOOK_RELEASE_REQUIRED_KEYS].sort())
-  assert.deepEqual(sortedKeys(release.tracks[0]), [...SKYHOOK_TRACK_REQUIRED_KEYS].sort())
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'artists'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'artistId'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'firstReleaseDate'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'remoteCover'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'provider'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(album, 'ids'), false)
   assert.equal(album.id, 'rg-tracked')
   assert.equal(album.releaseDate, '2010-02-02T00:00:00Z')
-  assert.equal(release.id, 'rel-tracked')
-  assert.equal(release.trackCount, 2)
-  assert.equal(release.tracks.length, 2)
-  assert.equal(release.tracks[0].trackName, 'Track One')
-  assert.equal(release.tracks[0].artistId, 'artist-track-id')
-  assert.deepEqual(release.tracks[0].oldIds, [])
-  assert.deepEqual(release.tracks[0].oldRecordingIds, [])
-  assert.equal(release.tracks[1].trackName, 'Track Two')
 })
 
 test('artist by id enriches missing artist images and preserves MusicBrainz album ratings before returning SkyHook metadata', async () => {

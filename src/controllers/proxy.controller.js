@@ -675,10 +675,11 @@ async function handleArtistById (req, res) {
     const enrichedTopResult = await enrichment.enrichResult(topResult, false)
     tracer.addStep(trace, 'enrichResult', Date.now() - startEnrich, 'success')
 
-    const response = toSkyhookArtistResource(buildArtistLookupResponse(enrichedData, enrichedTopResult, rankedResults))
+    const artistLookupResponse = buildArtistLookupResponse(enrichedData, enrichedTopResult, rankedResults)
+    const response = toSkyhookArtistResource(artistLookupResponse)
 
     await cache.set(cacheKey, response, 86400 * 30)
-    await cacheAlbumResponses(response.albums)
+    await cacheAlbumResponses(artistLookupResponse.albums)
     await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: ['musicbrainz'] })
 
     res.set('X-Cache', 'MISS')

@@ -116,6 +116,17 @@ const SKYHOOK_ALBUM_REQUIRED_KEYS = Object.freeze([
   'releaseStatuses'
 ])
 
+const SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS = Object.freeze([
+  'oldIds',
+  'id',
+  'title',
+  'type',
+  'secondaryTypes',
+  'releaseStatuses',
+  'releaseDate',
+  'rating'
+])
+
 const SKYHOOK_RELEASE_REQUIRED_KEYS = Object.freeze([
   'disambiguation',
   'country',
@@ -397,9 +408,23 @@ function toSkyhookArtistResource (artist = {}) {
     links: normalizeArray(artist.links || artist.Links).map(normalizeLinkResource),
     artistName: asString(artist.artistName || artist.ArtistName),
     artistAliases: normalizeAliases(artist),
-    albums: normalizeArray(artist.albums || artist.Albums).map(toSkyhookAlbumResource),
+    albums: normalizeArray(artist.albums || artist.Albums).map(toSkyhookArtistAlbumSummaryResource),
     status: asString(artist.status || artist.Status || LIDARR_SKYHOOK_ARTIST_DEFAULTS.status),
     rating: normalizeRatingResource(artist.rating || artist.Rating || artist.ratings)
+  }
+}
+
+function toSkyhookArtistAlbumSummaryResource (album = {}) {
+  const normalized = normalizeAlbum(album)
+  return {
+    oldIds: normalizeStringArray(normalized.oldIds),
+    id: asString(normalized.id),
+    title: asString(normalized.title),
+    type: asString(normalized.type || 'Album'),
+    secondaryTypes: normalizeStringArray(normalized.secondaryTypes),
+    releaseStatuses: normalizeReleaseStatuses(normalized.releaseStatuses),
+    releaseDate: asString(normalized.releaseDate) || null,
+    rating: normalizeRatingResource(normalized.rating || normalized.ratings)
   }
 }
 
@@ -555,6 +580,7 @@ module.exports = {
   LIDARR_SKYHOOK_ARTIST_REQUIRED_KEYS,
   LIDARR_OPTIONAL_ARTIST_KEYS,
   SKYHOOK_ARTIST_RESOURCE_KEYS,
+  SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS,
   SKYHOOK_ALBUM_REQUIRED_KEYS,
   SKYHOOK_RELEASE_REQUIRED_KEYS,
   SKYHOOK_TRACK_REQUIRED_KEYS,
@@ -568,6 +594,7 @@ module.exports = {
   normalizeLidarrArtistResponse,
   normalizeStringArray,
   toSkyhookAlbumResource,
+  toSkyhookArtistAlbumSummaryResource,
   toSkyhookArtistResource,
   withArtistLookupDefaults,
   withSkyhookArtistDefaults

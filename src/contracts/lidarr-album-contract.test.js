@@ -160,6 +160,22 @@ test('Nested artist resources match SkyHook artist contract exactly', () => {
   }
 })
 
+test('Album by ID artists cover every track ArtistId for Lidarr MapTrack', () => {
+  const fixture = readFixture('album-by-id.golden.json')
+  const album = toSkyhookAlbumResource(fixture)
+  const albumArtistIds = new Set(album.artists.map(artist => artist.id).filter(Boolean))
+  const trackArtistIds = album.releases
+    .flatMap(release => release.tracks)
+    .map(track => track.artistId)
+    .filter(Boolean)
+
+  assert.ok(trackArtistIds.length > 0, 'fixture must contain at least one track artist id')
+
+  for (const artistId of trackArtistIds) {
+    assert.ok(albumArtistIds.has(artistId), `album artists must include track artist id ${artistId}`)
+  }
+})
+
 test('Album by ID Viva Las Vengeance includes complete image, media, and track metadata', () => {
   const album = toSkyhookAlbumResource({
     id: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID,
