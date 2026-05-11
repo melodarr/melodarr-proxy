@@ -134,7 +134,7 @@ When no artist matches the lookup term and providers completed successfully, the
 
 ```http
 HTTP/1.1 200 OK
-Content-Type: application/json
+Content-Type: application/json; charset=utf-8
 ```
 
 ```json
