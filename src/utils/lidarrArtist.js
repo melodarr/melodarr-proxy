@@ -240,22 +240,28 @@ function normalizeImageResource (image = {}) {
 function normalizeProviderMetadata (providers) {
   return normalizeArray(providers)
     .map(provider => {
-      if (!provider || typeof provider !== 'object') {
+      if (!provider) {
         return null
       }
 
-      const normalized = {
-        name: asString(provider.name || provider.Name)
-      }
+      const normalized = typeof provider === 'object'
+        ? {
+            name: asString(provider.name || provider.Name)
+          }
+        : {
+            name: asString(provider)
+          }
 
-      const score = Number(provider.score ?? provider.Score)
-      if (Number.isFinite(score)) {
-        normalized.score = score
-      }
+      if (typeof provider === 'object') {
+        const score = Number(provider.score ?? provider.Score)
+        if (Number.isFinite(score)) {
+          normalized.score = score
+        }
 
-      const albumCount = Number(provider.albumCount ?? provider.AlbumCount)
-      if (Number.isFinite(albumCount)) {
-        normalized.albumCount = albumCount
+        const albumCount = Number(provider.albumCount ?? provider.AlbumCount)
+        if (Number.isFinite(albumCount)) {
+          normalized.albumCount = albumCount
+        }
       }
 
       return normalized.name ? normalized : null
