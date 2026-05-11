@@ -469,13 +469,7 @@ function withArtistLookupDefaults (artist = {}) {
     }
   }
 
-  if ('genres' in artist) {
-    Object.defineProperty(out, 'genres', {
-      value: normalizeStringArray(artist.genres),
-      enumerable: false,
-      configurable: true
-    })
-  }
+  if ('genres' in artist) out.genres = normalizeStringArray(artist.genres)
 
   if ('providers' in artist) out.providers = normalizeProviderMetadata(artist.providers)
   if ('partial' in artist) out.partial = artist.partial
