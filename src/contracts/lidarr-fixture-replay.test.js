@@ -128,13 +128,34 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
         req.query.term = 'Radiohead'
         const artistCandidate = expected.find(item => item.artist)?.artist
         const albumCandidate = expected.find(item => item.album)?.album
-        subT.mock.method(artistDiscovery, 'discoverArtists', async () => [{
-          ...(artistCandidate || {}),
-          id: artistCandidate?.id || albumCandidate?.artistId || 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
-          artistName: artistCandidate?.artistName || 'Radiohead',
-          images: artistCandidate?.images || [],
-          albums: albumCandidate ? [albumCandidate] : []
-        }])
+        subT.mock.method(artistDiscovery, 'discoverArtists', async () => ([
+          artistCandidate && {
+            type: 'artist',
+            id: artistCandidate.id || 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+            artistName: artistCandidate.artistName || 'Radiohead',
+            aliases: artistCandidate.artistAliases || [],
+            disambiguation: artistCandidate.disambiguation || '',
+            images: artistCandidate.images || [],
+            score: expected.find(item => item.artist)?.score || 0
+          },
+          albumCandidate && {
+            type: 'album',
+            artistName: albumCandidate.artists?.[0]?.artistName || artistCandidate?.artistName || 'Radiohead',
+            match: albumCandidate.title || 'Unknown Album',
+            disambiguation: albumCandidate.disambiguation || '',
+            overview: albumCandidate.overview || '',
+            releaseDate: albumCandidate.releaseDate,
+            genres: albumCandidate.genres || [],
+            secondaryTypes: albumCandidate.secondaryTypes || [],
+            releaseStatuses: albumCandidate.releaseStatuses || ['Official'],
+            images: albumCandidate.images || [],
+            score: expected.find(item => item.album)?.score || 0,
+            ids: {
+              musicbrainzArtistId: albumCandidate.artistId || artistCandidate?.id || 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
+              musicbrainzReleaseGroupId: albumCandidate.id || 'test-album'
+            }
+          }
+        ].filter(Boolean)))
         await skyhookController.handleSearch(req, res)
       } else if (file.includes('lookup')) {
         req.query.term = 'Radiohead'

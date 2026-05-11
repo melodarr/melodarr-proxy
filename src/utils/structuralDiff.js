@@ -18,8 +18,12 @@ function structuralDiff (expected, actual, path = 'root') {
       errors.push(`${path}: expected array, got ${typeof actual}`)
       return errors
     }
-    // For arrays, we just check the first element to ensure the shape matches
-    if (expected.length > 0 && actual.length > 0) {
+    if (expected.length > 0 && actual.length === 0) {
+      errors.push(`${path}: expected non-empty array, got empty array`)
+      return errors
+    }
+    // For non-empty arrays, compare the first element to ensure the shape matches
+    if (expected.length > 0) {
       // Compare the first element as a representative type
       errors.push(...structuralDiff(expected[0], actual[0], `${path}[0]`))
     }
@@ -43,7 +47,7 @@ function structuralDiff (expected, actual, path = 'root') {
       }
     }
 
-    // We optionally can flag extra keys
+    // Flag extra keys so fixture contract checks enforce an exact key set.
     for (const key of actualKeys) {
       if (!expectedKeys.includes(key)) {
         errors.push(`${path}.${key}: extraneous key found in actual`)
