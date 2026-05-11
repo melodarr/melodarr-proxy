@@ -278,12 +278,7 @@ class MusicBrainzProvider {
     return releasesByGroup
   }
 
-  enrichReleaseGroupSummary (summary, fallbackArtistId, releasesByGroup) {
-    if (!summary?.id || this.hasUsableReleaseTracks(summary.releases)) {
-      return summary
-    }
-
-    const rawReleases = releasesByGroup.get(summary.id) || []
+  applyReleasesToSummary (summary, rawReleases, fallbackArtistId) {
     const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
 
     if (releases.length === 0) {
@@ -297,6 +292,15 @@ class MusicBrainzProvider {
       trackCount: trackCounts.length ? Math.max(...trackCounts) : summary.trackCount,
       releases
     }
+  }
+
+  enrichReleaseGroupSummary (summary, fallbackArtistId, releasesByGroup) {
+    if (!summary?.id || this.hasUsableReleaseTracks(summary.releases)) {
+      return summary
+    }
+
+    const rawReleases = releasesByGroup.get(summary.id) || []
+    return this.applyReleasesToSummary(summary, rawReleases, fallbackArtistId)
   }
 
   async fetchReleaseGroupReleases (releaseGroupId) {
@@ -323,19 +327,7 @@ class MusicBrainzProvider {
         rawReleases = await this.fetchReleaseGroupReleases(summary.id)
         releaseGroupReleasesCache.set(summary.id, rawReleases)
       }
-      const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
-
-      if (releases.length === 0) {
-        return summary
-      }
-
-      const trackCounts = releases.map(release => Number(release.trackCount) || 0)
-
-      return {
-        ...summary,
-        trackCount: trackCounts.length ? Math.max(...trackCounts) : summary.trackCount,
-        releases
-      }
+      return this.applyReleasesToSummary(summary, rawReleases, fallbackArtistId)
     } catch (err) {
       return summary
     }
