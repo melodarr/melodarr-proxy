@@ -487,12 +487,13 @@ async function aggregateArtist (term) {
 
   images = []
   if (uniqueScored.length > 0) {
-    const limits = { poster: 1, fanart: 1, logo: 1 }
-    const counts = { poster: 0, fanart: 0, logo: 0 }
+    const allowedCoverTypes = new Set(['poster', 'fanart', 'logo'])
+    const limits = Object.assign(Object.create(null), { poster: 1, fanart: 1, logo: 1 })
+    const counts = Object.assign(Object.create(null), { poster: 0, fanart: 0, logo: 0 })
 
     for (const image of uniqueScored) {
-      const coverType = image.coverType || 'poster'
-      
+      const coverType = allowedCoverTypes.has(image.coverType) ? image.coverType : 'poster'
+
       counts[coverType] = counts[coverType] || 0
       const limit = limits[coverType] !== undefined ? limits[coverType] : 1
 
