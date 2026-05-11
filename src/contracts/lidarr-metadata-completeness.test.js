@@ -8,7 +8,7 @@ const {
   SKYHOOK_IMAGE_REQUIRED_KEYS,
   SKYHOOK_LINK_REQUIRED_KEYS,
   SKYHOOK_RATING_REQUIRED_KEYS,
-  SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS,
+  SKYHOOK_ALBUM_REQUIRED_KEYS,
   SKYHOOK_ARTIST_RESOURCE_KEYS,
   SKYHOOK_RELEASE_REQUIRED_KEYS,
   SKYHOOK_TRACK_REQUIRED_KEYS,
@@ -380,18 +380,20 @@ describe('Cross-serializer consistency', () => {
     assert.deepStrictEqual(Object.keys(result).sort(), [...SKYHOOK_ARTIST_RESOURCE_KEYS].sort())
   })
 
-  it('artist nested albums use Metadata summary schema from full provider', () => {
+  it('artist nested albums use full AlbumResource schema from full provider', () => {
     const result = toSkyhookArtistResource(fullProvider)
     const album = result.albums[0]
-    assert.deepStrictEqual(Object.keys(album).sort(), [...SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS].sort())
+    assert.deepStrictEqual(Object.keys(album).sort(), [...SKYHOOK_ALBUM_REQUIRED_KEYS].sort())
   })
 
-  it('artist nested albums omit full album-only fields', () => {
+  it('artist nested albums preserve fields Lidarr uses for artist-page status', () => {
     const result = toSkyhookArtistResource(fullProvider)
     const album = result.albums[0]
-    assert.equal('images' in album, false)
-    assert.equal('artists' in album, false)
-    assert.equal('releases' in album, false)
+    assert.equal(album.images.length, 1)
+    assert.equal(album.artists.length, 1)
+    assert.equal(album.releases.length, 1)
+    assert.equal(album.releases[0].trackCount, 1)
+    assert.equal(album.releases[0].tracks.length, 1)
   })
 
   it('album images strip provider-layer keys through full album serialization', () => {
@@ -427,7 +429,7 @@ describe('Cross-serializer consistency', () => {
     assert.deepStrictEqual(Object.keys(medium).sort(), [...SKYHOOK_MEDIUM_REQUIRED_KEYS].sort())
   })
 
-  it('artist album summary and full album resource keep matching rating shape', () => {
+  it('artist nested album and full album resource keep matching rating shape', () => {
     const albumInput = fullProvider.albums[0]
 
     const fromArtist = toSkyhookArtistResource(fullProvider).albums[0]
