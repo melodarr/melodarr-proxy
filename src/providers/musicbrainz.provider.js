@@ -236,30 +236,39 @@ class MusicBrainzProvider {
     return releases.some(release => Array.isArray(release.tracks) && release.tracks.length > 0)
   }
 
-  async getReleaseGroupReleases (releaseGroupId, releaseLookupCache) {
-    if (!releaseGroupId) {
-      return {}
+  async fetchArtistReleasesByGroup (artistId) {
+    if (!artistId) return new Map()
+
+    const releaseResult = await upstreamService.musicBrainzGet('/release', {
+      artist: artistId,
+      inc: 'release-groups+media+recordings+artist-credits',
+      limit: 100,
+      offset: 0
+    })
+
+    const releases = Array.isArray(releaseResult?.releases) ? releaseResult.releases : []
+    const releasesByGroup = new Map()
+
+    for (const release of releases) {
+      const rgId = release['release-group']?.id
+      if (!rgId) continue
+
+      if (!releasesByGroup.has(rgId)) {
+        releasesByGroup.set(rgId, [])
+      }
+      releasesByGroup.get(rgId).push(release)
     }
 
-    if (!releaseLookupCache.has(releaseGroupId)) {
-      releaseLookupCache.set(releaseGroupId, upstreamService.musicBrainzGet('/release', {
-        'release-group': releaseGroupId,
-        inc: 'media+recordings+artist-credits',
-        limit: 10,
-        offset: 0
-      }))
-    }
-
-    return releaseLookupCache.get(releaseGroupId)
+    return releasesByGroup
   }
 
-  async enrichReleaseGroupSummary (summary, fallbackArtistId, releaseLookupCache) {
+  enrichReleaseGroupSummary (summary, fallbackArtistId, releasesByGroup) {
     if (!summary?.id || this.hasUsableReleaseTracks(summary.releases)) {
       return summary
     }
 
-    const releaseResult = await this.getReleaseGroupReleases(summary.id, releaseLookupCache)
-    const releases = this.mapReleases(releaseResult, fallbackArtistId)
+    const rawReleases = releasesByGroup.get(summary.id) || []
+    const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
 
     if (releases.length === 0) {
       return summary
@@ -275,8 +284,9 @@ class MusicBrainzProvider {
   }
 
   async mapReleaseGroupSummaries (releaseGroups = [], fallbackArtistId = '') {
-    const releaseLookupCache = new Map()
-    const summaries = releaseGroups
+    const releasesByGroup = await this.fetchArtistReleasesByGroup(fallbackArtistId)
+
+    return releaseGroups
       .filter((group) => {
         const primaryType = String(group['primary-type'] || '').toLowerCase()
         const secondaryTypes = group['secondary-types'] || []
@@ -284,13 +294,7 @@ class MusicBrainzProvider {
       })
       .map(group => this.mapReleaseGroupSummary(group, fallbackArtistId))
       .filter(album => album.name)
-
-    const enriched = []
-    for (const summary of summaries) {
-      enriched.push(await this.enrichReleaseGroupSummary(summary, fallbackArtistId, releaseLookupCache))
-    }
-
-    return enriched
+      .map(summary => this.enrichReleaseGroupSummary(summary, fallbackArtistId, releasesByGroup))
   }
 
   async searchArtist (term) {

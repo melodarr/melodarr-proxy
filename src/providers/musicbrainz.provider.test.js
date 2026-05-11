@@ -274,8 +274,8 @@ test('MusicBrainz Provider', async (t) => {
         }
       }
       if (path === '/release') {
-        assert.strictEqual(params['release-group'], releaseGroupId)
-        assert.strictEqual(params.inc, 'media+recordings+artist-credits')
+        assert.strictEqual(params.artist, 'artist-panic')
+        assert.strictEqual(params.inc, 'release-groups+media+recordings+artist-credits')
         return {
           releases: [{
             id: 'release-viva-las-vengeance',
@@ -283,6 +283,7 @@ test('MusicBrainz Provider', async (t) => {
             date: releaseDate,
             status: 'Official',
             country: 'US',
+            'release-group': { id: releaseGroupId },
             media: [{
               title: 'Digital Media',
               format: 'Digital Media',
@@ -340,12 +341,13 @@ test('MusicBrainz Provider', async (t) => {
       }
       if (path === '/release') {
         releaseLookupCount += 1
-        assert.strictEqual(params['release-group'], 'rg-fallback')
+        assert.strictEqual(params.artist, 'artist-fallback')
         return {
           releases: [{
             id: 'rel-fallback',
             title: 'Fallback Album',
             date: '2022-08-19',
+            'release-group': { id: 'rg-fallback' },
             media: [{
               title: 'CD',
               format: 'CD',
@@ -401,12 +403,13 @@ test('MusicBrainz Provider', async (t) => {
         }
       }
       if (path === '/release') {
-        assert.strictEqual(params['release-group'], releaseGroupId)
+        assert.strictEqual(params.artist, 'artist-no-tracks')
         return {
           releases: [{
             id: 'rel-no-tracks-lookup',
             title: 'No Tracks Album',
             date: releaseDate,
+            'release-group': { id: releaseGroupId },
             media: [{
               title: 'Digital Media',
               format: 'Digital Media',
@@ -471,11 +474,12 @@ test('MusicBrainz Provider', async (t) => {
       }
       if (path === '/release') {
         releaseLookupCount += 1
-        assert.strictEqual(params['release-group'], 'rg-duplicate')
+        assert.strictEqual(params.artist, 'artist-duplicate-groups')
         return {
           releases: [{
             id: 'rel-duplicate',
             title: 'Duplicate Album',
+            'release-group': { id: 'rg-duplicate' },
             media: [{
               title: 'Digital Media',
               format: 'Digital Media',
