@@ -375,9 +375,9 @@ test('normalizeAlbum correctly populates firstReleaseDate and releaseDate in var
 
 test('toSkyhookAlbumResource strictly maps releaseDate and omits firstReleaseDate in all scenarios', () => {
   const scenarios = [
-    { input: { releaseDate: '2000-01-01' }, expected: '2000-01-01' },
-    { input: { firstReleaseDate: '1990-01-01' }, expected: '1990-01-01' },
-    { input: { releaseDate: '2005-01-01', firstReleaseDate: '1995-01-01' }, expected: '2005-01-01' },
+    { input: { releaseDate: '2000-01-01' }, expected: '2000-01-01T00:00:00Z' },
+    { input: { firstReleaseDate: '1990-01-01' }, expected: '1990-01-01T00:00:00Z' },
+    { input: { releaseDate: '2005-01-01', firstReleaseDate: '1995-01-01' }, expected: '2005-01-01T00:00:00Z' },
     { input: {}, expected: null }
   ]
 
@@ -406,6 +406,30 @@ test('toSkyhookArtistResource (ArtistResource) strictly omits firstReleaseDate f
     ]
   })
 
-  assert.equal(artist.albums[0].releaseDate, '2005-01-01')
+  assert.equal(artist.albums[0].releaseDate, '2005-01-01T00:00:00Z')
   assert.equal(Object.prototype.hasOwnProperty.call(artist.albums[0], 'firstReleaseDate'), false)
+})
+
+test('toSkyhookAlbumResource pads year-only release dates in nested releases for Lidarr DateTime parsing', () => {
+  const album = toSkyhookAlbumResource({
+    releaseDate: '2023',
+    releases: [
+      {
+        id: 'release-year-only',
+        title: 'PULSE',
+        releaseDate: '2023',
+        tracks: []
+      },
+      {
+        id: 'release-month-only',
+        title: 'PULSE',
+        releaseDate: '2023-05',
+        tracks: []
+      }
+    ]
+  })
+
+  assert.equal(album.releaseDate, '2023-01-01T00:00:00Z')
+  assert.equal(album.releases[0].releaseDate, '2023-01-01T00:00:00Z')
+  assert.equal(album.releases[1].releaseDate, '2023-05-01T00:00:00Z')
 })

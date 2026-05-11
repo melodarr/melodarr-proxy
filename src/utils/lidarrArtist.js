@@ -1,3 +1,5 @@
+const { toIsoDate } = require('./dates')
+
 const LIDARR_LOOKUP_ARTIST_DEFAULTS = Object.freeze({
   status: 'continuing',
   oldIds: Object.freeze([]),
@@ -315,7 +317,7 @@ function normalizeReleaseResource (release = {}) {
   return {
     disambiguation: asString(release.disambiguation || release.Disambiguation),
     country: normalizeStringArray(release.country || release.Country),
-    releaseDate: asString(release.releaseDate || release.ReleaseDate) || null,
+    releaseDate: toIsoDate(release.releaseDate || release.ReleaseDate) || null,
     id: asString(release.id || release.Id),
     oldIds: normalizeStringArray(release.oldIds || release.OldIds),
     label: normalizeStringArray(release.label || release.Label),
@@ -422,7 +424,7 @@ function normalizeAlbumSummary (album = {}) {
     type: asString(album.type || album.Type || 'Album'),
     secondaryTypes: normalizeStringArray(album.secondaryTypes || album.SecondaryTypes),
     releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
-    releaseDate: asString(album.releaseDate || album.ReleaseDate) || null,
+    releaseDate: toIsoDate(album.releaseDate || album.ReleaseDate) || null,
     rating: normalizeRatingResource(album.rating || album.Rating || album.ratings)
   }
 }
@@ -454,7 +456,7 @@ function toSkyhookAlbumResource (album = {}) {
     links: normalizeArray(normalized.links).map(normalizeLinkResource),
     genres: normalizeStringArray(normalized.genres),
     rating: normalizeRatingResource(normalized.rating || normalized.ratings),
-    releaseDate: asString(normalized.releaseDate) || null,
+    releaseDate: toIsoDate(normalized.releaseDate) || null,
     releases: normalizeArray(normalized.releases).map(normalizeReleaseResource),
     secondaryTypes: normalizeStringArray(normalized.secondaryTypes),
     title: asString(normalized.title),
