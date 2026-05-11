@@ -133,7 +133,7 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
             type: 'artist',
             id: artistCandidate.id || 'a74b1b7f-71a5-4011-9441-d0b5e4122711',
             artistName: artistCandidate.artistName || 'Radiohead',
-            aliases: artistCandidate.artistAliases || [],
+            aliases: artistCandidate.artistAliases || artistCandidate.aliases || [],
             disambiguation: artistCandidate.disambiguation || '',
             images: artistCandidate.images || [],
             score: expected.find(item => item.artist)?.score || 0
