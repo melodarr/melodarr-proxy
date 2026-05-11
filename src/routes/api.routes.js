@@ -6,6 +6,7 @@ const { getStats, getHistory } = require('../controllers/stats.controller')
 const { handleAlbumById, handleArtistById, handleArtistDiscover, handleArtistLookup, handleQueueDetails, handleRecentFeed, handleReleaseSearch, handleSearch, handleSongAlbums } = require('../controllers/proxy.controller')
 const { startProxy, stopProxy, clearCache, triggerSync } = require('../controllers/control.controller')
 const { applyUpdate, getUpdateStatus } = require('../controllers/update.controller')
+const { handleImageHead, handleImageProxy } = require('../controllers/image.controller')
 const { generateKey, getAllKeys, revokeKey } = require('../controllers/admin.controller')
 const {
   clearRuntimeSetting,
@@ -40,6 +41,8 @@ router.post('/settings/setup', setupSettings)
 router.post('/settings/login', loginSettings)
 router.post('/settings/logout', requireSettingsAuth, requireSettingsCsrf, logoutSettings)
 router.get('/update/status', getUpdateStatus)
+router.head('/image', handleImageHead)
+router.get('/image', handleImageProxy)
 
 // Authenticated monitoring/configuration
 router.get('/stats', requireSettingsAuth, getStats)

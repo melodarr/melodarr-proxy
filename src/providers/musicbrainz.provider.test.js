@@ -297,7 +297,7 @@ test('MusicBrainz Provider', async (t) => {
 
     const result = await musicbrainzProvider.lookupArtistById('artist-panic')
     const album = result.albums[0]
-    const expectedCover = `https://coverartarchive.org/release-group/${releaseGroupId}/front-250`
+    const expectedCover = `https://coverartarchive.org/release-group/${releaseGroupId}/front`
 
     assert.strictEqual(album.id, releaseGroupId)
     assert.strictEqual(album.title, 'Viva Las Vengeance')
@@ -588,7 +588,7 @@ test('MusicBrainz Provider', async (t) => {
 
     const result = await musicbrainzProvider.lookupArtistById('artist-no-tracks')
     const album = result.albums[0]
-    const expectedCover = `https://coverartarchive.org/release-group/${releaseGroupId}/front-250`
+    const expectedCover = `https://coverartarchive.org/release-group/${releaseGroupId}/front`
 
     assert.strictEqual(album.id, releaseGroupId)
     assert.strictEqual(album.title, 'No Tracks Album')
