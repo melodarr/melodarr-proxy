@@ -316,14 +316,14 @@ describe('API E2E Tests', () => {
       assert.ok(res.data.albums.length > 0, 'artist metadata must include albums for Lidarr add persistence')
 
       const album = res.data.albums[0]
-      assert.strictEqual(album.artistId, mbid)
       assert.strictEqual(album.title, 'Millennium')
       assert.strictEqual(album.type, 'Album')
       assert.deepStrictEqual(album.secondaryTypes, [])
       assert.deepStrictEqual(album.releaseStatuses, ['Official'])
       assert.strictEqual(album.releaseDate, '1999-05-18T00:00:00Z')
-      assert.ok(Array.isArray(album.artists))
-      assert.strictEqual(album.artists[0].id, mbid)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'artistId'), false)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'artists'), false)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
     })
 
     it('GET /api/album/{releaseGroupId} → returns and caches Lidarr album refetch metadata with tracks', async () => {
@@ -419,7 +419,6 @@ describe('API E2E Tests', () => {
       const album = res.data.albums[0]
       assert.ok(album, 'metadata refetch should include mapped MusicBrainz albums when present')
       assert.strictEqual(album.id, '920a68fe-7b93-3d0e-bf73-44ac72f03dd2')
-      assert.strictEqual(album.artistId, lidarrAddArtistRequest.foreignArtistId)
       assert.strictEqual(album.title, 'Millennium')
       assert.strictEqual(album.releaseDate, '1999-05-18T00:00:00Z')
       assert.deepStrictEqual(album.oldIds, [])
@@ -428,14 +427,11 @@ describe('API E2E Tests', () => {
       assert.deepStrictEqual(album.releaseStatuses, ['Official'])
       assert.strictEqual(album.releaseStatuses.includes('Official'), true)
       assert.deepStrictEqual(album.rating, { count: 0, value: 0 })
-      assert.ok(Array.isArray(album.releases))
-      assert.ok(Array.isArray(album.images))
-      assert.ok(Array.isArray(album.links))
-      assert.ok(Array.isArray(album.artists))
-      assert.strictEqual(album.artists[0].id, lidarrAddArtistRequest.foreignArtistId)
-      assert.deepStrictEqual(album.artists[0].artistAliases, ['BSB', 'Back Street Boys'])
-      assert.ok(Array.isArray(album.artists[0].images))
-      assert.ok(Array.isArray(album.artists[0].links))
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'artistId'), false)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'artists'), false)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'images'), false)
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(album, 'links'), false)
     })
   })
 

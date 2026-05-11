@@ -5,10 +5,7 @@ const path = require('node:path')
 
 const {
   SKYHOOK_ARTIST_RESOURCE_KEYS,
-  SKYHOOK_ALBUM_REQUIRED_KEYS,
-  SKYHOOK_RELEASE_REQUIRED_KEYS,
-  SKYHOOK_TRACK_REQUIRED_KEYS,
-  SKYHOOK_MEDIUM_REQUIRED_KEYS,
+  SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS,
   SKYHOOK_IMAGE_REQUIRED_KEYS,
   SKYHOOK_LINK_REQUIRED_KEYS,
   SKYHOOK_RATING_REQUIRED_KEYS,
@@ -119,16 +116,16 @@ test('Artist link resources match link contract exactly', () => {
   }
 })
 
-// ─── Nested albums (recursive) ──────────────────────────────────────
+// ─── Nested album summaries ─────────────────────────────────────────
 
-test('Nested album resources match SkyHook album contract exactly', () => {
+test('Artist by ID nested albums match the Metadata summary contract exactly', () => {
   const fixture = readFixture('artist-by-id.golden.json')
   const artist = toSkyhookArtistResource(fixture)
 
   assert.ok(artist.albums.length > 0, 'fixture must contain at least one album')
 
   for (const album of artist.albums) {
-    assertKeysExact(album, SKYHOOK_ALBUM_REQUIRED_KEYS, 'nested album')
+    assertKeysExact(album, SKYHOOK_ARTIST_ALBUM_SUMMARY_KEYS, 'nested album summary')
   }
 })
 
@@ -143,55 +140,18 @@ test('Nested album rating resources match rating contract exactly', () => {
   }
 })
 
-test('Nested album releases match release contract exactly', () => {
+test('Artist by ID nested albums omit releases and tracks for Lidarr GetArtistInfo', () => {
   const fixture = readFixture('artist-by-id.golden.json')
   const artist = toSkyhookArtistResource(fixture)
 
-  const releases = artist.albums.flatMap(a => a.releases)
-  assert.ok(releases.length > 0, 'fixture must contain at least one release')
-
-  for (const release of releases) {
-    assertKeysExact(release, SKYHOOK_RELEASE_REQUIRED_KEYS, 'nested album release')
+  for (const album of artist.albums) {
+    assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(album, 'tracks'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(album, 'media'), false)
   }
 })
 
-test('Nested album tracks match track contract exactly', () => {
-  const fixture = readFixture('artist-by-id.golden.json')
-  const artist = toSkyhookArtistResource(fixture)
-
-  const tracks = artist.albums.flatMap(a => a.releases).flatMap(r => r.tracks)
-  assert.ok(tracks.length > 0, 'fixture must contain at least one track')
-
-  for (const track of tracks) {
-    assertKeysExact(track, SKYHOOK_TRACK_REQUIRED_KEYS, 'nested album track')
-  }
-})
-
-test('Nested album media match medium contract exactly', () => {
-  const fixture = readFixture('artist-by-id.golden.json')
-  const artist = toSkyhookArtistResource(fixture)
-
-  const media = artist.albums.flatMap(a => a.releases).flatMap(r => r.media)
-  assert.ok(media.length > 0, 'fixture must contain at least one medium')
-
-  for (const medium of media) {
-    assertKeysExact(medium, SKYHOOK_MEDIUM_REQUIRED_KEYS, 'nested album medium')
-  }
-})
-
-test('Nested album images match image contract exactly', () => {
-  const fixture = readFixture('artist-by-id.golden.json')
-  const artist = toSkyhookArtistResource(fixture)
-
-  const images = artist.albums.flatMap(a => a.images)
-  assert.ok(images.length > 0, 'fixture must contain at least one album image')
-
-  for (const image of images) {
-    assertKeysExact(image, SKYHOOK_IMAGE_REQUIRED_KEYS, 'nested album image')
-  }
-})
-
-test('Artist by ID nested Viva Las Vengeance releases preserve complete track counts', () => {
+test('Artist by ID nested Viva Las Vengeance returns a summary only', () => {
   const artist = toSkyhookArtistResource({
     id: 'b9472588-93f3-4922-a1a2-74082cdf9ce8',
     artistName: 'Panic! at the Disco',
@@ -217,29 +177,7 @@ test('Artist by ID nested Viva Las Vengeance releases preserve complete track co
 
   const album = artist.albums.find(album => album.title === 'Viva Las Vengeance')
   assert.ok(album, 'artist-by-id response must include Viva Las Vengeance')
-
-  const matchingRelease = album.releases.find(release => release.trackCount === 12)
-  assert.ok(matchingRelease, 'Viva Las Vengeance must include at least one 12-track release')
-
-  for (const release of album.releases) {
-    if (release.trackCount > 0) {
-      assert.equal(release.tracks.length, release.trackCount)
-    }
-  }
-})
-
-// ─── Recursive artist-in-album ──────────────────────────────────────
-
-test('Artists nested within albums match SkyHook artist resource contract exactly', () => {
-  const fixture = readFixture('artist-by-id.golden.json')
-  const artist = toSkyhookArtistResource(fixture)
-
-  const nestedArtists = artist.albums.flatMap(a => a.artists)
-  assert.ok(nestedArtists.length > 0, 'fixture must contain at least one nested artist in albums')
-
-  for (const nestedArtist of nestedArtists) {
-    assertKeysExact(nestedArtist, SKYHOOK_ARTIST_RESOURCE_KEYS, 'nested album artist')
-  }
+  assert.equal(Object.prototype.hasOwnProperty.call(album, 'releases'), false)
 })
 
 // ─── Stripping unknown fields ───────────────────────────────────────
