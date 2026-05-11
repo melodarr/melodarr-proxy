@@ -153,6 +153,150 @@ class MusicBrainzProvider {
       .filter(release => release.id && release.tracks.length > 0)
   }
 
+  coverArtUrl (releaseGroupId) {
+    return releaseGroupId ? `https://coverartarchive.org/release-group/${releaseGroupId}/front-250` : ''
+  }
+
+  mapReleaseImages (releaseGroupId) {
+    const url = this.coverArtUrl(releaseGroupId)
+    return url
+      ? [{
+          coverType: 'cover',
+          url,
+          remoteUrl: url
+        }]
+      : []
+  }
+
+  mapBrowseReleases (group = {}, fallbackArtistId = '') {
+    const rawReleases = Array.isArray(group.releases) ? group.releases : []
+
+    return rawReleases.map((release) => {
+      const media = Array.isArray(release.media) ? release.media : []
+      const tracks = this.mapReleaseTracks(media, fallbackArtistId)
+      const trackCount = tracks.length || Number(release['track-count'] || 0) || 0
+
+      return {
+        id: release.id || '',
+        oldIds: [],
+        title: release.title || group.title || '',
+        status: release.status || 'Official',
+        label: [],
+        disambiguation: release.disambiguation || '',
+        country: release.country ? [release.country] : [],
+        releaseDate: release.date || null,
+        media: media.map((medium, index) => ({
+          name: medium.title || medium.format || 'Unknown',
+          format: medium.format || 'Unknown',
+          position: Number(medium.position || index + 1) || index + 1
+        })),
+        trackCount,
+        tracks
+      }
+    }).filter(release => release.id)
+  }
+
+  mapReleaseGroupSummary (group = {}, fallbackArtistId = '') {
+    const rawDate = group['first-release-date'] || ''
+    const yearMatch = rawDate.match(/^(\d{4})/)
+    const rating = this.mapRating(group)
+    const id = group.id || ''
+    const imageUrl = this.coverArtUrl(id)
+    const releases = this.mapBrowseReleases(group, fallbackArtistId)
+    const trackCounts = releases.map(release => Number(release.trackCount) || 0)
+    const trackCount = trackCounts.length ? Math.max(...trackCounts) : 0
+
+    return {
+      id,
+      title: group.title || '',
+      name: group.title || '',
+      year: yearMatch ? parseInt(yearMatch[1], 10) : null,
+      // MB returns YYYY, YYYY-MM, or YYYY-MM-DD. Preserve as-is; downstream
+      // consumers can pad to full ISO for Lidarr compatibility.
+      releaseDate: rawDate || null,
+      trackCount,
+      type: group['primary-type'] || 'Album',
+      albumType: group['primary-type'] || 'Album',
+      secondaryTypes: group['secondary-types'] || [],
+      releaseStatuses: ['Official'],
+      imageUrl,
+      images: this.mapReleaseImages(id),
+      remoteCover: imageUrl,
+      rating,
+      ratings: { votes: rating.count, value: rating.value },
+      ids: {
+        musicbrainzReleaseGroupId: id
+      },
+      provider: 'musicbrainz',
+      releases
+    }
+  }
+
+  hasUsableReleaseTracks (releases = []) {
+    return releases.some(release => Array.isArray(release.tracks) && release.tracks.length > 0)
+  }
+
+  async fetchArtistReleasesByGroup (artistId) {
+    if (!artistId) return new Map()
+
+    const releaseResult = await upstreamService.musicBrainzGet('/release', {
+      artist: artistId,
+      inc: 'release-groups+media+recordings+artist-credits',
+      limit: 100,
+      offset: 0
+    })
+
+    const releases = Array.isArray(releaseResult?.releases) ? releaseResult.releases : []
+    const releasesByGroup = new Map()
+
+    for (const release of releases) {
+      const rgId = release['release-group']?.id
+      if (!rgId) continue
+
+      if (!releasesByGroup.has(rgId)) {
+        releasesByGroup.set(rgId, [])
+      }
+      releasesByGroup.get(rgId).push(release)
+    }
+
+    return releasesByGroup
+  }
+
+  enrichReleaseGroupSummary (summary, fallbackArtistId, releasesByGroup) {
+    if (!summary?.id || this.hasUsableReleaseTracks(summary.releases)) {
+      return summary
+    }
+
+    const rawReleases = releasesByGroup.get(summary.id) || []
+    const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
+
+    if (releases.length === 0) {
+      return summary
+    }
+
+    const trackCounts = releases.map(release => Number(release.trackCount) || 0)
+
+    return {
+      ...summary,
+      trackCount: trackCounts.length ? Math.max(...trackCounts) : summary.trackCount,
+      releases
+    }
+  }
+
+  async mapReleaseGroupSummaries (releaseGroups = [], fallbackArtistId = '') {
+    const releasesByGroup = await this.fetchArtistReleasesByGroup(fallbackArtistId)
+
+    return releaseGroups
+      .filter((group) => {
+        const primaryType = String(group['primary-type'] || '').toLowerCase()
+        const secondaryTypes = group['secondary-types'] || []
+        return ['album', 'ep'].includes(primaryType) && secondaryTypes.length === 0
+      })
+      .map(group => this.mapReleaseGroupSummary(group, fallbackArtistId))
+      .filter(album => album.name)
+      .map(summary => this.enrichReleaseGroupSummary(summary, fallbackArtistId, releasesByGroup))
+  }
+
   async searchArtist (term) {
     const artistSearch = await upstreamService.musicBrainzGet('/artist', {
       query: `artist:"${this.mbQueryValue(term)}"`,
@@ -175,52 +319,7 @@ class MusicBrainzProvider {
     })
     const releaseGroups = releaseGroupResult?.['release-groups'] || []
 
-    const albums = releaseGroups
-      .filter((group) => {
-        const primaryType = String(group['primary-type'] || '').toLowerCase()
-        const secondaryTypes = group['secondary-types'] || []
-        return ['album', 'ep'].includes(primaryType) && secondaryTypes.length === 0
-      })
-      .map(group => {
-        const rawDate = group['first-release-date'] || ''
-        const yearMatch = rawDate.match(/^(\d{4})/)
-        const rating = this.mapRating(group)
-
-        const rawReleases = Array.isArray(group.releases) ? group.releases : []
-        const releases = rawReleases.map(r => ({
-          id: r.id || '',
-          title: r.title || group.title || '',
-          status: r.status || 'Official',
-          disambiguation: r.disambiguation || '',
-          country: r.country ? [r.country] : [],
-          releaseDate: r.date || null,
-          trackCount: Number(r['track-count'] || 0),
-          media: [],
-          tracks: []
-        }))
-        const trackCounts = releases.map(r => Number(r.trackCount) || 0)
-        const trackCount = trackCounts.length ? Math.max(...trackCounts) : 0
-
-        return {
-          name: group.title || '',
-          year: yearMatch ? parseInt(yearMatch[1], 10) : null,
-          // MB returns YYYY, YYYY-MM, or YYYY-MM-DD. Preserve as-is; downstream
-          // consumers can pad to full ISO for Lidarr compatibility.
-          releaseDate: rawDate || null,
-          trackCount,
-          type: group['primary-type'] || 'Album',
-          albumType: group['primary-type'] || 'Album',
-          secondaryTypes: group['secondary-types'] || [],
-          releaseStatuses: ['Official'],
-          imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
-          rating,
-          ratings: { votes: rating.count, value: rating.value },
-          ids: {
-            musicbrainzReleaseGroupId: group.id || ''
-          },
-          releases
-        }
-      }).filter(a => a.name)
+    const albums = await this.mapReleaseGroupSummaries(releaseGroups, artist.id || '')
 
     return {
       schemaVersion: 'skyhook-v1',
@@ -258,51 +357,7 @@ class MusicBrainzProvider {
     })
     const releaseGroups = releaseGroupResult?.['release-groups'] || []
 
-    const albums = releaseGroups
-      .filter((group) => {
-        const primaryType = String(group['primary-type'] || '').toLowerCase()
-        const secondaryTypes = group['secondary-types'] || []
-        return ['album', 'ep'].includes(primaryType) && secondaryTypes.length === 0
-      })
-      .map(group => {
-        const rawDate = group['first-release-date'] || ''
-        const yearMatch = rawDate.match(/^(\d{4})/)
-        const rating = this.mapRating(group)
-
-        const rawReleases = Array.isArray(group.releases) ? group.releases : []
-        const releases = rawReleases.map(r => ({
-          id: r.id || '',
-          title: r.title || group.title || '',
-          status: r.status || 'Official',
-          disambiguation: r.disambiguation || '',
-          country: r.country ? [r.country] : [],
-          releaseDate: r.date || null,
-          trackCount: Number(r['track-count'] || 0),
-          media: [],
-          tracks: []
-        }))
-        const trackCounts = releases.map(r => Number(r.trackCount) || 0)
-        const trackCount = trackCounts.length ? Math.max(...trackCounts) : 0
-
-        return {
-          name: group.title || '',
-          year: yearMatch ? parseInt(yearMatch[1], 10) : null,
-          releaseDate: rawDate || null,
-          trackCount,
-          type: group['primary-type'] || 'Album',
-          albumType: group['primary-type'] || 'Album',
-          secondaryTypes: group['secondary-types'] || [],
-          releaseStatuses: ['Official'],
-          imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
-          rating,
-          ratings: { votes: rating.count, value: rating.value },
-          ids: {
-            musicbrainzReleaseGroupId: group.id || ''
-          },
-          provider: 'musicbrainz',
-          releases
-        }
-      }).filter(a => a.name)
+    const albums = await this.mapReleaseGroupSummaries(releaseGroups, artist.id || '')
 
     return {
       schemaVersion: 'skyhook-v1',
@@ -350,6 +405,7 @@ class MusicBrainzProvider {
     const artistName = primaryArtist?.artistName || ''
     const releases = this.mapReleases(releaseResult, artistId)
     const rating = this.mapRating(group)
+    const imageUrl = this.coverArtUrl(group.id)
 
     return {
       id: group.id || releaseGroupId,
@@ -365,16 +421,11 @@ class MusicBrainzProvider {
       },
       artists,
       releaseDate: rawDate || null,
-      imageUrl: group.id ? `https://coverartarchive.org/release-group/${group.id}/front-250` : '',
+      imageUrl,
       rating,
       ratings: { votes: rating.count, value: rating.value },
-      images: group.id
-        ? [{
-            coverType: 'cover',
-            url: `https://coverartarchive.org/release-group/${group.id}/front-250`,
-            remoteUrl: `https://coverartarchive.org/release-group/${group.id}/front-250`
-          }]
-        : [],
+      images: this.mapReleaseImages(group.id),
+      remoteCover: imageUrl,
       ids: {
         musicbrainzReleaseGroupId: group.id || releaseGroupId
       },

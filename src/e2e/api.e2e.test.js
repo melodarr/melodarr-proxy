@@ -105,6 +105,7 @@ describe('API E2E Tests', () => {
                   date: '1999-05-18',
                   status: 'Official',
                   country: 'US',
+                  'release-group': { id: '920a68fe-7b93-3d0e-bf73-44ac72f03dd2' },
                   media: [{
                     title: 'CD 1',
                     format: 'CD',
@@ -333,7 +334,7 @@ describe('API E2E Tests', () => {
       const res = await client.get(`/api/album/${releaseGroupId}`)
 
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers['x-cache'], 'MISS')
+      assert.strictEqual(res.headers['x-cache'], 'HIT')
       assert.deepStrictEqual(Object.keys(res.data).sort(), [
         'artistId',
         'artists',

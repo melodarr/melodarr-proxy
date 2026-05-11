@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const {
   toSkyhookArtistResource,
   toSkyhookAlbumResource,
+  withArtistLookupDefaults,
   SKYHOOK_IMAGE_REQUIRED_KEYS,
   SKYHOOK_LINK_REQUIRED_KEYS,
   SKYHOOK_RATING_REQUIRED_KEYS,
@@ -13,6 +14,10 @@ const {
   SKYHOOK_TRACK_REQUIRED_KEYS,
   SKYHOOK_MEDIUM_REQUIRED_KEYS
 } = require('../utils/lidarrArtist')
+
+const VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID = 'b8fee959-1da5-450b-8708-8f218f6414d4'
+const VIVA_LAS_VENGEANCE_RELEASE_DATE = '2022-08-19T00:00:00Z'
+const VIVA_LAS_VENGEANCE_COVER = `https://coverartarchive.org/release-group/${VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID}/front-250`
 
 // ─── § 1: IMAGE COMPLETENESS ──────────────────────────────────────────────────
 
@@ -515,5 +520,60 @@ describe('Release/track/medium edge cases', () => {
   it('album releaseDate defaults to null when missing', () => {
     const album = toSkyhookAlbumResource({})
     assert.equal(album.releaseDate, null)
+  })
+
+  it('preserves fallback release-group browse data lacking tracks with compatibility fields', () => {
+    const artist = withArtistLookupDefaults({
+      artistName: 'Panic! at the Disco',
+      id: 'b9472588-93f3-4922-a1a2-74082cdf9ce8',
+      albums: [{
+        id: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID,
+        title: 'Viva Las Vengeance',
+        firstReleaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+        releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+        provider: 'musicbrainz',
+        ids: {
+          musicbrainzReleaseGroupId: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID
+        },
+        images: [{
+          coverType: 'cover',
+          url: VIVA_LAS_VENGEANCE_COVER,
+          remoteUrl: VIVA_LAS_VENGEANCE_COVER
+        }],
+        remoteCover: VIVA_LAS_VENGEANCE_COVER,
+        releases: [{
+          id: 'browse-release-without-tracks',
+          title: 'Viva Las Vengeance',
+          releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+          status: 'Official',
+          trackCount: 0,
+          media: [{
+            name: 'Digital Media',
+            format: 'Digital Media',
+            position: 1
+          }]
+        }]
+      }]
+    })
+
+    const album = artist.albums[0]
+    assert.equal(album.id, VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID)
+    assert.equal(album.title, 'Viva Las Vengeance')
+    assert.equal(album.releaseDate, VIVA_LAS_VENGEANCE_RELEASE_DATE)
+    assert.equal(album.provider, 'musicbrainz')
+    assert.equal(album.ids.musicbrainzReleaseGroupId, VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID)
+    assert.equal(album.remoteCover, VIVA_LAS_VENGEANCE_COVER)
+    assert.equal(album.images[0].url, VIVA_LAS_VENGEANCE_COVER)
+    assert.equal(album.images[0].remoteUrl, VIVA_LAS_VENGEANCE_COVER)
+
+    const release = album.releases[0]
+    assert.equal(release.id, 'browse-release-without-tracks')
+    assert.equal(release.trackCount, 0)
+    assert.deepEqual(release.tracks, [])
+    assert.deepEqual(release.media, [{
+      name: 'Digital Media',
+      format: 'Digital Media',
+      position: 1
+    }])
   })
 })

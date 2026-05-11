@@ -232,6 +232,7 @@ function toArtistLookupArray (response, isDebug) {
 
 function buildArtistLookupRankingInput (term, data) {
   const artistId = data.id || data.foreignArtistId || ''
+  const sourceAlbums = Array.isArray(data.albums) ? data.albums : []
   const nestedArtist = withSkyhookArtistDefaults({
     artistName: data.artistName,
     id: artistId,
@@ -248,27 +249,36 @@ function buildArtistLookupRankingInput (term, data) {
     albums: []
   })
 
+  const albums = sourceAlbums.map(album => {
+    const imageUrl = album.imageUrl || album.remoteCover || album.images?.[0]?.remoteUrl || album.images?.[0]?.url || ''
+
+    return normalizeAlbum({
+      ...album,
+      artistId: album.artistId || artistId,
+      artist: album.artist || nestedArtist,
+      artists: Array.isArray(album.artists) && album.artists.length > 0 ? album.artists : [nestedArtist],
+      title: album.title || album.name,
+      id: album.id || album.foreignAlbumId || album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
+      firstReleaseDate: toIsoDate(album.firstReleaseDate || album.releaseDate || album.year),
+      releaseDate: toIsoDate(album.releaseDate || album.firstReleaseDate || album.year),
+      images: Array.isArray(album.images) && album.images.length > 0
+        ? album.images
+        : (imageUrl ? [{ coverType: 'cover', url: imageUrl, remoteUrl: imageUrl }] : []),
+      remoteCover: imageUrl,
+      rating: album.rating || album.ratings,
+      ratings: album.ratings || album.rating,
+      provider: album.provider || '',
+      ids: album.ids || {}
+    })
+  })
+
   return {
     query: term,
     results: [
       {
         artistName: data.artistName,
-        albums: data.albums.map(album => ({
-          artistId,
-          artist: nestedArtist,
-          artists: [nestedArtist],
-          title: album.name,
-          id: album.ids?.musicbrainzReleaseGroupId || album.ids?.theAudioDbAlbumId || album.ids?.itunesCollectionId || album.ids?.discogsId || album.ids?.musicbrainzAlbumId || '',
-          firstReleaseDate: toIsoDate(album.releaseDate || album.year),
-          releaseDate: toIsoDate(album.releaseDate || album.year),
-          images: album.imageUrl ? [{ coverType: 'cover', url: album.imageUrl, remoteUrl: album.imageUrl }] : [],
-          remoteCover: album.imageUrl || '',
-          rating: album.rating || album.ratings,
-          ratings: album.ratings || album.rating,
-          provider: album.provider || '',
-          ids: album.ids || {}
-        })).map(normalizeAlbum),
-        providerSources: Array.from(new Set(data.albums.map(a => a.provider))),
+        albums,
+        providerSources: Array.from(new Set(sourceAlbums.map(a => a.provider))),
         confidence: data.confidence
       }
     ]

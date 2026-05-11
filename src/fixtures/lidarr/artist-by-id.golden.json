@@ -57,11 +57,13 @@
       "images": [
         {
           "coverType": "cover",
-          "url": "https://example.com/ok-computer-cover.jpg",
+          "url": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front-250",
+          "remoteUrl": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front-250",
           "height": 500,
           "width": 500
         }
       ],
+      "remoteCover": "https://coverartarchive.org/release-group/b1392450-e666-3926-a536-22c65f834433/front-250",
       "links": [
         {
           "target": "https://en.wikipedia.org/wiki/OK_Computer",
@@ -96,7 +98,7 @@
           "trackCount": 12,
           "media": [
             {
-              "name": "",
+              "name": "CD",
               "format": "CD",
               "position": 1
             }
@@ -127,6 +129,136 @@
               "recordingId": "e5f30c2e-8a1c-4cd4-a3c2-0b2e6d50f9a1",
               "oldIds": [],
               "oldRecordingIds": []
+            },
+            {
+              "id": "f4c2d0f1-1712-4c07-86b3-1b0ef7e06a03",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Subterranean Homesick Alien",
+              "trackNumber": "3",
+              "trackPosition": 3,
+              "durationMs": 267000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "f4c2d0f1-1712-4c07-86b3-1b0ef7e06a03",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "f8d9e9a6-05a3-4fa4-9d35-1fa2f88b8dd3",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Exit Music (For a Film)",
+              "trackNumber": "4",
+              "trackPosition": 4,
+              "durationMs": 264000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "f8d9e9a6-05a3-4fa4-9d35-1fa2f88b8dd3",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "77c0efc3-1aa0-4b43-a180-3cf664882d15",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Let Down",
+              "trackNumber": "5",
+              "trackPosition": 5,
+              "durationMs": 299000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "77c0efc3-1aa0-4b43-a180-3cf664882d15",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "2d01df30-2f57-40e5-9c12-0db52ecad7db",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Karma Police",
+              "trackNumber": "6",
+              "trackPosition": 6,
+              "durationMs": 261000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "2d01df30-2f57-40e5-9c12-0db52ecad7db",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "fb9a7d54-6df1-49ed-bbe3-bd2d67134961",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Fitter Happier",
+              "trackNumber": "7",
+              "trackPosition": 7,
+              "durationMs": 117000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "fb9a7d54-6df1-49ed-bbe3-bd2d67134961",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "be3bcaa4-e2bb-47d5-bd3e-5f9cf9c1b71d",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Electioneering",
+              "trackNumber": "8",
+              "trackPosition": 8,
+              "durationMs": 230000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "be3bcaa4-e2bb-47d5-bd3e-5f9cf9c1b71d",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "2ee391d1-7710-49a7-b74f-b70e995b163c",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Climbing Up the Walls",
+              "trackNumber": "9",
+              "trackPosition": 9,
+              "durationMs": 285000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "2ee391d1-7710-49a7-b74f-b70e995b163c",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "7f20e590-b233-4f3c-bf87-6ff1842d1ad3",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "No Surprises",
+              "trackNumber": "10",
+              "trackPosition": 10,
+              "durationMs": 229000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "7f20e590-b233-4f3c-bf87-6ff1842d1ad3",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "407d9ee4-5b41-4d3b-a621-6927a9604e58",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "Lucky",
+              "trackNumber": "11",
+              "trackPosition": 11,
+              "durationMs": 259000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "407d9ee4-5b41-4d3b-a621-6927a9604e58",
+              "oldIds": [],
+              "oldRecordingIds": []
+            },
+            {
+              "id": "e6f57105-8b2a-4286-b0fd-07f0d10e6f47",
+              "artistId": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+              "trackName": "The Tourist",
+              "trackNumber": "12",
+              "trackPosition": 12,
+              "durationMs": 324000,
+              "explicit": false,
+              "mediumNumber": 1,
+              "recordingId": "e6f57105-8b2a-4286-b0fd-07f0d10e6f47",
+              "oldIds": [],
+              "oldRecordingIds": []
             }
           ]
         }
@@ -151,11 +283,13 @@
       "images": [
         {
           "coverType": "cover",
-          "url": "https://example.com/kid-a-cover.jpg",
+          "url": "https://coverartarchive.org/release-group/a6d1f063-97dc-3e1e-a419-08f1b55c0a53/front-250",
+          "remoteUrl": "https://coverartarchive.org/release-group/a6d1f063-97dc-3e1e-a419-08f1b55c0a53/front-250",
           "height": 500,
           "width": 500
         }
       ],
+      "remoteCover": "https://coverartarchive.org/release-group/a6d1f063-97dc-3e1e-a419-08f1b55c0a53/front-250",
       "links": [],
       "artists": [
         {

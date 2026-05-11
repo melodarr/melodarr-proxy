@@ -41,6 +41,10 @@ const PROXY_EXTENSION_KEYS = [
   '_generatedAt'
 ]
 
+const VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID = 'b8fee959-1da5-450b-8708-8f218f6414d4'
+const VIVA_LAS_VENGEANCE_RELEASE_DATE = '2022-08-19T00:00:00Z'
+const VIVA_LAS_VENGEANCE_COVER = `https://coverartarchive.org/release-group/${VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID}/front-250`
+
 test('Lidarr artist lookup resource matches contract exactly', () => {
   const fixture = readFixture('artist-lookup.golden.json')
   const out = fixture.map(a => withArtistLookupDefaults(a))
@@ -234,4 +238,39 @@ test('partial provider failure fixture produces a valid degraded lookup response
     }
   ])
   assert.equal(artist.albums.length, 1)
+})
+
+test('artist lookup includes complete Viva Las Vengeance album summary from mocked MusicBrainz data', () => {
+  const [artist] = [{
+    artistName: 'Panic! at the Disco',
+    id: 'b9472588-93f3-4922-a1a2-74082cdf9ce8',
+    albums: [{
+      title: 'Viva Las Vengeance',
+      id: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID,
+      firstReleaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+      releaseDate: VIVA_LAS_VENGEANCE_RELEASE_DATE,
+      provider: 'musicbrainz',
+      ids: {
+        musicbrainzReleaseGroupId: VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID
+      },
+      images: [{
+        coverType: 'cover',
+        url: VIVA_LAS_VENGEANCE_COVER,
+        remoteUrl: VIVA_LAS_VENGEANCE_COVER
+      }],
+      remoteCover: VIVA_LAS_VENGEANCE_COVER
+    }]
+  }].map(a => withArtistLookupDefaults(a))
+
+  const album = artist.albums.find(album => album.title === 'Viva Las Vengeance')
+  assert.ok(album, 'Panic! at the Disco lookup must include Viva Las Vengeance')
+  assert.equal(album.id, VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID)
+  assert.equal(album.ids.musicbrainzReleaseGroupId, VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID)
+  assert.equal(album.title, 'Viva Las Vengeance')
+  assert.equal(album.releaseDate, VIVA_LAS_VENGEANCE_RELEASE_DATE)
+  assert.equal(album.provider, 'musicbrainz')
+  assert.equal(album.images.length, 1)
+  assert.equal(album.images[0].url, VIVA_LAS_VENGEANCE_COVER)
+  assert.ok(album.images[0].url.includes('https://coverartarchive.org/release-group/'))
+  assert.equal(album.remoteCover, album.images[0].url)
 })

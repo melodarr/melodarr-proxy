@@ -316,17 +316,40 @@ function normalizeReleaseResource (release = {}) {
   }
 }
 
+function getAlbumId (album = {}) {
+  return asString(
+    album.id ||
+    album.Id ||
+    album.foreignAlbumId ||
+    album.ForeignAlbumId ||
+    album.ids?.musicbrainzReleaseGroupId ||
+    album.ids?.musicbrainzAlbumId ||
+    album.ids?.theAudioDbAlbumId ||
+    album.ids?.itunesCollectionId ||
+    album.ids?.discogsId
+  )
+}
+
+function normalizeAlbumImages (album = {}) {
+  const images = normalizeArray(album.images || album.Images)
+  if (images.length > 0) {
+    return images.map(normalizeLookupImage)
+  }
+
+  const imageUrl = asString(album.imageUrl || album.ImageUrl || album.remoteCover || album.RemoteCover)
+  return imageUrl
+    ? [normalizeLookupImage({ coverType: 'cover', url: imageUrl, remoteUrl: imageUrl })]
+    : []
+}
+
 function normalizeAlbum (album = {}) {
   const type = asString(album.type || album.albumType || album.primaryType || 'Album')
-  const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
-  const imageUrl = asString(album.imageUrl || album.remoteCover)
-  const normalizedAlbumImages = normalizeArray(album.images)
-  const images = normalizedAlbumImages.length > 0
-    ? normalizedAlbumImages.map(normalizeLookupImage)
-    : (imageUrl ? [normalizeLookupImage({ coverType: 'cover', url: imageUrl })] : [])
+  const releaseDate = asString(album.releaseDate || album.firstReleaseDate || album.year)
+  const firstReleaseDate = asString(album.firstReleaseDate || album.releaseDate || album.year)
+  const images = normalizeAlbumImages(album)
 
   const out = {
-    id: asString(album.id || album.foreignAlbumId || album.ids?.musicbrainzReleaseGroupId),
+    id: getAlbumId(album),
     oldIds: normalizeStringArray(album.oldIds || album.OldIds),
     title: asString(album.title || album.name || album.albumName),
     type,
@@ -335,9 +358,9 @@ function normalizeAlbum (album = {}) {
     releaseStatuses: normalizeReleaseStatuses(album.releaseStatuses || album.ReleaseStatuses),
     rating: normalizeRating(album.rating || album.ratings),
     ratings: normalizeRatings(album.ratings || album.rating),
-    firstReleaseDate: asString(album.firstReleaseDate || album.releaseDate) || null,
+    firstReleaseDate: firstReleaseDate || null,
     releaseDate: releaseDate || null,
-    releases: normalizeArray(album.releases),
+    releases: normalizeArray(album.releases || album.Releases).map(normalizeReleaseResource),
     genres: normalizeStringArray(album.genres),
     media: normalizeArray(album.media),
     images,
@@ -352,6 +375,10 @@ function normalizeAlbum (album = {}) {
   if ('disambiguation' in album) out.disambiguation = asString(album.disambiguation)
   if ('overview' in album) out.overview = asString(album.overview)
   if ('providers' in album) out.providers = normalizeProviderMetadata(album.providers)
+  if ('provider' in album) out.provider = album.provider
+  if ('ids' in album) out.ids = album.ids
+  if ('provenance' in album) out.provenance = album.provenance
+  if ('imageProvider' in album) out.imageProvider = album.imageProvider
 
   return out
 }
