@@ -22,6 +22,10 @@ function normalizeImageSource (source) {
   return normalizedSource
 }
 
+function getProviderMetricName (provider) {
+  return normalizeImageSource(provider?.name)
+}
+
 function getAllProviders () {
   const all = { ...builtinProviders }
   let customProviders = []
@@ -98,7 +102,7 @@ async function aggregateArtist (term) {
   // more-reliable providers get scheduled first. Order doesn't change
   // the parallel execution, but it documents intent and matches how the
   // merge step downstream walks validOutcomes.
-  const orderedProviders = providerMetrics.sortByScore(activeProviders, provider => normalizeImageSource(provider.name))
+  const orderedProviders = providerMetrics.sortByScore(activeProviders, getProviderMetricName)
 
   const results = await Promise.allSettled(
     orderedProviders.map(async provider => {
