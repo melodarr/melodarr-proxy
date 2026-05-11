@@ -15,7 +15,8 @@ test('pathAuthMiddleware accepts legacy hex API keys in path', () => {
   })
 
   assert.equal(nextArg, undefined)
-  assert.equal(req.query.api_key, 'bc57be1e98bed038597f1fed0f058137')
+  assert.equal(req.pathApiKey, 'bc57be1e98bed038597f1fed0f058137')
+  assert.equal(req.query.api_key, undefined)
 })
 
 test('pathAuthMiddleware accepts mp-prefixed API keys in path', () => {
@@ -30,7 +31,8 @@ test('pathAuthMiddleware accepts mp-prefixed API keys in path', () => {
   })
 
   assert.equal(nextArg, undefined)
-  assert.equal(req.query.api_key, 'mp_example')
+  assert.equal(req.pathApiKey, 'mp_example')
+  assert.equal(req.query.api_key, undefined)
 })
 
 test('pathAuthMiddleware skips route when path key is missing', () => {
@@ -45,6 +47,7 @@ test('pathAuthMiddleware skips route when path key is missing', () => {
   })
 
   assert.equal(nextArg, 'route')
+  assert.equal(req.pathApiKey, undefined)
   assert.equal(req.query.api_key, undefined)
 })
 

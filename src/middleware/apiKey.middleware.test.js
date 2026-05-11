@@ -159,3 +159,28 @@ test('api key middleware accepts valid keys and records completion metrics', () 
   assert.equal(calls.apiRequests[0][1], true)
   assert.equal(typeof calls.apiRequests[0][2], 'number')
 })
+
+test('api key middleware accepts path API key from Lidarr-compatible routes', () => {
+  const seenKeys = []
+  const { middleware, calls } = loadMiddleware({
+    checkRateLimit: (key) => {
+      seenKeys.push(key)
+      return { valid: true, id: 'path-key-id', name: 'Lidarr Path' }
+    }
+  })
+  const req = { headers: {}, query: {}, pathApiKey: 'mp_path_valid' }
+  const res = makeResponse()
+  let nextCalled = false
+
+  middleware(req, res, () => {
+    nextCalled = true
+  })
+  res.finish()
+
+  assert.equal(nextCalled, true)
+  assert.deepEqual(seenKeys, ['mp_path_valid'])
+  assert.equal(req.apiClient, 'Lidarr Path')
+  assert.equal(req.apiKeyId, 'path-key-id')
+  assert.equal(req.apiKeyMasked, 'path-key-id:Lidarr Path')
+  assert.equal(calls.apiRequests[0][0], 'path-key-id:Lidarr Path')
+})

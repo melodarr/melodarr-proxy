@@ -33,7 +33,7 @@ function apiKeyMiddleware (req, res, next) {
     return next()
   }
 
-  const key = req.headers['x-api-key'] || req.query.api_key || req.query.apikey
+  const key = req.pathApiKey || req.headers['x-api-key'] || req.query.api_key || req.query.apikey
 
   if (!key) {
     metrics.recordApiRequest('unknown', false, 0) // Need to adjust this or pass undefined
