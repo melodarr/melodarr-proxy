@@ -1,5 +1,8 @@
 const upstreamService = require('../services/upstream.service')
 
+const MUSICBRAINZ_RELEASE_PAGE_SIZE = 100
+const MUSICBRAINZ_RELEASE_PAGE_LIMIT = 10
+
 class MusicBrainzProvider {
   constructor () {
     this.name = 'musicbrainz'
@@ -239,24 +242,37 @@ class MusicBrainzProvider {
   async fetchArtistReleasesByGroup (artistId) {
     if (!artistId) return new Map()
 
-    const releaseResult = await upstreamService.musicBrainzGet('/release', {
-      artist: artistId,
-      inc: 'release-groups+media+recordings+artist-credits',
-      limit: 100,
-      offset: 0
-    })
-
-    const releases = Array.isArray(releaseResult?.releases) ? releaseResult.releases : []
     const releasesByGroup = new Map()
+    let offset = 0
+    let fetchedPages = 0
 
-    for (const release of releases) {
-      const rgId = release['release-group']?.id
-      if (!rgId) continue
+    while (fetchedPages < MUSICBRAINZ_RELEASE_PAGE_LIMIT) {
+      const releaseResult = await upstreamService.musicBrainzGet('/release', {
+        artist: artistId,
+        inc: 'release-groups+media+recordings+artist-credits',
+        limit: MUSICBRAINZ_RELEASE_PAGE_SIZE,
+        offset
+      })
 
-      if (!releasesByGroup.has(rgId)) {
-        releasesByGroup.set(rgId, [])
+      const releases = Array.isArray(releaseResult?.releases) ? releaseResult.releases : []
+
+      for (const release of releases) {
+        const rgId = release['release-group']?.id
+        if (!rgId) continue
+
+        if (!releasesByGroup.has(rgId)) {
+          releasesByGroup.set(rgId, [])
+        }
+        releasesByGroup.get(rgId).push(release)
       }
-      releasesByGroup.get(rgId).push(release)
+
+      fetchedPages += 1
+      offset += MUSICBRAINZ_RELEASE_PAGE_SIZE
+
+      const total = Number(releaseResult?.count ?? 0) || 0
+      if (releases.length < MUSICBRAINZ_RELEASE_PAGE_SIZE || (total > 0 && offset >= total)) {
+        break
+      }
     }
 
     return releasesByGroup

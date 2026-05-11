@@ -318,6 +318,82 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(calls.filter(call => call.path === '/release').length, 1)
   })
 
+  await t.test('lookupArtistById - paginates artist releases so older albums receive tracks', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroupId = 'rg-vices-and-virtues'
+    const releaseOffsets = []
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-panic') {
+        return {
+          id: 'artist-panic',
+          name: 'Panic! at the Disco'
+        }
+      }
+      if (path === '/release-group') {
+        return {
+          'release-groups': [{
+            id: releaseGroupId,
+            title: 'Vices & Virtues',
+            'primary-type': 'Album',
+            'first-release-date': '2011-03-18'
+          }]
+        }
+      }
+      if (path === '/release') {
+        assert.strictEqual(params.artist, 'artist-panic')
+        assert.strictEqual(params.limit, 100)
+        releaseOffsets.push(params.offset)
+
+        if (params.offset === 0) {
+          return {
+            count: 101,
+            releases: Array.from({ length: 100 }, (_, index) => ({
+              id: `rel-filler-${index + 1}`,
+              title: `Filler Release ${index + 1}`,
+              'release-group': { id: `rg-filler-${index + 1}` },
+              media: [{
+                title: 'Digital Media',
+                format: 'Digital Media',
+                position: 1,
+                tracks: makeMusicBrainzTracks(1, 'artist-panic')
+              }]
+            }))
+          }
+        }
+
+        return {
+          count: 101,
+          releases: [{
+            id: 'rel-vices-and-virtues',
+            title: 'Vices & Virtues',
+            date: '2011-03-18',
+            status: 'Official',
+            country: 'US',
+            'release-group': { id: releaseGroupId },
+            media: [{
+              title: 'CD',
+              format: 'CD',
+              position: 1,
+              tracks: makeMusicBrainzTracks(14, 'artist-panic')
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-panic')
+    const album = result.albums[0]
+
+    assert.deepStrictEqual(releaseOffsets, [0, 100])
+    assert.strictEqual(album.id, releaseGroupId)
+    assert.strictEqual(album.trackCount, 14)
+    assert.strictEqual(album.releases.length, 1)
+    assert.strictEqual(album.releases[0].id, 'rel-vices-and-virtues')
+    assert.strictEqual(album.releases[0].media[0].format, 'CD')
+    assert.strictEqual(album.releases[0].tracks.length, 14)
+  })
+
   await t.test('lookupArtistById - falls back to one release lookup when browse release groups lack embedded releases', async () => {
     const { musicbrainzProvider, setMock } = setupMocks()
     let releaseLookupCount = 0
