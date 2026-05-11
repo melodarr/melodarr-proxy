@@ -43,7 +43,7 @@ const PROXY_EXTENSION_KEYS = [
 
 const VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID = 'b8fee959-1da5-450b-8708-8f218f6414d4'
 const VIVA_LAS_VENGEANCE_RELEASE_DATE = '2022-08-19T00:00:00Z'
-const VIVA_LAS_VENGEANCE_COVER = `https://coverartarchive.org/release-group/${VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID}/front-250`
+const VIVA_LAS_VENGEANCE_COVER = `https://coverartarchive.org/release-group/${VIVA_LAS_VENGEANCE_RELEASE_GROUP_ID}/front`
 
 test('Lidarr artist lookup resource matches contract exactly', () => {
   const fixture = readFixture('artist-lookup.golden.json')

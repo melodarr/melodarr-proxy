@@ -61,3 +61,14 @@ test('settings rollback route requires settings auth and CSRF before handler', (
     ['requireSettingsAuth', 'requireSettingsCsrf', 'applyRollback']
   )
 })
+
+test('image proxy routes are public so Lidarr media cover fetches do not need API auth', () => {
+  const router = require('./api.routes')
+  const headLayer = router.stack.find((layer) => layer.route?.path === '/image' && layer.route.methods.head)
+  const getLayer = router.stack.find((layer) => layer.route?.path === '/image' && layer.route.methods.get)
+
+  assert.ok(headLayer, 'expected HEAD /image route to be registered')
+  assert.ok(getLayer, 'expected GET /image route to be registered')
+  assert.deepEqual(headLayer.route.stack.map((stackLayer) => stackLayer.handle.name), ['handleImageHead'])
+  assert.deepEqual(getLayer.route.stack.map((stackLayer) => stackLayer.handle.name), ['handleImageProxy'])
+})

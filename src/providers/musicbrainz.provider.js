@@ -157,7 +157,7 @@ class MusicBrainzProvider {
   }
 
   coverArtUrl (releaseGroupId) {
-    return releaseGroupId ? `https://coverartarchive.org/release-group/${releaseGroupId}/front-250` : ''
+    return releaseGroupId ? `https://coverartarchive.org/release-group/${releaseGroupId}/front` : ''
   }
 
   mapReleaseImages (releaseGroupId) {

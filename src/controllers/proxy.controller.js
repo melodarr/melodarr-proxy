@@ -12,6 +12,7 @@ const logger = require('../utils/logger')
 const { saveSnapshot } = require('../snapshots')
 const { toIsoDate } = require('../utils/dates')
 const { toSkyhookSearchShape } = require('../utils/skyhook')
+const { proxifyImageUrls } = require('../utils/imageProxy')
 const { isValidArtist } = require('../utils/validateArtist')
 const {
   normalizeAlbum,
@@ -108,7 +109,7 @@ async function handleSearch (req, res) {
     metrics.recordCache(true, isStale)
     await tracer.finalizeTrace(trace, { cacheHit: true })
     res.set('X-Cache-Generated-At', cached.generatedAt)
-    return res.json(toSkyhookSearchShape(cached.data, type).filter(isValidArtist))
+    return res.json(proxifyImageUrls(toSkyhookSearchShape(cached.data, type).filter(isValidArtist), req))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -141,7 +142,7 @@ async function handleSearch (req, res) {
       metrics.recordCache(true, isStale)
       await tracer.finalizeTrace(trace, { cacheHit: true })
       res.set('X-Cache-Generated-At', cachedData.generatedAt)
-      return res.json(toSkyhookSearchShape(cachedData.data, type).filter(isValidArtist))
+      return res.json(proxifyImageUrls(toSkyhookSearchShape(cachedData.data, type).filter(isValidArtist), req))
     }
   }
 
@@ -168,7 +169,7 @@ async function handleSearch (req, res) {
     await saveSnapshot(`search:${normalizedQ}`, data)
 
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json(toSkyhookSearchShape(data, type).filter(isValidArtist))
+    return res.json(proxifyImageUrls(toSkyhookSearchShape(data, type).filter(isValidArtist), req))
   } catch (err) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Upstream error in handleSearch', {
@@ -648,7 +649,7 @@ async function handleArtistById (req, res) {
     const isStale = (Date.now() - new Date(cachedData.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
     tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
     metrics.recordCache(true, isStale)
-    const response = toSkyhookArtistResource(cachedData.data)
+    const response = proxifyImageUrls(toSkyhookArtistResource(cachedData.data), req)
     await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: ['musicbrainz'] })
     res.set('X-Cache', 'HIT')
     res.set('X-Providers', 'musicbrainz')
@@ -686,7 +687,7 @@ async function handleArtistById (req, res) {
     res.set('X-Upstream-Calls', '1')
     res.set('X-Providers', 'musicbrainz')
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json(response)
+    return res.json(proxifyImageUrls(response, req))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist by ID lookup failed', {
@@ -728,7 +729,7 @@ async function handleAlbumById (req, res) {
     res.set('X-Cache', 'HIT')
     res.set('X-Providers', 'musicbrainz')
     res.set('X-Cache-Generated-At', cachedData.generatedAt)
-    return res.json(normalizeAlbumResponse({ ...cachedData.data, _generatedAt: cachedData.generatedAt }))
+    return res.json(proxifyImageUrls(normalizeAlbumResponse({ ...cachedData.data, _generatedAt: cachedData.generatedAt }), req))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -757,7 +758,7 @@ async function handleAlbumById (req, res) {
       res.set('X-Cache', 'HIT')
       res.set('X-Providers', 'musicbrainz')
       res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
-      return res.json(normalizeAlbumResponse({ ...cachedDataAfterWait.data, _generatedAt: cachedDataAfterWait.generatedAt }))
+      return res.json(proxifyImageUrls(normalizeAlbumResponse({ ...cachedDataAfterWait.data, _generatedAt: cachedDataAfterWait.generatedAt }), req))
     }
   }
 
@@ -783,7 +784,7 @@ async function handleAlbumById (req, res) {
     res.set('X-Upstream-Calls', '1')
     res.set('X-Providers', 'musicbrainz')
     res.set('X-Cache-Generated-At', new Date().toISOString())
-    return res.json(response)
+    return res.json(proxifyImageUrls(response, req))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Album by ID lookup failed', {
@@ -839,7 +840,7 @@ async function handleArtistDiscover (req, res) {
       providersUsed: providersTried
     })
 
-    const wrappedCandidates = toSkyhookSearchShape(candidates, type).filter(isValidArtist)
+    const wrappedCandidates = proxifyImageUrls(toSkyhookSearchShape(candidates, type).filter(isValidArtist), req)
     return res.json({
       query,
       type,
