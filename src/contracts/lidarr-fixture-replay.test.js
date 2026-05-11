@@ -32,6 +32,7 @@ test('Replay Raw Fixtures vs Proxy Controller (Structural)', async (t) => {
   }
   
   const files = fs.readdirSync(fixturesDir).filter(f => f.endsWith('.json'))
+  assert.ok(files.length > 0, `No JSON fixtures found in ${fixturesDir}`)
   
   for (const file of files) {
     const fixturePath = path.join(fixturesDir, file)
