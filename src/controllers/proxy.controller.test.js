@@ -1,5 +1,28 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
+const {
+  LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
+  LIDARR_OPTIONAL_ARTIST_KEYS
+} = require('../utils/lidarrArtist')
+
+const SUPPORTED_ARTIST_LOOKUP_KEYS = new Set([
+  ...LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
+  ...LIDARR_OPTIONAL_ARTIST_KEYS,
+  'partial',
+  'warning'
+])
+
+function assertRequiredArtistLookupFields (artist) {
+  for (const key of LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS) {
+    assert.ok(Object.prototype.hasOwnProperty.call(artist, key), `Missing required artist field: ${key}`)
+  }
+}
+
+function assertNoUnsupportedArtistLookupFields (artist) {
+  for (const key of Object.keys(artist)) {
+    assert.ok(SUPPORTED_ARTIST_LOOKUP_KEYS.has(key), `Unsupported top-level artist field: ${key}`)
+  }
+}
 
 function makeResponse () {
   return {
@@ -15,6 +38,9 @@ function makeResponse () {
       return this
     },
     json (body) {
+      if (!this.headers['Content-Type']) {
+        this.headers['Content-Type'] = 'application/json; charset=utf-8'
+      }
       this.body = body
       return this
     }
@@ -232,6 +258,62 @@ test('artist lookup requires a term', async () => {
   assert.equal(res.body.error, 'Missing required query parameter: term')
 })
 
+test('GET /api/v1/artist/lookup?term=Radiohead returns normalized mocked-provider artist data', async () => {
+  const radioheadMbid = 'a74b1b7f-71a5-4011-9441-d0b5e4122711'
+  const { controller } = loadController({
+    aggregateArtist: async (term) => ({
+      artistName: term,
+      id: radioheadMbid,
+      foreignArtistId: radioheadMbid,
+      disambiguation: '',
+      overview: 'English rock band from Abingdon, Oxfordshire.',
+      status: 'continuing',
+      oldIds: [],
+      aliases: ['On a Friday'],
+      artistAliases: ['On a Friday'],
+      links: [{ name: 'Official Website', url: 'https://www.radiohead.com/' }],
+      images: [{ coverType: 'poster', url: 'https://example.test/radiohead.jpg', remoteUrl: 'https://example.test/radiohead.jpg' }],
+      albums: [
+        {
+          name: 'OK Computer',
+          year: 1997,
+          releaseDate: '1997-05-21T00:00:00Z',
+          imageUrl: 'https://example.test/ok-computer.jpg',
+          provider: 'musicbrainz',
+          ids: { musicbrainzReleaseGroupId: 'b1392450-e666-3926-a536-22c65f834433' }
+        }
+      ],
+      confidence: 1,
+      providers: [{ name: 'musicbrainz' }, { name: 'itunes' }],
+      providerCount: 2,
+      partial: false,
+      warning: null,
+      debug: { shouldNotLeak: true },
+      providerErrors: [{ provider: 'unsupported-leak-check' }],
+      results: [{ shouldNotLeak: true }]
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'Radiohead' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Providers'], 'musicbrainz,itunes')
+  assert.ok(Array.isArray(res.body), 'Response should be a JSON array')
+  assert.equal(res.body.length, 1)
+
+  const artist = res.body[0]
+  assertRequiredArtistLookupFields(artist)
+  assertNoUnsupportedArtistLookupFields(artist)
+  assert.equal(artist.artistName, 'Radiohead')
+  assert.equal(artist.foreignArtistId, radioheadMbid)
+  assert.equal(artist.id, radioheadMbid)
+  assert.equal(artist.providers, undefined)
+  assert.equal(artist.debug, undefined)
+  assert.equal(artist.providerErrors, undefined)
+  assert.equal(artist.results, undefined)
+})
+
 test('artist lookup normalizes provider data and caches the response', async () => {
   let upstreamCalls = 0
   const { controller, cacheStore, lockCalls } = loadController({
@@ -394,12 +476,39 @@ test('artist lookup returns partial error response when all providers fail', asy
   await controller.handleArtistLookup({ query: { term: 'Broken Artist' } }, res)
 
   assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['Content-Type'], 'application/json; charset=utf-8')
+  assert.equal(res.headers['X-Providers'], 'unknown')
   assert.deepEqual(res.body, [])
   assert.deepEqual(lockCalls.at(-1), {
     method: 'releaseLock',
     key: 'lock:artist:broken artist',
     token: 'test-lock'
   })
+})
+
+test('artist lookup returns [] JSON without partial true for NoMatchArtist', async () => {
+  const { controller } = loadController({
+    aggregateArtist: async () => ({
+      artistName: '',
+      id: '',
+      foreignArtistId: '',
+      albums: [],
+      confidence: 0,
+      providers: [],
+      providerCount: 0,
+      partial: false,
+      warning: null
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistLookup({ query: { term: 'NoMatchArtist' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['Content-Type'], 'application/json; charset=utf-8')
+  assert.equal(res.headers['X-Providers'], 'unknown')
+  assert.deepEqual(res.body, [])
+  assert.notEqual(res.body.partial, true)
 })
 
 test('artist lookup handles missing provider metadata gracefully with "unknown" header', async () => {
@@ -422,6 +531,7 @@ test('artist lookup handles missing provider metadata gracefully with "unknown" 
 
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['X-Providers'], 'unknown')
+  assert.equal(res.headers['Content-Type'], 'application/json; charset=utf-8')
   assert.equal(res.body[0].id, 'mock-mbid')
 })
 
@@ -430,6 +540,7 @@ test('artist lookup returns valid response when a provider partially fails', asy
     aggregateArtist: async (term) => ({
       artistName: term,
       id: 'partial-mbid',
+      foreignArtistId: 'partial-mbid',
       albums: [],
       confidence: 1,
       providers: [{ name: 'musicbrainz', score: 100 }],
@@ -443,7 +554,14 @@ test('artist lookup returns valid response when a provider partially fails', asy
   await controller.handleArtistLookup({ query: { term: 'partial failure' } }, res)
 
   assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['X-Providers'], 'musicbrainz')
+  assert.equal(res.body.length, 1)
   assert.equal(res.body[0].id, 'partial-mbid')
+  assert.equal(res.body[0].foreignArtistId, 'partial-mbid')
+  assert.equal(res.body[0].partial, true)
+  assert.equal(res.body[0].warning, 'One or more providers failed')
+  assertRequiredArtistLookupFields(res.body[0])
+  assertNoUnsupportedArtistLookupFields(res.body[0])
 })
 
 test('artist lookup returns stale cache when upstream background refresh fails', async () => {

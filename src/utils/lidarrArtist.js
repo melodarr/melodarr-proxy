@@ -85,6 +85,18 @@ const LIDARR_OPTIONAL_ARTIST_KEYS = Object.freeze([
   'sortName'
 ])
 
+const LIDARR_ADD_ARTIST_OPTIONAL_KEYS = Object.freeze([
+  'qualityProfileId',
+  'metadataProfileId',
+  'monitored',
+  'monitorNewItems',
+  'folder',
+  'rootFolderPath',
+  'addOptions',
+  'ended',
+  'tags'
+])
+
 const SKYHOOK_ALBUM_REQUIRED_KEYS = Object.freeze([
   'artistId',
   'artists',
@@ -204,13 +216,57 @@ function normalizeRatingResource (value) {
   }
 }
 
-function normalizeImageResource (image = {}) {
+function normalizeLookupImage (image = {}) {
+  const url = asString(image.url || image.remoteUrl || image.Url || image.RemoteUrl)
+  const remoteUrl = asString(image.remoteUrl || image.url || image.RemoteUrl || image.Url)
+
   return {
     coverType: asString(image.coverType || image.CoverType),
-    url: asString(image.url || image.remoteUrl || image.Url),
+    url,
+    remoteUrl
+  }
+}
+
+function normalizeImageResource (image = {}) {
+  const url = asString(image.url || image.remoteUrl || image.Url || image.RemoteUrl)
+  return {
+    coverType: asString(image.coverType || image.CoverType),
+    url,
     height: Number(image.height ?? image.Height ?? 0) || 0,
     width: Number(image.width ?? image.Width ?? 0) || 0
   }
+}
+
+function normalizeProviderMetadata (providers) {
+  return normalizeArray(providers)
+    .map(provider => {
+      if (!provider) {
+        return null
+      }
+
+      const normalized = typeof provider === 'object'
+        ? {
+            name: asString(provider.name || provider.Name)
+          }
+        : {
+            name: asString(provider)
+          }
+
+      if (typeof provider === 'object') {
+        const score = Number(provider.score ?? provider.Score)
+        if (Number.isFinite(score)) {
+          normalized.score = score
+        }
+
+        const albumCount = Number(provider.albumCount ?? provider.AlbumCount)
+        if (Number.isFinite(albumCount)) {
+          normalized.albumCount = albumCount
+        }
+      }
+
+      return normalized.name ? normalized : null
+    })
+    .filter(Boolean)
 }
 
 function normalizeLinkResource (link = {}) {
@@ -263,10 +319,14 @@ function normalizeReleaseResource (release = {}) {
 function normalizeAlbum (album = {}) {
   const type = asString(album.type || album.albumType || album.primaryType || 'Album')
   const releaseDate = asString(album.releaseDate || album.firstReleaseDate)
-  const images = normalizeArray(album.images)
+  const imageUrl = asString(album.imageUrl || album.remoteCover)
+  const normalizedAlbumImages = normalizeArray(album.images)
+  const images = normalizedAlbumImages.length > 0
+    ? normalizedAlbumImages.map(normalizeLookupImage)
+    : (imageUrl ? [normalizeLookupImage({ coverType: 'cover', url: imageUrl })] : [])
 
   const out = {
-    id: asString(album.id || album.foreignAlbumId),
+    id: asString(album.id || album.foreignAlbumId || album.ids?.musicbrainzReleaseGroupId),
     oldIds: normalizeStringArray(album.oldIds || album.OldIds),
     title: asString(album.title || album.name || album.albumName),
     type,
@@ -282,14 +342,16 @@ function normalizeAlbum (album = {}) {
     media: normalizeArray(album.media),
     images,
     links: normalizeArray(album.links),
-    remoteCover: asString(album.remoteCover || images[0]?.remoteUrl || images[0]?.url)
+    remoteCover: images.length > 0
+      ? asString(images[0].url || images[0].remoteUrl)
+      : asString(album.remoteCover)
   }
 
   if ('artistId' in album) out.artistId = asString(album.artistId)
   if ('artists' in album) out.artists = normalizeArray(album.artists)
   if ('disambiguation' in album) out.disambiguation = asString(album.disambiguation)
   if ('overview' in album) out.overview = asString(album.overview)
-  if ('providers' in album) out.providers = album.providers
+  if ('providers' in album) out.providers = normalizeProviderMetadata(album.providers)
 
   return out
 }
@@ -361,6 +423,10 @@ function isArtistLike (value) {
   )
 }
 
+function isLidarrAddArtistPayload (artist = {}) {
+  return LIDARR_ADD_ARTIST_OPTIONAL_KEYS.some(key => Object.prototype.hasOwnProperty.call(artist, key))
+}
+
 function normalizeLidarrArtistResponse (value) {
   if (Array.isArray(value)) {
     return value.map(normalizeLidarrArtistResponse)
@@ -397,17 +463,21 @@ function withArtistLookupDefaults (artist = {}) {
     aliases: normalizeAliases(artist),
     artistAliases: normalizeAliases(artist),
     links: normalizeArray(artist.links),
-    images: normalizeArray(artist.images),
+    images: normalizeArray(artist.images).map(normalizeLookupImage),
     albums: normalizeArray(artist.albums).map(normalizeAlbum),
     ratings: normalizeRatings(artist.ratings || artist.rating),
     rating: normalizeRating(artist.rating || artist.ratings)
   }
 
-  for (const key of LIDARR_OPTIONAL_ARTIST_KEYS) {
-    if (key !== 'ratings' && key !== 'rating' && key in artist) out[key] = artist[key]
+  if (isLidarrAddArtistPayload(artist)) {
+    for (const key of LIDARR_ADD_ARTIST_OPTIONAL_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(artist, key)) out[key] = artist[key]
+    }
   }
 
-  if ('providers' in artist) out.providers = artist.providers
+  if ('genres' in artist) out.genres = normalizeStringArray(artist.genres)
+
+  if ('providers' in artist) out.providers = normalizeProviderMetadata(artist.providers)
   if ('partial' in artist) out.partial = artist.partial
   if ('warning' in artist) out.warning = artist.warning
   if ('schemaVersion' in artist) out.schemaVersion = artist.schemaVersion

@@ -25,10 +25,21 @@ const {
 } = require('../utils/lidarrArtist')
 
 function stripInternalKeys (response) {
-  const allowed = new Set([...LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS, ...LIDARR_OPTIONAL_ARTIST_KEYS])
+  const allowed = new Set([
+    ...LIDARR_LOOKUP_ARTIST_REQUIRED_KEYS,
+    ...LIDARR_OPTIONAL_ARTIST_KEYS,
+    'partial',
+    'warning'
+  ])
   const cleaned = {}
   for (const key of Object.keys(response)) {
     if (allowed.has(key)) {
+      if (key === 'partial' && response[key] !== true) {
+        continue
+      }
+      if (key === 'warning' && !response[key]) {
+        continue
+      }
       cleaned[key] = response[key]
     }
   }
@@ -37,6 +48,9 @@ function stripInternalKeys (response) {
 
 function finalizeArtistLookupResponse (response, isDebug) {
   const normalized = withArtistLookupDefaults(response)
+  if (normalized.partial) {
+    normalized.warning = 'One or more providers failed'
+  }
   if (!isDebug && normalized.debug) {
     delete normalized.debug
   }
@@ -189,6 +203,31 @@ function summarizeProvidersFromAlbums (albums = []) {
     name,
     albumCount
   }))
+}
+
+function resolveArtistLookupProviders (payload = {}) {
+  if (Array.isArray(payload.providers) && payload.providers.length > 0) {
+    return payload.providers
+  }
+
+  return summarizeProvidersFromAlbums(payload.albums)
+}
+
+function getArtistLookupProviderNames (providers = []) {
+  return providers
+    .map(provider => typeof provider === 'string' ? provider : provider?.name)
+    .filter(Boolean)
+}
+
+function setArtistLookupProviderHeader (res, providers = []) {
+  const providerNames = getArtistLookupProviderNames(providers)
+
+  res.set('X-Providers', providerNames.length ? providerNames.join(',') : 'unknown')
+}
+
+function toArtistLookupArray (response, isDebug) {
+  const finalResponse = finalizeArtistLookupResponse(response, isDebug)
+  return [finalResponse].filter(isValidArtist)
 }
 
 function buildArtistLookupRankingInput (term, data) {
@@ -442,7 +481,7 @@ async function handleArtistLookup (req, res) {
         try {
           const bgTrace = tracer.createTrace(`artistLookupSWR:${normalizedTerm}`)
           const { data } = await executeArtistLookupPipeline(term, isDebug, cacheKey, normalizedTerm, bgTrace)
-          await tracer.finalizeTrace(bgTrace, { cacheHit: false, providersUsed: data.providers.map(p => p.name) })
+          await tracer.finalizeTrace(bgTrace, { cacheHit: false, providersUsed: getArtistLookupProviderNames(data.providers) })
         } catch (err) {
           logger.error('Background refresh failed', { context: 'SWR', error: err.message, term })
         } finally {
@@ -453,9 +492,7 @@ async function handleArtistLookup (req, res) {
 
     tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, isStale ? 'hit-stale' : 'hit')
     const cachedObj = cachedData.data
-    const providers = cachedObj.providers?.length
-      ? cachedObj.providers
-      : summarizeProvidersFromAlbums(cachedObj.albums)
+    const providers = resolveArtistLookupProviders(cachedObj)
 
     metrics.recordCache(true, isStale)
     metrics.recordArtistLookup({
@@ -466,17 +503,15 @@ async function handleArtistLookup (req, res) {
       statusCode: 200
     })
     res.set('X-Cache', 'HIT')
-    const providerHeader = providers.length ? providers.map(provider => provider.name).join(',') : 'unknown'
-    res.set('X-Providers', providerHeader)
+    setArtistLookupProviderHeader(res, providers)
     res.set('X-Cache-Generated-At', cachedData.generatedAt)
 
     const response = withArtistLookupDefaults({ ...cachedObj, providers })
     response._generatedAt = cachedData.generatedAt
 
-    await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
+    await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: getArtistLookupProviderNames(providers) })
 
-    const finalResponse = finalizeArtistLookupResponse(response, isDebug)
-    return res.json([finalResponse].filter(isValidArtist))
+    return res.json(toArtistLookupArray(response, isDebug))
   }
 
   tracer.addStep(trace, 'cacheCheck', Date.now() - startCache, 'miss')
@@ -506,9 +541,7 @@ async function handleArtistLookup (req, res) {
     const cachedDataAfterWait = await cache.get(cacheKey)
     if (cachedDataAfterWait) {
       const cachedObj = cachedDataAfterWait.data
-      const providers = cachedObj.providers?.length
-        ? cachedObj.providers
-        : summarizeProvidersFromAlbums(cachedObj.albums)
+      const providers = resolveArtistLookupProviders(cachedObj)
 
       const isStale = (Date.now() - new Date(cachedDataAfterWait.generatedAt).getTime()) > (getConfigValue('cacheTtlSeconds') * 1000)
       metrics.recordCache(true, isStale)
@@ -520,17 +553,15 @@ async function handleArtistLookup (req, res) {
         statusCode: 200
       })
       res.set('X-Cache', 'HIT')
-      const providerHeader = providers.length ? providers.map(provider => provider.name).join(',') : 'unknown'
-      res.set('X-Providers', providerHeader)
+      setArtistLookupProviderHeader(res, providers)
       res.set('X-Cache-Generated-At', cachedDataAfterWait.generatedAt)
 
       const response = withArtistLookupDefaults({ ...cachedObj, providers })
       response._generatedAt = cachedDataAfterWait.generatedAt
 
-      await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: providers.map(p => p.name) })
+      await tracer.finalizeTrace(trace, { cacheHit: true, providersUsed: getArtistLookupProviderNames(providers) })
 
-      const finalResponse = finalizeArtistLookupResponse(response, isDebug)
-      return res.json([finalResponse].filter(isValidArtist))
+      return res.json(toArtistLookupArray(response, isDebug))
     }
   }
 
@@ -538,15 +569,14 @@ async function handleArtistLookup (req, res) {
     tracer.addStep(trace, 'error', 0, 'timeout')
     metrics.recordArtistLookup({ term, upstreamCalls: 0, providers: [], partial: true, statusCode: 200, error: 'Lock timeout' })
     await tracer.finalizeTrace(trace, { cacheHit: false })
+    setArtistLookupProviderHeader(res, [])
     return res.status(200).json([])
   }
 
   try {
     const { response, data } = await executeArtistLookupPipeline(term, isDebug, cacheKey, normalizedTerm, trace)
 
-    const resolvedProviders = data.providers?.length
-      ? data.providers
-      : summarizeProvidersFromAlbums(data.albums || [])
+    const resolvedProviders = resolveArtistLookupProviders(data)
 
     metrics.recordArtistLookup({
       term,
@@ -559,16 +589,14 @@ async function handleArtistLookup (req, res) {
 
     res.set('X-Cache', 'MISS')
     res.set('X-Upstream-Calls', String(data.providerCount || 0))
-    const providerHeader = resolvedProviders.length ? resolvedProviders.map(provider => provider.name).join(',') : 'unknown'
-    res.set('X-Providers', providerHeader)
+    setArtistLookupProviderHeader(res, resolvedProviders)
     res.set('X-Cache-Generated-At', new Date().toISOString())
 
     const finalResponse = { ...response, _generatedAt: new Date().toISOString() }
 
-    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: resolvedProviders.map(p => p.name) })
+    await tracer.finalizeTrace(trace, { cacheHit: false, providersUsed: getArtistLookupProviderNames(resolvedProviders) })
 
-    const sanitizedResponse = finalizeArtistLookupResponse(finalResponse, isDebug)
-    return res.json([sanitizedResponse].filter(isValidArtist))
+    return res.json(toArtistLookupArray(finalResponse, isDebug))
   } catch (error) {
     tracer.addStep(trace, 'error', 0, 'error')
     logger.error('Artist lookup failed', {
@@ -587,6 +615,7 @@ async function handleArtistLookup (req, res) {
 
     await tracer.finalizeTrace(trace, { cacheHit: false })
 
+    setArtistLookupProviderHeader(res, [])
     return res.status(200).json([])
   } finally {
     await cache.releaseLock(lockKey, lockToken)
