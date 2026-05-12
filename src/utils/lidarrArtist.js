@@ -420,7 +420,7 @@ function toSkyhookAlbumResource (album = {}) {
     genres: normalizeStringArray(normalized.genres),
     rating: normalizeRatingResource(normalized.rating || normalized.ratings),
     releaseDate: toIsoDate(normalized.releaseDate) || null,
-    releases: normalizeArray(normalized.releases).map(normalizeReleaseResource),
+    releases: normalizeArray(normalized.releases),
     secondaryTypes: normalizeStringArray(normalized.secondaryTypes),
     title: asString(normalized.title),
     type: asString(normalized.type || 'Album'),
