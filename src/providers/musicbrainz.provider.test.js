@@ -67,7 +67,7 @@ test('MusicBrainz Provider', async (t) => {
         return {
           'release-groups': [
             { id: 'rg1', title: 'Album 1', 'primary-type': 'Album', 'first-release-date': '2020-01-01', rating: { value: 4.25, 'votes-count': 12 } },
-            { id: 'rg2', title: 'EP 1', 'primary-type': 'EP', 'secondary-types': ['Compilation'] }, // filtered out
+            { id: 'rg2', title: 'EP 1', 'primary-type': 'EP', 'secondary-types': ['Compilation'] },
             { id: 'rg3', title: 'Album 2', 'primary-type': 'Album' },
             { id: 'rg4', title: 'Album 3', 'primary-type': 'Album' }
           ]
@@ -77,7 +77,7 @@ test('MusicBrainz Provider', async (t) => {
 
     const result = await musicbrainzProvider.searchArtist('exact match')
     assert.strictEqual(result.artistName, 'exact match')
-    assert.strictEqual(result.albums.length, 3)
+    assert.strictEqual(result.albums.length, 4)
     assert.strictEqual(result.albums[0].name, 'Album 1')
     assert.strictEqual(result.albums[0].year, 2020)
     // v0.3.36: full date preserved alongside year.
@@ -88,12 +88,14 @@ test('MusicBrainz Provider', async (t) => {
     // Browse API does not include releases (inc=releases is lookup-only),
     // so trackCount defaults to 0 for browse-sourced release groups.
     assert.strictEqual(result.albums[0].trackCount, 0)
-    assert.strictEqual(result.albums[1].name, 'Album 2')
-    assert.strictEqual(result.albums[1].year, null)
-    assert.strictEqual(result.albums[1].releaseDate, null)
-    assert.strictEqual(result.albums[1].trackCount, 0)
-    assert.strictEqual(result.albums[2].name, 'Album 3')
+    assert.strictEqual(result.albums[1].name, 'EP 1')
+    assert.deepStrictEqual(result.albums[1].secondaryTypes, ['Compilation'])
+    assert.strictEqual(result.albums[2].name, 'Album 2')
+    assert.strictEqual(result.albums[2].year, null)
+    assert.strictEqual(result.albums[2].releaseDate, null)
     assert.strictEqual(result.albums[2].trackCount, 0)
+    assert.strictEqual(result.albums[3].name, 'Album 3')
+    assert.strictEqual(result.albums[3].trackCount, 0)
     assert.deepStrictEqual(result.oldIds, [])
     assert.deepStrictEqual(result.aliases, ['Exact Alias', 'Sort Alias'])
     assert.deepStrictEqual(result.artistAliases, ['Exact Alias', 'Sort Alias'])
@@ -186,7 +188,7 @@ test('MusicBrainz Provider', async (t) => {
     assert.deepStrictEqual(withArtistLookupDefaults(result).artistAliases, ['On a Friday'])
   })
 
-  await t.test('lookupArtistById - preserves Album and EP primary types for Lidarr metadata filtering', async () => {
+  await t.test('lookupArtistById - preserves MusicBrainz release-group types for Lidarr metadata filtering', async () => {
     const { musicbrainzProvider, setMock } = setupMocks()
     setMock(async (path) => {
       if (path === '/artist/artist-types') {
@@ -209,11 +211,42 @@ test('MusicBrainz Provider', async (t) => {
 
     const result = await musicbrainzProvider.lookupArtistById('artist-types')
 
-    assert.deepStrictEqual(result.albums.map(album => album.name), ['Album Type', 'EP Type'])
-    assert.deepStrictEqual(result.albums.map(album => album.type), ['Album', 'EP'])
-    assert.deepStrictEqual(result.albums.map(album => album.albumType), ['Album', 'EP'])
-    assert.deepStrictEqual(result.albums.map(album => album.secondaryTypes), [[], []])
-    assert.deepStrictEqual(result.albums.map(album => album.releaseStatuses), [['Official'], ['Official']])
+    assert.deepStrictEqual(result.albums.map(album => album.name), ['Album Type', 'EP Type', 'Single Type', 'Live Album'])
+    assert.deepStrictEqual(result.albums.map(album => album.type), ['Album', 'EP', 'Single', 'Album'])
+    assert.deepStrictEqual(result.albums.map(album => album.albumType), ['Album', 'EP', 'Single', 'Album'])
+    assert.deepStrictEqual(result.albums.map(album => album.secondaryTypes), [[], [], [], ['Live']])
+    assert.deepStrictEqual(result.albums.map(album => album.releaseStatuses), [['Official'], ['Official'], ['Official'], ['Official']])
+  })
+
+  await t.test('lookupArtistById - preserves requested MBID as oldId when MusicBrainz redirects identity', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path, params) => {
+      if (path === '/artist/old-artist-id') {
+        return {
+          id: 'new-artist-id',
+          name: 'Redirected Artist'
+        }
+      }
+      if (path === '/release-group') {
+        assert.strictEqual(params.artist, 'new-artist-id')
+        return {
+          'release-groups': [{
+            id: 'rg-redirected',
+            title: 'Redirected Album',
+            'primary-type': 'Album'
+          }]
+        }
+      }
+      if (path === '/release') {
+        return { releases: [] }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('old-artist-id')
+
+    assert.strictEqual(result.id, 'new-artist-id')
+    assert.deepStrictEqual(result.oldIds, ['old-artist-id'])
+    assert.strictEqual(result.albums[0].name, 'Redirected Album')
   })
 
   await t.test('lookupArtistById - handles large valid discographies deterministically', async () => {
@@ -234,7 +267,7 @@ test('MusicBrainz Provider', async (t) => {
         }
       }
       if (path === '/release-group') {
-        return { 'release-groups': releaseGroups }
+        return { count: releaseGroups.length, 'release-groups': releaseGroups }
       }
     })
 
@@ -392,6 +425,56 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(album.releases[0].id, 'rel-vices-and-virtues')
     assert.strictEqual(album.releases[0].media[0].format, 'CD')
     assert.strictEqual(album.releases[0].tracks.length, 14)
+  })
+
+  await t.test('lookupArtistById - paginates release groups so large discographies are complete', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    const releaseGroupOffsets = []
+
+    setMock(async (path, params) => {
+      if (path === '/artist/artist-large-discography') {
+        return {
+          id: 'artist-large-discography',
+          name: 'Large Discography Artist'
+        }
+      }
+      if (path === '/release-group') {
+        assert.strictEqual(params.artist, 'artist-large-discography')
+        assert.strictEqual(params.limit, 100)
+        releaseGroupOffsets.push(params.offset)
+
+        if (params.offset === 0) {
+          return {
+            count: 101,
+            'release-groups': Array.from({ length: 100 }, (_, index) => ({
+              id: `rg-page-1-${index + 1}`,
+              title: `Page 1 Album ${index + 1}`,
+              'primary-type': 'Album'
+            }))
+          }
+        }
+
+        return {
+          count: 101,
+          'release-groups': [{
+            id: 'rg-page-2-single',
+            title: 'Page 2 Single',
+            'primary-type': 'Single'
+          }]
+        }
+      }
+      if (path === '/release') {
+        return { releases: [] }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('artist-large-discography')
+
+    assert.deepStrictEqual(releaseGroupOffsets, [0, 100])
+    assert.strictEqual(result.albums.length, 101)
+    assert.strictEqual(result.albums[100].name, 'Page 2 Single')
+    assert.strictEqual(result.albums[100].type, 'Single')
+    assert.strictEqual(result.providers[0].albumCount, 101)
   })
 
   await t.test('lookupArtistById - uses release-group fallback when artist releases omit an album', async () => {
@@ -797,6 +880,51 @@ test('MusicBrainz Provider', async (t) => {
     assert.strictEqual(result.releases.length, 1)
     assert.strictEqual(result.releases[0].tracks.length, 1)
     assert.strictEqual(result.releases[0].tracks[0].artistId, 'a74b1b7f')
+  })
+
+  await t.test('lookupAlbumById - preserves requested release-group MBID as oldId when MusicBrainz redirects identity', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path, params) => {
+      if (path === '/release-group/old-rg-id') {
+        return {
+          id: 'new-rg-id',
+          title: 'Redirected Album',
+          'first-release-date': '2020-01-01',
+          'primary-type': 'Album',
+          'secondary-types': [],
+          'artist-credit': [{
+            artist: {
+              id: 'artist-id',
+              name: 'Redirected Artist'
+            }
+          }]
+        }
+      }
+      if (path === '/release') {
+        assert.strictEqual(params['release-group'], 'new-rg-id')
+        return {
+          releases: [{
+            id: 'rel-redirected',
+            title: 'Redirected Album',
+            date: '2020-01-01',
+            status: 'Official',
+            media: [{
+              title: 'Digital Media',
+              format: 'Digital Media',
+              position: 1,
+              tracks: makeMusicBrainzTracks(1, 'artist-id')
+            }]
+          }]
+        }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupAlbumById('old-rg-id')
+
+    assert.strictEqual(result.id, 'new-rg-id')
+    assert.deepStrictEqual(result.oldIds, ['old-rg-id'])
+    assert.strictEqual(result.ids.musicbrainzReleaseGroupId, 'new-rg-id')
+    assert.strictEqual(result.releases[0].id, 'rel-redirected')
   })
 
   await t.test('lookupAlbumById - includes every credited track artist required by Lidarr MapTrack', async () => {
