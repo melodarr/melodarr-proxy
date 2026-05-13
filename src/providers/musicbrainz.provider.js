@@ -70,10 +70,22 @@ class MusicBrainzProvider {
 
     for (const relation of this.extractRelations(artist)) {
       const resource = String(relation?.url?.resource || '').trim()
+      const type = String(relation?.type || '').trim().toLowerCase()
       if (!resource) continue
 
-      const discogsMatch = resource.match(/discogs\.com\/artist\/(\d+)/i)
-      if (discogsMatch) {
+      let parsedUrl
+      try {
+        parsedUrl = new URL(resource)
+      } catch {
+        continue
+      }
+
+      const hostname = String(parsedUrl.hostname || '').toLowerCase()
+      const pathname = String(parsedUrl.pathname || '')
+      const isDiscogsHost = hostname === 'discogs.com' || hostname === 'www.discogs.com'
+      const discogsMatch = isDiscogsHost ? pathname.match(/^\/artist\/(\d+)(?:\/|$)/i) : null
+
+      if (discogsMatch && (type === '' || type === 'discogs')) {
         ids.discogsArtistId = discogsMatch[1]
       }
     }
