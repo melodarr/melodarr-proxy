@@ -11,6 +11,7 @@ const { normalizeStringArray } = require('../utils/lidarrArtist')
 const { enqueueProviderRequest } = require('../services/rate-limiter.service')
 
 const FALLBACK_ORDER = ['musicbrainz', 'itunes', 'theaudiodb', 'discogs']
+const MUSICBRAINZ_ARTIST_DISCOVERY_LIMIT = 100
 
 function normalizeText (value) {
   return String(value || '').trim()
@@ -93,6 +94,21 @@ function mergeCandidateImages (candidates, imageCandidates) {
 
 function scoreExact (value, query, exactScore, fallbackScore) {
   return normalizeText(value).toLowerCase() === normalizeText(query).toLowerCase() ? exactScore : fallbackScore
+}
+
+function rankArtistCandidates (candidates, query) {
+  const normalizedQuery = normalizeText(query).toLowerCase()
+
+  return [...candidates].sort((a, b) => {
+    const aExact = [a.artistName, a.sortName].some(value => normalizeText(value).toLowerCase() === normalizedQuery)
+    const bExact = [b.artistName, b.sortName].some(value => normalizeText(value).toLowerCase() === normalizedQuery)
+
+    if (aExact !== bExact) {
+      return aExact ? -1 : 1
+    }
+
+    return (Number(b.score) || 0) - (Number(a.score) || 0)
+  })
 }
 
 // Reads METADATA_PROVIDERS / runtime override and returns a Set of enabled
@@ -190,11 +206,12 @@ async function discoverArtistByMb (query) {
   const result = await upstreamService.musicBrainzGet('/artist', {
     query: `artist:"${String(query).replace(/"/g, '\\"')}"`,
     inc: 'aliases',
-    limit: 10
+    limit: MUSICBRAINZ_ARTIST_DISCOVERY_LIMIT
   })
 
-  return (result?.artists || []).map((artist) => ({
+  return rankArtistCandidates((result?.artists || []).map((artist) => ({
     artistName: artist.name || artist['sort-name'] || '',
+    sortName: artist['sort-name'] || '',
     id: artist.id || '',
     type: 'artist',
     source: 'musicbrainz',
@@ -207,7 +224,7 @@ async function discoverArtistByMb (query) {
     ids: {
       musicbrainzArtistId: artist.id || ''
     }
-  }))
+  })), query).map(({ sortName, ...candidate }) => candidate)
 }
 
 async function discoverSongByMb (query) {
