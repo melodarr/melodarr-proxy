@@ -101,6 +101,31 @@ test('MusicBrainz Provider', async (t) => {
     assert.deepStrictEqual(result.artistAliases, ['Exact Alias', 'Sort Alias'])
   })
 
+  await t.test('searchArtist - prefers exact artist names beyond the first ranked page', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path, params) => {
+      if (path === '/artist') {
+        assert.strictEqual(params.limit, 100)
+        return {
+          artists: [
+            { id: 'tony-bennett', name: 'Tony Bennett', 'sort-name': 'Bennett, Tony', score: 100 },
+            { id: 'bennett-de', name: 'BENNETT', 'sort-name': 'BENNETT', score: 68, disambiguation: 'DJ and producer from Koblenz, Germany' }
+          ]
+        }
+      }
+      if (path === '/release-group') {
+        assert.strictEqual(params.artist, 'bennett-de')
+        return { 'release-groups': [] }
+      }
+    })
+
+    const result = await musicbrainzProvider.searchArtist('BENNETT')
+
+    assert.strictEqual(result.id, 'bennett-de')
+    assert.strictEqual(result.artistName, 'BENNETT')
+    assert.strictEqual(result.disambiguation, 'DJ and producer from Koblenz, Germany')
+  })
+
   await t.test('searchArtist - maps MusicBrainz aliases through to Lidarr artistAliases', async () => {
     const { musicbrainzProvider, setMock } = setupMocks()
     setMock(async (path) => {
@@ -153,7 +178,7 @@ test('MusicBrainz Provider', async (t) => {
     const { musicbrainzProvider, setMock } = setupMocks()
     setMock(async (path, params) => {
       if (path === '/artist/a74b1b7f') {
-        assert.strictEqual(params.inc, 'aliases')
+        assert.strictEqual(params.inc, 'aliases+url-rels')
         return {
           id: 'a74b1b7f',
           name: 'Radiohead',
@@ -186,6 +211,50 @@ test('MusicBrainz Provider', async (t) => {
     assert.deepStrictEqual(result.aliases, ['On a Friday'])
     assert.deepStrictEqual(result.artistAliases, ['On a Friday'])
     assert.deepStrictEqual(withArtistLookupDefaults(result).artistAliases, ['On a Friday'])
+  })
+
+  await t.test('lookupArtistById - maps MusicBrainz url relations for linked image/provider enrichment', async () => {
+    const { musicbrainzProvider, setMock } = setupMocks()
+    setMock(async (path) => {
+      if (path === '/artist/bennett-id') {
+        return {
+          id: 'bennett-id',
+          name: 'BENNETT',
+          relations: [
+            {
+              type: 'discogs',
+              url: { resource: 'https://www.discogs.com/artist/13759927' }
+            },
+            {
+              type: 'image',
+              url: { resource: 'https://example.test/bennett.jpg' }
+            }
+          ]
+        }
+      }
+      if (path === '/release-group') {
+        return { 'release-groups': [] }
+      }
+      if (path === '/release') {
+        return { releases: [] }
+      }
+    })
+
+    const result = await musicbrainzProvider.lookupArtistById('bennett-id')
+
+    assert.deepStrictEqual(result.links, [
+      { target: 'https://www.discogs.com/artist/13759927', type: 'discogs' },
+      { target: 'https://example.test/bennett.jpg', type: 'image' }
+    ])
+    assert.deepStrictEqual(result.images, [{
+      coverType: 'poster',
+      url: 'https://example.test/bennett.jpg',
+      remoteUrl: 'https://example.test/bennett.jpg'
+    }])
+    assert.deepStrictEqual(result.ids, {
+      musicbrainzArtistId: 'bennett-id',
+      discogsArtistId: '13759927'
+    })
   })
 
   await t.test('lookupArtistById - preserves MusicBrainz release-group types for Lidarr metadata filtering', async () => {

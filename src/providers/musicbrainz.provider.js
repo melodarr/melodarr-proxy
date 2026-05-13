@@ -4,6 +4,7 @@ const MUSICBRAINZ_RELEASE_GROUP_PAGE_SIZE = 100
 const MUSICBRAINZ_RELEASE_GROUP_PAGE_LIMIT = 10
 const MUSICBRAINZ_RELEASE_PAGE_SIZE = 100
 const MUSICBRAINZ_RELEASE_PAGE_LIMIT = 10
+const MUSICBRAINZ_ARTIST_SEARCH_LIMIT = 100
 
 class MusicBrainzProvider {
   constructor () {
@@ -19,19 +20,65 @@ class MusicBrainzProvider {
     if (artists.length === 0) return null
 
     const normalizedTerm = String(term).trim().toLowerCase()
-    const exactMatch = artists.find((artist) => {
+    const exactMatches = artists.filter((artist) => {
       const name = String(artist.name || '').toLowerCase()
       const sortName = String(artist['sort-name'] || '').toLowerCase()
       return name === normalizedTerm || sortName === normalizedTerm
     })
 
-    return exactMatch || artists[0]
+    if (exactMatches.length > 0) {
+      return exactMatches.sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0))[0]
+    }
+
+    return artists[0]
   }
 
   extractAliases (artist = {}) {
     return (artist.aliases || [])
       .map(alias => String(alias?.name || alias?.['sort-name'] || '').trim())
       .filter(Boolean)
+  }
+
+  extractRelations (artist = {}) {
+    return Array.isArray(artist.relations) ? artist.relations : []
+  }
+
+  extractLinks (artist = {}) {
+    return this.extractRelations(artist)
+      .map(relation => {
+        const target = String(relation?.url?.resource || '').trim()
+        const type = String(relation?.type || '').trim()
+        return target ? { target, type } : null
+      })
+      .filter(Boolean)
+  }
+
+  extractArtistImages (artist = {}) {
+    return this.extractRelations(artist)
+      .filter(relation => String(relation?.type || '').toLowerCase() === 'image')
+      .map(relation => String(relation?.url?.resource || '').trim())
+      .filter(Boolean)
+      .map(url => ({
+        coverType: 'poster',
+        url,
+        remoteUrl: url
+      }))
+  }
+
+  extractExternalIds (artist = {}) {
+    const ids = {}
+
+    for (const relation of this.extractRelations(artist)) {
+      const resource = String(relation?.url?.resource || '').trim()
+      if (!resource) continue
+
+      const discogsMatch = resource.match(/discogs\.com\/artist\/(\d+)/i)
+      if (discogsMatch) {
+        ids.discogsArtistId = discogsMatch[1]
+      }
+    }
+
+    return ids
   }
 
   mapRating (value = {}) {
@@ -414,7 +461,8 @@ class MusicBrainzProvider {
   async searchArtist (term) {
     const artistSearch = await upstreamService.musicBrainzGet('/artist', {
       query: `artist:"${this.mbQueryValue(term)}"`,
-      limit: 5
+      inc: 'aliases',
+      limit: MUSICBRAINZ_ARTIST_SEARCH_LIMIT
     })
     const artist = this.selectBestArtist(artistSearch, term)
 
@@ -437,13 +485,18 @@ class MusicBrainzProvider {
       aliases: this.extractAliases(artist),
       artistAliases: this.extractAliases(artist),
       images: [],
+      links: this.extractLinks(artist),
+      ids: {
+        musicbrainzArtistId: artist.id || '',
+        ...this.extractExternalIds(artist)
+      },
       albums
     }
   }
 
   async lookupArtistById (artistId) {
     const artist = await upstreamService.musicBrainzGet(`/artist/${encodeURIComponent(artistId)}`, {
-      inc: 'aliases'
+      inc: 'aliases+url-rels'
     })
 
     if (!artist?.id) {
@@ -466,7 +519,12 @@ class MusicBrainzProvider {
       oldIds: this.redirectedOldIds(artistId, artist.id),
       aliases: this.extractAliases(artist),
       artistAliases: this.extractAliases(artist),
-      images: [],
+      links: this.extractLinks(artist),
+      images: this.extractArtistImages(artist),
+      ids: {
+        musicbrainzArtistId: artist.id || '',
+        ...this.extractExternalIds(artist)
+      },
       albums,
       partial: false,
       warning: null,
