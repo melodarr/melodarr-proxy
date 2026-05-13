@@ -94,7 +94,7 @@ test('Discogs Provider', async (t) => {
     assert.strictEqual(result.albums.length, 0)
   })
 
-  await t.test('lookupArtistById - returns linked artist images without broad search', async () => {
+  await t.test('lookupArtistById - returns only primary image when artist has multiple images', async () => {
     const { discogsProvider, setAxiosMock } = setupMocks()
     setAxiosMock(async (url, config) => {
       assert.strictEqual(url, 'https://api.discogs.com/artists/13759927')
@@ -104,9 +104,9 @@ test('Discogs Provider', async (t) => {
           name: 'BENNETT',
           profile: 'DJ and producer from Koblenz, Germany',
           images: [
-            { uri: 'https://img.discogs.com/bennett-primary.jpg' },
-            { uri: 'https://img.discogs.com/bennett-primary.jpg' },
-            { resource_url: 'https://img.discogs.com/bennett-secondary.jpg' }
+            { type: 'primary', uri: 'https://img.discogs.com/bennett-primary.jpg' },
+            { type: 'secondary', uri: 'https://img.discogs.com/bennett-secondary-1.jpg' },
+            { type: 'secondary', uri: 'https://img.discogs.com/bennett-secondary-2.jpg' }
           ]
         }
       }
@@ -122,13 +122,27 @@ test('Discogs Provider', async (t) => {
         coverType: 'poster',
         url: 'https://img.discogs.com/bennett-primary.jpg',
         remoteUrl: 'https://img.discogs.com/bennett-primary.jpg'
-      },
-      {
-        coverType: 'poster',
-        url: 'https://img.discogs.com/bennett-secondary.jpg',
-        remoteUrl: 'https://img.discogs.com/bennett-secondary.jpg'
       }
     ])
+  })
+
+  await t.test('lookupArtistById - falls back to first image when no primary type is present', async () => {
+    const { discogsProvider, setAxiosMock } = setupMocks()
+    setAxiosMock(async () => ({
+      data: {
+        name: 'BENNETT',
+        profile: '',
+        images: [
+          { uri: 'https://img.discogs.com/bennett-img1.jpg' },
+          { uri: 'https://img.discogs.com/bennett-img2.jpg' }
+        ]
+      }
+    }))
+
+    const result = await discogsProvider.lookupArtistById('13759927')
+
+    assert.strictEqual(result.images.length, 1)
+    assert.strictEqual(result.images[0].url, 'https://img.discogs.com/bennett-img1.jpg')
   })
 
   await t.test('lookupArtistById - returns null on missing linked artist', async () => {

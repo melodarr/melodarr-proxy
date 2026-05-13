@@ -32,8 +32,12 @@ class DiscogsProvider {
     }
   }
 
-  mapArtistImages (artist = {}) {
-    const images = Array.isArray(artist.images) ? artist.images : []
+  mapArtistImages (artist = {}, { primaryOnly = false } = {}) {
+    let images = Array.isArray(artist.images) ? artist.images : []
+    if (primaryOnly) {
+      const primary = images.filter(image => image?.type === 'primary')
+      images = primary.length > 0 ? primary : images.slice(0, 1)
+    }
     const urls = [
       ...images.map(image => image?.uri || image?.resource_url),
       artist.cover_image,
@@ -62,7 +66,7 @@ class DiscogsProvider {
       return {
         artistName: artist.name || '',
         overview: artist.profile || '',
-        images: this.mapArtistImages(artist),
+        images: this.mapArtistImages(artist, { primaryOnly: true }),
         ids: {
           discogsArtistId: normalizedId
         }
