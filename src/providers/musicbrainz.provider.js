@@ -1,5 +1,7 @@
 const upstreamService = require('../services/upstream.service')
 
+const MUSICBRAINZ_RELEASE_GROUP_PAGE_SIZE = 100
+const MUSICBRAINZ_RELEASE_GROUP_PAGE_LIMIT = 10
 const MUSICBRAINZ_RELEASE_PAGE_SIZE = 100
 const MUSICBRAINZ_RELEASE_PAGE_LIMIT = 10
 
@@ -51,6 +53,18 @@ class MusicBrainzProvider {
         aliases: [],
         artistAliases: []
       }))
+  }
+
+  redirectedOldIds (requestedId, resolvedId, oldIds = []) {
+    const requested = String(requestedId || '').trim()
+    const resolved = String(resolvedId || '').trim()
+    const ids = Array.isArray(oldIds) ? oldIds : []
+
+    if (requested && resolved && requested !== resolved) {
+      ids.unshift(requested)
+    }
+
+    return [...new Set(ids.map(id => String(id || '').trim()).filter(Boolean))]
   }
 
   mergeArtists (...artistGroups) {
@@ -199,6 +213,14 @@ class MusicBrainzProvider {
     }).filter(release => release.id)
   }
 
+  mapReleaseStatuses (releases = []) {
+    const statuses = releases
+      .map(release => String(release?.status || '').trim())
+      .filter(Boolean)
+
+    return [...new Set(statuses)].length > 0 ? [...new Set(statuses)] : ['Official']
+  }
+
   mapReleaseGroupSummary (group = {}, fallbackArtistId = '') {
     const rawDate = group['first-release-date'] || ''
     const yearMatch = rawDate.match(/^(\d{4})/)
@@ -208,6 +230,8 @@ class MusicBrainzProvider {
     const releases = this.mapBrowseReleases(group, fallbackArtistId)
     const trackCounts = releases.map(release => Number(release.trackCount) || 0)
     const trackCount = trackCounts.length ? Math.max(...trackCounts) : 0
+    const secondaryTypes = Array.isArray(group['secondary-types']) ? group['secondary-types'] : []
+    const releaseStatuses = this.mapReleaseStatuses(releases)
 
     return {
       id,
@@ -220,8 +244,8 @@ class MusicBrainzProvider {
       trackCount,
       type: group['primary-type'] || 'Album',
       albumType: group['primary-type'] || 'Album',
-      secondaryTypes: group['secondary-types'] || [],
-      releaseStatuses: ['Official'],
+      secondaryTypes,
+      releaseStatuses,
       imageUrl,
       images: this.mapReleaseImages(id),
       remoteCover: imageUrl,
@@ -278,6 +302,39 @@ class MusicBrainzProvider {
     return releasesByGroup
   }
 
+  async fetchReleaseGroupsByArtist (artistId) {
+    if (!artistId) return []
+
+    const releaseGroups = []
+    let offset = 0
+    let fetchedPages = 0
+
+    while (fetchedPages < MUSICBRAINZ_RELEASE_GROUP_PAGE_LIMIT) {
+      const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
+        artist: artistId,
+        inc: 'ratings',
+        limit: MUSICBRAINZ_RELEASE_GROUP_PAGE_SIZE,
+        offset
+      })
+
+      const pageReleaseGroups = Array.isArray(releaseGroupResult?.['release-groups'])
+        ? releaseGroupResult['release-groups']
+        : []
+
+      releaseGroups.push(...pageReleaseGroups)
+
+      fetchedPages += 1
+      offset += MUSICBRAINZ_RELEASE_GROUP_PAGE_SIZE
+
+      const total = Number(releaseGroupResult?.count ?? 0) || 0
+      if (pageReleaseGroups.length < MUSICBRAINZ_RELEASE_GROUP_PAGE_SIZE || (total > 0 && offset >= total)) {
+        break
+      }
+    }
+
+    return releaseGroups
+  }
+
   applyReleasesToSummary (summary, rawReleases, fallbackArtistId) {
     const releases = this.mapReleases({ releases: rawReleases }, fallbackArtistId)
 
@@ -290,6 +347,7 @@ class MusicBrainzProvider {
     return {
       ...summary,
       trackCount: trackCounts.length ? Math.max(...trackCounts) : summary.trackCount,
+      releaseStatuses: this.mapReleaseStatuses(releases),
       releases
     }
   }
@@ -339,9 +397,7 @@ class MusicBrainzProvider {
 
     const summaries = releaseGroups
       .filter((group) => {
-        const primaryType = String(group['primary-type'] || '').toLowerCase()
-        const secondaryTypes = group['secondary-types'] || []
-        return ['album', 'ep'].includes(primaryType) && secondaryTypes.length === 0
+        return group?.id && group?.title
       })
       .map(group => this.mapReleaseGroupSummary(group, fallbackArtistId))
       .filter(album => album.name)
@@ -368,15 +424,7 @@ class MusicBrainzProvider {
 
     // Browse API only supports 'artist-credits' as a subquery inc plus misc
     // includes like 'ratings'. 'releases' is a lookup-only inc and causes a 400.
-    const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
-      artist: artist.id,
-      inc: 'ratings',
-      type: 'album|ep',
-      limit: 100,
-      offset: 0
-    })
-    const releaseGroups = releaseGroupResult?.['release-groups'] || []
-
+    const releaseGroups = await this.fetchReleaseGroupsByArtist(artist.id)
     const albums = await this.mapReleaseGroupSummaries(releaseGroups, artist.id || '')
 
     return {
@@ -406,15 +454,7 @@ class MusicBrainzProvider {
 
     // Browse API only supports 'artist-credits' as a subquery inc plus misc
     // includes like 'ratings'. 'releases' is a lookup-only inc and causes a 400.
-    const releaseGroupResult = await upstreamService.musicBrainzGet('/release-group', {
-      artist: artist.id,
-      inc: 'ratings',
-      type: 'album|ep',
-      limit: 100,
-      offset: 0
-    })
-    const releaseGroups = releaseGroupResult?.['release-groups'] || []
-
+    const releaseGroups = await this.fetchReleaseGroupsByArtist(artist.id)
     const albums = await this.mapReleaseGroupSummaries(releaseGroups, artist.id || '')
 
     return {
@@ -423,7 +463,7 @@ class MusicBrainzProvider {
       id: artist.id || '',
       disambiguation: artist.disambiguation || '',
       overview: artist.disambiguation || '',
-      oldIds: [],
+      oldIds: this.redirectedOldIds(artistId, artist.id),
       aliases: this.extractAliases(artist),
       artistAliases: this.extractAliases(artist),
       images: [],
@@ -488,6 +528,7 @@ class MusicBrainzProvider {
         musicbrainzReleaseGroupId: group.id || releaseGroupId
       },
       provider: 'musicbrainz',
+      oldIds: this.redirectedOldIds(releaseGroupId, group.id),
       type: group['primary-type'] || 'Album',
       albumType: group['primary-type'] || 'Album',
       secondaryTypes: group['secondary-types'] || [],
