@@ -387,6 +387,11 @@ async function tryLinkedProviderArtistEnrichment (data) {
     return data
   }
 
+  const enabledProviders = (getConfigValue('metadataProviders') || 'musicbrainz').split(',').map(s => s.trim().toLowerCase())
+  if (!enabledProviders.includes('discogs')) {
+    return data
+  }
+
   try {
     const enrichment = await withTimeout(discogsProvider.lookupArtistById(discogsArtistId), 10000)
     if (!enrichment) {
