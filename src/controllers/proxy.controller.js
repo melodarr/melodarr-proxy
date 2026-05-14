@@ -4,6 +4,7 @@ const cache = require('../cache')
 const providers = require('../providers')
 const musicbrainzProvider = require('../providers/musicbrainz.provider')
 const theAudioDbProvider = require('../providers/theaudiodb.provider')
+const discogsProvider = require('../providers/discogs.provider')
 const artistDiscovery = require('../providers/artist-discovery')
 const rankingEngine = require('../ranking/engine')
 const enrichment = require('../enrichment/pipeline')
@@ -379,6 +380,37 @@ async function tryAggregateArtistImageEnrichment (data) {
   }
 }
 
+async function tryLinkedProviderArtistEnrichment (data) {
+  const discogsArtistId = data?.ids?.discogsArtistId
+
+  if (!discogsArtistId) {
+    return data
+  }
+
+  const enabledProviders = (getConfigValue('metadataProviders') || 'musicbrainz').split(',').map(s => s.trim().toLowerCase())
+  if (!enabledProviders.includes('discogs')) {
+    return data
+  }
+
+  try {
+    const enrichment = await withTimeout(discogsProvider.lookupArtistById(discogsArtistId), 10000)
+    if (!enrichment) {
+      return data
+    }
+
+    return mergeArtistByIdEnrichment(data, enrichment)
+  } catch (error) {
+    logger.warn('Artist by ID linked Discogs enrichment skipped', {
+      context: 'Proxy',
+      artistName: data.artistName,
+      discogsArtistId,
+      error: error.message,
+      code: error.code
+    })
+    return data
+  }
+}
+
 async function tryEnrichArtistByIdData (data) {
   if (!data?.artistName) {
     return data
@@ -391,7 +423,8 @@ async function tryEnrichArtistByIdData (data) {
   try {
     const enrichment = await withTimeout(theAudioDbProvider.searchArtistProfile(data.artistName), 10000)
     if (!enrichment) {
-      return tryAggregateArtistImageEnrichment(data)
+      const linkedData = await tryLinkedProviderArtistEnrichment(data)
+      return hasArtistImages(linkedData) ? linkedData : tryAggregateArtistImageEnrichment(linkedData)
     }
 
     if (!isMatchingArtistEnrichment(data, enrichment)) {
@@ -401,11 +434,16 @@ async function tryEnrichArtistByIdData (data) {
         requestedId: data.id,
         theAudioDbMbid: enrichment.ids?.musicbrainzArtistId || null
       })
-      return tryAggregateArtistImageEnrichment(data)
+      const linkedData = await tryLinkedProviderArtistEnrichment(data)
+      return hasArtistImages(linkedData) ? linkedData : tryAggregateArtistImageEnrichment(linkedData)
     }
 
     const enrichedData = mergeArtistByIdEnrichment(data, enrichment)
-    return hasArtistImages(enrichedData) ? enrichedData : tryAggregateArtistImageEnrichment(enrichedData)
+    if (hasArtistImages(enrichedData)) {
+      return enrichedData
+    }
+    const linkedData = await tryLinkedProviderArtistEnrichment(enrichedData)
+    return hasArtistImages(linkedData) ? linkedData : tryAggregateArtistImageEnrichment(linkedData)
   } catch (error) {
     logger.warn('Artist by ID enrichment skipped', {
       context: 'Proxy',
@@ -413,7 +451,8 @@ async function tryEnrichArtistByIdData (data) {
       error: error.message,
       code: error.code
     })
-    return tryAggregateArtistImageEnrichment(data)
+    const linkedData = await tryLinkedProviderArtistEnrichment(data)
+    return hasArtistImages(linkedData) ? linkedData : tryAggregateArtistImageEnrichment(linkedData)
   }
 }
 

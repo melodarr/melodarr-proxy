@@ -47,11 +47,12 @@ function makeResponse () {
   }
 }
 
-function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
+function loadController ({ aggregateArtist, cacheStore = new Map(), metadataProviders = 'musicbrainz,discogs' } = {}) {
   const controllerPath = require.resolve('./proxy.controller')
   const providersPath = require.resolve('../providers')
   const musicbrainzProviderPath = require.resolve('../providers/musicbrainz.provider')
   const theAudioDbProviderPath = require.resolve('../providers/theaudiodb.provider')
+  const discogsProviderPath = require.resolve('../providers/discogs.provider')
   const cachePath = require.resolve('../cache')
   const metricsPath = require.resolve('../metrics')
   const tracerPath = require.resolve('../tracer')
@@ -67,6 +68,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
   delete require.cache[providersPath]
   delete require.cache[musicbrainzProviderPath]
   delete require.cache[theAudioDbProviderPath]
+  delete require.cache[discogsProviderPath]
   delete require.cache[cachePath]
   delete require.cache[metricsPath]
   delete require.cache[tracerPath]
@@ -144,6 +146,15 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     }
   }
 
+  require.cache[discogsProviderPath] = {
+    id: discogsProviderPath,
+    filename: discogsProviderPath,
+    loaded: true,
+    exports: {
+      lookupArtistById: arguments[0]?.lookupDiscogsArtistById || (async () => null)
+    }
+  }
+
   require.cache[cachePath] = {
     id: cachePath,
     filename: cachePath,
@@ -195,7 +206,7 @@ function loadController ({ aggregateArtist, cacheStore = new Map() } = {}) {
     filename: settingsPath,
     loaded: true,
     exports: {
-      getConfigValue: () => 86400
+      getConfigValue: (key) => key === 'metadataProviders' ? metadataProviders : 86400
     }
   }
 
@@ -913,6 +924,108 @@ test('artist by id skips TheAudioDB enrichment when returned MBID does not match
 
   assert.equal(res.statusCode, 200)
   assert.deepEqual(res.body.images, [])
+})
+
+test('artist by id uses MusicBrainz-linked Discogs artist image when broad enrichment mismatches', async () => {
+  let discogsLookupId = null
+  const { controller } = loadController({
+    lookupArtistById: async (id) => ({
+      artistName: 'BENNETT',
+      id,
+      disambiguation: 'DJ and producer from Koblenz, Germany',
+      overview: 'DJ and producer from Koblenz, Germany',
+      aliases: [],
+      artistAliases: [],
+      links: [{ target: 'https://www.discogs.com/artist/13759927', type: 'discogs' }],
+      ids: { musicbrainzArtistId: id, discogsArtistId: '13759927' },
+      images: [],
+      albums: [],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 0 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    }),
+    searchArtistProfile: async () => ({
+      artistName: 'BENNETT',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/wrong-bennett.jpg', remoteUrl: 'https://example.test/wrong-bennett.jpg' }
+      ],
+      ids: { musicbrainzArtistId: 'different-bennett' }
+    }),
+    lookupDiscogsArtistById: async (id) => {
+      discogsLookupId = id
+      return {
+        artistName: 'BENNETT',
+        overview: 'Linked Discogs artist profile',
+        images: [
+          { coverType: 'poster', url: 'https://example.test/correct-bennett.jpg', remoteUrl: 'https://example.test/correct-bennett.jpg' }
+        ]
+      }
+    },
+    aggregateArtist: async () => {
+      throw new Error('aggregateArtist should not run after linked Discogs image succeeds')
+    }
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: '282259f5-4979-4301-94ef-bcaecaeb553e' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(discogsLookupId, '13759927')
+  assert.deepEqual(res.body.images.map(image => image.url), ['https://example.test/correct-bennett.jpg'])
+  assert.equal(res.body.overview, 'DJ and producer from Koblenz, Germany')
+})
+
+test('artist by id skips MusicBrainz-linked Discogs lookup when discogs is not in metadataProviders', async () => {
+  let discogsLookupCalled = false
+  const { controller } = loadController({
+    metadataProviders: 'musicbrainz',
+    lookupArtistById: async (id) => ({
+      artistName: 'BENNETT',
+      id,
+      disambiguation: 'DJ and producer from Koblenz, Germany',
+      overview: 'DJ and producer from Koblenz, Germany',
+      aliases: [],
+      artistAliases: [],
+      links: [{ target: 'https://www.discogs.com/artist/13759927', type: 'discogs' }],
+      ids: { musicbrainzArtistId: id, discogsArtistId: '13759927' },
+      images: [],
+      albums: [],
+      providers: [{ name: 'musicbrainz', score: 100, albumCount: 0 }],
+      providerErrors: [],
+      partial: false,
+      warning: null,
+      providerCount: 1,
+      confidence: 100
+    }),
+    searchArtistProfile: async () => ({
+      artistName: 'BENNETT',
+      images: [
+        { coverType: 'poster', url: 'https://example.test/wrong-bennett.jpg', remoteUrl: 'https://example.test/wrong-bennett.jpg' }
+      ],
+      ids: { musicbrainzArtistId: 'different-bennett' }
+    }),
+    lookupDiscogsArtistById: async (id) => {
+      discogsLookupCalled = true
+      return {
+        artistName: 'BENNETT',
+        images: [{ coverType: 'poster', url: 'https://example.test/correct-bennett.jpg', remoteUrl: 'https://example.test/correct-bennett.jpg' }]
+      }
+    },
+    aggregateArtist: async () => ({
+      artistName: 'BENNETT',
+      id: '282259f5-4979-4301-94ef-bcaecaeb553e',
+      images: []
+    })
+  })
+  const res = makeResponse()
+
+  await controller.handleArtistById({ params: { foreignArtistId: '282259f5-4979-4301-94ef-bcaecaeb553e' }, query: {} }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(discogsLookupCalled, false, 'Discogs lookup must not run when discogs is not in metadataProviders')
 })
 
 test('artist by id falls back to aggregate provider images when TheAudioDB enrichment is unavailable', async () => {

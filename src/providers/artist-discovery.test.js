@@ -90,6 +90,7 @@ test('Artist Discovery Provider', async (t) => {
     setMbMock(async (path, params) => {
       assert.strictEqual(path, '/artist')
       assert.strictEqual(params.inc, 'aliases')
+      assert.strictEqual(params.limit, 100)
       return {
         artists: [
           {
@@ -113,6 +114,23 @@ test('Artist Discovery Provider', async (t) => {
     assert.deepStrictEqual(result[0].aliases, ['Test Alias', 'Sort Alias'])
     assert.deepStrictEqual(result[0].artistAliases, ['Test Alias', 'Sort Alias'])
     assert.strictEqual(result[1].artistName, 'Test Sort')
+  })
+
+  await t.test('discoverArtists - artist ranks exact MusicBrainz name ahead of higher-scored surname matches', async () => {
+    const { discovery, setMbMock } = setupMocks({ providers: 'musicbrainz' })
+    setMbMock(async () => ({
+      artists: [
+        { name: 'Tony Bennett', 'sort-name': 'Bennett, Tony', id: 'tony-bennett', score: '100' },
+        { name: 'BENNETT', 'sort-name': 'BENNETT', id: 'bennett-de', score: '68', disambiguation: 'DJ and producer from Koblenz, Germany' }
+      ]
+    }))
+
+    const result = await discovery.discoverArtists({ query: 'BENNETT', type: 'artist' })
+
+    assert.strictEqual(result[0].artistName, 'BENNETT')
+    assert.strictEqual(result[0].id, 'bennett-de')
+    assert.strictEqual(result[0].disambiguation, 'DJ and producer from Koblenz, Germany')
+    assert.strictEqual(result[1].artistName, 'Tony Bennett')
   })
 
   await t.test('discoverArtists - artist enriches MB candidates with exact provider images', async () => {

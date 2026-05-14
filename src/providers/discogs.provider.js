@@ -12,25 +12,81 @@ class DiscogsProvider {
     return getProviderUserAgent()
   }
 
-  async searchArtist (term) {
+  getAuthHeaders () {
     const token = getConfigValue('discogsToken')
     if (!token) {
       throw new Error('Discogs token not configured')
     }
 
-    const headers = {
+    return {
       'User-Agent': this.getUserAgent(),
       Authorization: `Discogs token=${token}`
     }
-    const timeout = getConfigValue('upstreamTimeoutMs') || 10000
+  }
+
+  getRequestOptions () {
+    return {
+      headers: this.getAuthHeaders(),
+      httpsAgent: getProviderHttpsAgent(getConfigValue('discogsIpFamily') || getConfigValue('providerIpFamily')),
+      timeout: getConfigValue('upstreamTimeoutMs') || 10000
+    }
+  }
+
+  mapArtistImages (artist = {}, { primaryOnly = false } = {}) {
+    let images = Array.isArray(artist.images) ? artist.images : []
+    if (primaryOnly) {
+      const primary = images.filter(image => image?.type === 'primary')
+      images = primary.length > 0 ? primary : images.slice(0, 1)
+    }
+    const urls = [
+      ...images.map(image => image?.uri || image?.resource_url),
+      artist.cover_image,
+      artist.thumb
+    ].filter(Boolean)
+
+    return [...new Set(urls)].map(url => ({
+      coverType: 'poster',
+      url,
+      remoteUrl: url
+    }))
+  }
+
+  async lookupArtistById (artistId) {
+    const normalizedId = String(artistId || '').trim()
+    if (!normalizedId) {
+      throw new Error('Discogs artist id is required')
+    }
+
+    const options = this.getRequestOptions()
+
+    try {
+      const artistRes = await enqueueProviderRequest('discogs', () => axios.get(`https://api.discogs.com/artists/${encodeURIComponent(normalizedId)}`, options))
+      const artist = artistRes.data || {}
+
+      return {
+        artistName: artist.name || '',
+        overview: artist.profile || '',
+        images: this.mapArtistImages(artist, { primaryOnly: true }),
+        ids: {
+          discogsArtistId: normalizedId
+        }
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  async searchArtist (term) {
+    const options = this.getRequestOptions()
 
     try {
       // 1. Search for artist
       const searchRes = await enqueueProviderRequest('discogs', () => axios.get('https://api.discogs.com/database/search', {
         params: { type: 'artist', q: term },
-        headers,
-        httpsAgent: getProviderHttpsAgent(getConfigValue('discogsIpFamily') || getConfigValue('providerIpFamily')),
-        timeout
+        ...options
       }))
 
       const artists = searchRes.data?.results || []
@@ -43,9 +99,7 @@ class DiscogsProvider {
       // 2. Get artist releases
       const releasesRes = await enqueueProviderRequest('discogs', () => axios.get(`https://api.discogs.com/artists/${exactMatch.id}/releases`, {
         params: { sort: 'year', sort_order: 'asc', per_page: 100 },
-        headers,
-        httpsAgent: getProviderHttpsAgent(getConfigValue('discogsIpFamily') || getConfigValue('providerIpFamily')),
-        timeout
+        ...options
       }))
 
       const releases = releasesRes.data?.releases || []
@@ -68,14 +122,7 @@ class DiscogsProvider {
 
       return {
         artistName: exactMatch.title || term,
-        images: [
-          exactMatch.cover_image,
-          exactMatch.thumb
-        ].filter(Boolean).map(url => ({
-          coverType: 'poster',
-          url,
-          remoteUrl: url
-        })),
+        images: this.mapArtistImages(exactMatch),
         albums
       }
     } catch (error) {
