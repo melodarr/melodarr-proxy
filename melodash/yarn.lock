@@ -1134,7 +1134,7 @@ __metadata:
     recharts: "npm:3.8.1"
     swr: "npm:2.4.1"
     tailwind-merge: "npm:3.6.0"
-    tailwindcss: "npm:4.2.4"
+    tailwindcss: "npm:4.3.0"
     typescript: "npm:6.0.3"
   languageName: unknown
   linkType: soft
@@ -1480,13 +1480,6 @@ __metadata:
   version: 3.6.0
   resolution: "tailwind-merge@npm:3.6.0"
   checksum: 10c0/a728d929f4786bcb48641db4228cc8c006a7545491783a658fb4d24d177dab960620991d17805a047309228de50ab949ca8d9e112c30183da0432367796ae186
-  languageName: node
-  linkType: hard
-
-"tailwindcss@npm:4.2.4":
-  version: 4.2.4
-  resolution: "tailwindcss@npm:4.2.4"
-  checksum: 10c0/1069304b6bf2855daa029ac4af382abb95ed26ae4d05bc09ea01a56e6af3de8b6fb1b4d508d8bbb39abf30a69766e6f2f75835e112ac6fc39ed94ae5d4901048
   languageName: node
   linkType: hard
 
