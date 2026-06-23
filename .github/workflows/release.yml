@@ -18,7 +18,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # 4. Release Validity: CI passes
       # We run the CI steps (lint & test) as part of this workflow to ensure validity
