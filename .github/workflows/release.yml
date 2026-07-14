@@ -23,7 +23,7 @@ jobs:
       # 4. Release Validity: CI passes
       # We run the CI steps (lint & test) as part of this workflow to ensure validity
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24.x'
       
